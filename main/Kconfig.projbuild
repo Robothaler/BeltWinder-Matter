@@ -1,0 +1,31 @@
+menu "Roller Shutter Configuration"
+    config PULSE_COUNTER_PIN
+        int "Pulse Counter GPIO Pin"
+        default 18
+        help
+            GPIO pin connected to the hall sensor for pulse counting.
+
+    config MOTOR_UP_PIN
+        int "Motor UP Signal GPIO Pin"
+        default 17
+        help
+            GPIO pin to monitor if the motor is moving UP.
+
+    config MOTOR_DOWN_PIN
+        int "Motor DOWN Signal GPIO Pin"
+        default 16
+        help
+            GPIO pin to monitor if the motor is moving DOWN.
+
+    config BUTTON_UP_PIN
+        int "Button UP Control GPIO Pin"
+        default 21
+        help
+            GPIO pin to simulate a button press for moving UP.
+
+    config BUTTON_DOWN_PIN
+        int "Button DOWN Control GPIO Pin"
+        default 22
+        help
+            GPIO pin to simulate a button press for moving DOWN.
+endmenu

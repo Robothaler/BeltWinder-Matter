@@ -1,0 +1,85 @@
+# Copyright (c) 2020 Project CHIP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/chip.gni")
+import("${chip_root}/src/app/common_flags.gni")
+
+config("includes") {
+  include_dirs = [ "${chip_app_zap_dir}" ]
+}
+
+source_set("attribute-type") {
+  sources = [ "${chip_app_zap_dir}/app-common/zap-generated/attribute-type.h" ]
+
+  public_configs = [ ":includes" ]
+}
+
+source_set("global-ids") {
+  sources =
+      [ "${chip_root}/zzz_generated/app-common/clusters/shared/GlobalIds.h" ]
+
+  deps = [ "${chip_root}/src/lib/core:types" ]
+}
+
+source_set("ids") {
+  sources = [
+    "${chip_app_zap_dir}/app-common/zap-generated/ids/Attributes.h",
+    "${chip_app_zap_dir}/app-common/zap-generated/ids/Clusters.h",
+    "${chip_app_zap_dir}/app-common/zap-generated/ids/Commands.h",
+    "${chip_app_zap_dir}/app-common/zap-generated/ids/Events.h",
+  ]
+
+  public_deps = [ "${chip_root}/zzz_generated/app-common/clusters:all-ids" ]
+
+  public_configs = [ ":includes" ]
+}
+
+static_library("cluster-objects") {
+  output_name = "libClusterObjects"
+
+  sources = [
+    "${chip_app_zap_dir}/app-common/zap-generated/cluster-objects.cpp",
+    "${chip_app_zap_dir}/app-common/zap-generated/cluster-objects.h",
+  ]
+
+  public_deps = [
+    ":ids",
+    "${chip_root}/src/app:events",
+    "${chip_root}/src/app:paths",
+    "${chip_root}/src/app/data-model",
+    "${chip_root}/src/app/data-model:encode-decode",
+    "${chip_root}/src/app/util:types",
+    "${chip_root}/src/lib/core",
+    "${chip_root}/src/lib/support",
+    "${chip_root}/src/protocols/interaction_model",
+    "${chip_root}/zzz_generated/app-common/clusters:all-headers",
+    "${chip_root}/zzz_generated/app-common/clusters/shared:headers",
+  ]
+
+  public_configs = [ ":includes" ]
+}
+
+source_set("enums") {
+  sources = [
+    "${chip_app_zap_dir}/app-common/zap-generated/cluster-enums-check.h",
+    "${chip_app_zap_dir}/app-common/zap-generated/cluster-enums.h",
+    "CompatEnumNames.h",
+  ]
+
+  deps = [
+    "${chip_root}/zzz_generated/app-common/clusters:all-enums",
+    "${chip_root}/zzz_generated/app-common/clusters/shared:enums",
+  ]
+  public_configs = [ ":includes" ]
+}

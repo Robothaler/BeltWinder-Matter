@@ -1,0 +1,28 @@
+## 1.1.4
+
+### Enhancements:
+- Added support to pass user data to read callback with new callback function: `src_read_cb_with_user_ctx_t`
+
+## 1.1.3
+
+### Bugfixes:
+- Fixed `esp_delta_ota_patch_gen.py` patch generation, by ignoring the case in regex which is used to get validation hash of binary through esptool command, caused due to breaking change in esptool.
+
+## 1.1.2
+
+### Bugfixes:
+- Fixed `esp_delta_ota_patch_gen.py` python command for creating patch in README.md file of esp_delta_ota/https_delta_ota example.
+- Added `Verifying patch` section in the README.md and corresponding python command.
+
+## 1.1.1
+
+### Bugfixes:
+- Fixed issue causing `esp_delta_ota_patch_gen.py` to be non-functional on Windows OS.
+- Replaced earlier use of subprocess commands with direct `esptool` module import based method for handling ESP chip-specific operations across all platforms.
+- Replaced earlier use of subprocess commands with direct `detools` module import based method for creating and applying patches.
+
+## 1.1.0
+
+### Enhancements:
+- Added support to pass user data to write callback with new callback function: `merged_stream_write_cb_with_user_ctx_t`
+- The older write callback function: `merged_stream_write_cb_t` has been deprecated and will be removed in the next major release.

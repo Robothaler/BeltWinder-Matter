@@ -1,0 +1,9 @@
+dependencies:
+  idf: '>=4.3'
+description: ESP Delta OTA Library
+repository: git://github.com/espressif/idf-extra-components.git
+repository_info:
+  commit_sha: fb6abe80e0c1ec659bc5cca993cd5d4bffe55680
+  path: esp_delta_ota
+url: https://github.com/espressif/idf-extra-components/tree/master/esp_delta_ota
+version: 1.1.4

@@ -1,0 +1,123 @@
+# Copyright (c) 2020 Project CHIP Authors
+#
+# Licensed under the Apache License, Version 2.0 (the "License");
+# you may not use this file except in compliance with the License.
+# You may obtain a copy of the License at
+#
+# http://www.apache.org/licenses/LICENSE-2.0
+#
+# Unless required by applicable law or agreed to in writing, software
+# distributed under the License is distributed on an "AS IS" BASIS,
+# WITHOUT WARRANTIES OR CONDITIONS OF ANY KIND, either express or implied.
+# See the License for the specific language governing permissions and
+# limitations under the License.
+
+import("//build_overrides/chip.gni")
+import("${chip_root}/src/app/common_flags.gni")
+import("${chip_root}/src/controller/flags.gni")
+import("${chip_root}/src/lib/lib.gni")
+import("${chip_root}/src/platform/device.gni")
+
+source_set("nodatamodel") {
+  sources = [ "EmptyDataModelHandler.cpp" ]
+
+  public_deps = [ "${chip_root}/src/app" ]
+}
+
+source_set("delegates") {
+  sources = [ "OperationalCredentialsDelegate.h" ]
+}
+
+source_set("interactions") {
+  sources = [
+    "CHIPCluster.h",
+    "CommandSenderAllocator.h",
+    "InvokeInteraction.h",
+    "ReadInteraction.h",
+    "TypedCommandCallback.h",
+    "TypedReadCallback.h",
+    "WriteInteraction.h",
+  ]
+  public_deps = [ "${chip_root}/src/app" ]
+}
+
+static_library("controller") {
+  output_name = "libChipController"
+
+  sources = [
+    # TODO: these dependencies are broken. Specifically:
+    #       a) ChipDeviceControllerFactory.h includes CHIPDeviceController.h
+    #       b) CHIPDeviceController.cpp is only compiled for read_client
+    # These conditionals are NOT ok and should have been solved with separate
+    # source sets - either include some functionality or do not
+    #
+    # Then CHIPDeviceController.h pulls in AbstractDnssdDiscoveryController and everything
+    # cascades. In the end it looks like basically every header file is pulled in.
+    #
+    # Unfortunately this is hard to fix in one go, hence these odd list of header-only
+    # dependencies
+    "AbstractDnssdDiscoveryController.h",
+    "AutoCommissioner.h",
+    "CHIPCommissionableNodeController.h",
+    "CHIPDeviceController.h",
+    "CHIPDeviceControllerSystemState.h",
+    "CommissioneeDeviceProxy.h",
+    "CommissioningDelegate.h",
+    "CommissioningWindowOpener.h",
+    "CommissioningWindowParams.h",
+    "CurrentFabricRemover.h",
+    "DeviceDiscoveryDelegate.h",
+    "DevicePairingDelegate.h",
+    "ExampleOperationalCredentialsIssuer.h",
+    "SetUpCodePairer.h",
+  ]
+
+  deps = [ "${chip_root}/src/lib/address_resolve" ]
+
+  if (chip_support_commissioning_in_controller && chip_build_controller) {
+    sources += [
+      "AbstractDnssdDiscoveryController.cpp",
+      "AutoCommissioner.cpp",
+      "CHIPCommissionableNodeController.cpp",
+      "CHIPDeviceControllerFactory.cpp",
+      "CHIPDeviceControllerFactory.h",
+      "CommissioneeDeviceProxy.cpp",
+      "CommissionerDiscoveryController.cpp",
+      "CommissionerDiscoveryController.h",
+      "CommissioningDelegate.cpp",
+      "ExampleOperationalCredentialsIssuer.cpp",
+      "SetUpCodePairer.cpp",
+    ]
+
+    # ExampleOperationalCredentialsIssuer uses TestGroupData
+    deps += [ "${chip_root}/src/lib/support:testing" ]
+
+    if (chip_enable_read_client) {
+      sources += [
+        "CHIPDeviceController.cpp",
+        "CommissioningWindowOpener.cpp",
+        "CurrentFabricRemover.cpp",
+      ]
+    }
+  }
+
+  public_deps = [
+    ":interactions",
+    "${chip_root}/src/app",
+    "${chip_root}/src/app/server",
+    "${chip_root}/src/lib/core",
+    "${chip_root}/src/lib/dnssd",
+    "${chip_root}/src/lib/support",
+    "${chip_root}/src/messaging",
+    "${chip_root}/src/platform",
+    "${chip_root}/src/protocols",
+    "${chip_root}/src/setup_payload",
+    "${chip_root}/src/tracing",
+    "${chip_root}/src/tracing:macros",
+    "${chip_root}/src/transport",
+  ]
+
+  cflags = [ "-Wconversion" ]
+
+  public_configs = [ "${chip_root}/src:includes" ]
+}

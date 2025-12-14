@@ -1,0 +1,1455 @@
+Processing esp32doit-devkit-v1 (platform: https://github.com/pioarduino/platform-espressif32/releases/download/stable/platform-espressif32.zip; board: esp32doit-devkit-v1; framework: espidf, arduino)
+--------------------------------------------------------------------------------
+Verbose mode can be enabled via `-v, --verbose` option
+CONFIGURATION: https://docs.platformio.org/page/boards/espressif32/esp32doit-devkit-v1.html
+PLATFORM: Espressif 32 (55.3.34) > DOIT ESP32 DEVKIT V1
+HARDWARE: ESP32 240MHz, 320KB RAM, 3.88MB Flash
+DEBUG: Current (cmsis-dap) External (cmsis-dap, esp-bridge, esp-prog, iot-bus-jtag, jlink, minimodule, olimex-arm-usb-ocd, olimex-arm-usb-ocd-h, olimex-arm-usb-tiny-h, olimex-jtag-tiny, tumpa)
+PACKAGES: 
+ - contrib-piohome @ 3.4.4 
+ - framework-arduinoespressif32 @ 3.3.4 
+ - framework-arduinoespressif32-libs @ 5.5.0+sha.8410210c9a 
+ - framework-espidf @ 3.50501.0 (5.5.1) 
+ - tool-cmake @ 4.0.3 
+ - tool-esp-rom-elfs @ 2024.10.11 
+ - tool-esptoolpy @ 5.1.0 
+ - tool-mklittlefs @ 3.2.0 
+ - tool-ninja @ 1.13.1 
+ - tool-openocd-esp32 @ 2.1200.20250707 (12.0) 
+ - tool-scons @ 4.40801.0 (4.8.1) 
+ - tool-xtensa-esp-elf-gdb @ 16.3.0+20250913 
+ - toolchain-xtensa-esp-elf @ 14.2.0+20250730
+*** "custom_component" is used to deselect managed idf components ***
+[ComponentManager] Created backup of build file
+[ComponentManager] Component not found: espressif/esp_hosted
+[ComponentManager] Component not found: espressif/esp_wifi_remote
+[ComponentManager] Component not found: espressif/network_provisioning
+[ComponentManager] Component not found: espressif/esp-dsp
+[ComponentManager] Component not found: espressif/esp_modem
+[ComponentManager] Component not found: espressif/libsodium
+[ComponentManager] Component not found: espressif/esp_insights
+[ComponentManager] Component not found: espressif/esp_diag_data_store
+[ComponentManager] Component not found: espressif/cbor
+[ComponentManager] Component not found: espressif/esp_rainmaker
+[ComponentManager] Component not found: espressif/rmaker_common
+[ComponentManager] Component not found: espressif/qrcode
+[ComponentManager] Component not found: espressif/esp-sr
+[ComponentManager] Component not found: espressif/esp-modbus
+[ComponentManager] Component not found: chmorgan/esp-libhelix-mp3
+[ComponentManager] Component not found: espressif/esp32-camera
+[ComponentManager] Component not found: espressif/esp-zboss-lib
+[ComponentManager] Component not found: espressif/esp-zigbee-lib
+[ComponentManager] Processed 11 ignored libraries
+[ComponentManager] Session completed with 20 changes
+Reading CMake configuration...
+[ESP-IDF] Ignoring components based on lib_ignore: bt, esp_http_client, esp_https_ota, esp_rainmaker, insights, matter, networkclientsecure, openthread, spiffs, wifiprov, zigbee
+Generating assembly for certificate bundle...
+LDF: Library Dependency Finder -> https://bit.ly/configure-pio-ldf
+LDF Modes: Finder ~ chain+, Compatibility ~ soft
+Found 32 compatible libraries
+Scanning dependencies...
+Dependency Graph
+|-- ArduinoJson @ 6.21.5
+|-- WiFi @ 3.3.4
+Building in debug mode
+Generating assembly for .pio/build/esp32doit-devkit-v1/https_server.crt.S
+Compiling .pio/build/esp32doit-devkit-v1/main/main.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/main/rollershutter.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/main/rollershutter_driver.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/main/web_ui_handler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/lib15a/WiFi/AP.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/lib15a/WiFi/STA.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/lib15a/WiFi/WiFi.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/lib15a/WiFi/WiFiAP.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/lib15a/WiFi/WiFiGeneric.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/lib15a/WiFi/WiFiMulti.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/lib15a/WiFi/WiFiSTA.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/lib15a/WiFi/WiFiScan.cpp.o
+Generating LD script .pio/build/esp32doit-devkit-v1/esp-idf/esp_system/ld/memory.ld.in
+Generating LD script .pio/build/esp32doit-devkit-v1/esp-idf/esp_system/ld/sections.ld.in
+Generating LD script .pio/build/esp32doit-devkit-v1/memory.ld
+Compiling .pio/build/esp32doit-devkit-v1/app_trace/app_trace.c.o
+Compiling .pio/build/esp32doit-devkit-v1/app_trace/app_trace_util.c.o
+Compiling .pio/build/esp32doit-devkit-v1/app_trace/host_file_io.c.o
+Compiling .pio/build/esp32doit-devkit-v1/app_trace/port/port_uart.c.o
+Compiling .pio/build/esp32doit-devkit-v1/app_update/esp_ota_ops.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/app_trace/libapp_trace.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/app_trace/libapp_trace.a
+Compiling .pio/build/esp32doit-devkit-v1/app_update/esp_ota_app_desc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/bootloader_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/bootloader_common_loader.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/app_update/libapp_update.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/app_update/libapp_update.a
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/bootloader_clock_init.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/bootloader_mem.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/bootloader_random.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/bootloader_efuse.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/flash_encrypt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/secure_boot.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/bootloader_random_esp32.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/bootloader_flash/src/bootloader_flash.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/bootloader_flash/src/flash_qio_mode.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/bootloader_flash/src/bootloader_flash_config_esp32.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/bootloader_utility.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/flash_partitions.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/esp_image_format.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/bootloader_sha.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bootloader_support/src/esp32/secure_boot_secure_features.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/controller/esp32/bt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/controller/esp32/hli_api.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/controller/esp32/hli_vectors.S.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/bootloader_support/libbootloader_support.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/bootloader_support/libbootloader_support.a
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/btc/core/btc_alarm.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/api/esp_blufi_api.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/hci_log/bt_hci_log.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/btc/core/btc_manage.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/btc/core/btc_task.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/btc/profile/esp/blufi/blufi_prf.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/btc/profile/esp/blufi/blufi_protocol.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/alarm.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/allocator.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/buffer.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/config.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/fixed_queue.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/pkt_queue.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/fixed_pkt_queue.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/future.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/hash_functions.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/hash_map.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/list.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/mutex.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/thread.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/osi.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/osi/semaphore.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/porting/mem/bt_osi_mem.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/ble_log/ble_log_spi_out.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/ble_log/ble_log_uhci_out.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/transport/src/transport.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/util/src/addr.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/gatt/src/ble_svc_gatt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/tps/src/ble_svc_tps.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/ias/src/ble_svc_ias.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/ipss/src/ble_svc_ipss.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/ans/src/ble_svc_ans.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/hr/src/ble_svc_hr.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/htp/src/ble_svc_htp.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/gap/src/ble_svc_gap.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/bas/src/ble_svc_bas.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/dis/src/ble_svc_dis.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/lls/src/ble_svc_lls.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/prox/src/ble_svc_prox.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/cts/src/ble_svc_cts.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/hid/src/ble_svc_hid.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/sps/src/ble_svc_sps.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/cte/src/ble_svc_cte.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/services/ras/src/ble_svc_ras.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_cs.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_conn.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_store_util.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_sm.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_shutdown.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_l2cap_sig_cmd.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_hci_cmd.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_id.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_att_svr.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_gatts_lcl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_ibeacon.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_atomic.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_sm_alg.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_stop.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_hci_evt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_mqueue.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_periodic_sync.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_att.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_ead.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_aes_ccm.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_gattc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_store.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_sm_lgcy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_cfg.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_att_clt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_l2cap_coc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_mbuf.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_att_cmd.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_log.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_eddystone.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_startup.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_l2cap_sig.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_gap.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_sm_cmd.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_uuid.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_pvcy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_flow.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_l2cap.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_sm_sc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_misc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_gatts.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_adv.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_hci.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_hci_util.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_hs_resolv.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/store/ram/src/ble_store_ram.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/store/config/src/ble_store_config.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/store/config/src/ble_store_nvs.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_gattc_cache.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_gattc_cache_conn.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/host/src/ble_eatt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/porting/nimble/src/nimble_port.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/porting/npl/freertos/src/nimble_port_freertos.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/port/src/nvs_port.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/porting/nimble/src/endian.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/porting/nimble/src/os_mempool.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/porting/nimble/src/mem.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/porting/nimble/src/os_mbuf.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/porting/nimble/src/os_msys_init.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/porting/npl/freertos/src/npl_os_freertos.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/esp-hci/src/esp_nimble_hci.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/host/nimble/nimble/nimble/transport/esp_ipc_legacy/src/hci_esp_ipc_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/bt/common/btc/profile/esp/blufi/nimble_host/esp_blufi.c.o
+Compiling .pio/build/esp32doit-devkit-v1/cmock/CMock/src/cmock.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/commands.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/cmock/libcmock.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/cmock/libcmock.a
+Compiling .pio/build/esp32doit-devkit-v1/console/esp_console_common.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/bt/libbt.a
+Compiling .pio/build/esp32doit-devkit-v1/console/esp_console_repl_internal.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/split_argv.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/linenoise/linenoise.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/bt/libbt.a
+Compiling .pio/build/esp32doit-devkit-v1/console/esp_console_repl_chip.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_cmd.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_date.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_dbl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_dstr.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_end.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_file.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_hashtable.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_int.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_lit.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_rem.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_rex.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_str.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/arg_utils.c.o
+Compiling .pio/build/esp32doit-devkit-v1/console/argtable3/argtable3.c.o
+Compiling .pio/build/esp32doit-devkit-v1/cxx/cxx_exception_stubs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/cxx/cxx_guards.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/cxx/cxx_init.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/adc_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/adc_dma_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/dac_common_legacy.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/console/libconsole.a
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/esp32/dac_legacy.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/console/libconsole.a
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/timer_legacy.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/cxx/libcxx.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/cxx/libcxx.a
+Compiling .pio/build/esp32doit-devkit-v1/driver/i2c/i2c.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/i2s_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/mcpwm_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/pcnt_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/rmt_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/sigma_delta_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/touch_sensor/touch_sensor_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/touch_sensor/esp32/touch_sensor.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/twai/twai.c.o
+Compiling .pio/build/esp32doit-devkit-v1/driver/deprecated/adc_i2s_deprecated.c.o
+Compiling .pio/build/esp32doit-devkit-v1/efuse/esp32/esp_efuse_table.c.o
+Compiling .pio/build/esp32doit-devkit-v1/efuse/esp32/esp_efuse_fields.c.o
+Compiling .pio/build/esp32doit-devkit-v1/efuse/esp32/esp_efuse_utility.c.o
+Compiling .pio/build/esp32doit-devkit-v1/efuse/src/esp_efuse_api.c.o
+Compiling .pio/build/esp32doit-devkit-v1/efuse/src/esp_efuse_fields.c.o
+Compiling .pio/build/esp32doit-devkit-v1/efuse/src/esp_efuse_utility.c.o
+Compiling .pio/build/esp32doit-devkit-v1/efuse/src/efuse_controller/keys/without_key_purposes/three_key_blocks/esp_efuse_api_key.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/driver/libdriver.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/driver/libdriver.a
+Compiling .pio/build/esp32doit-devkit-v1/efuse/src/esp_efuse_startup.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp-tls/esp_tls.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/efuse/libefuse.a
+Compiling .pio/build/esp32doit-devkit-v1/esp-tls/esp-tls-crypto/esp_tls_crypto.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/efuse/libefuse.a
+Compiling .pio/build/esp32doit-devkit-v1/esp-tls/esp_tls_error_capture.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp-tls/esp_tls_platform_port.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp-tls/esp_tls_mbedtls.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_adc/adc_oneshot.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_adc/adc_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_adc/adc_cali.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_adc/adc_cali_curve_fitting.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_adc/deprecated/esp_adc_cal_common_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_adc/adc_continuous.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_adc/esp32/adc_dma.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_adc/esp32/adc_cali_line_fitting.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_adc/deprecated/esp32/esp_adc_cal_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_app_format/esp_app_desc.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp-tls/libesp-tls.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp-tls/libesp-tls.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_bootloader_format/esp_bootloader_desc.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_app_format/libesp_app_format.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_app_format/libesp_app_format.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_coex/src/coexist.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_bootloader_format/libesp_bootloader_format.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_bootloader_format/libesp_bootloader_format.a
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_adc/libesp_adc.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_coex/src/lib_printf.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_adc/libesp_adc.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_coex/esp32/esp_coex_adapter.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_coex/src/coexist_debug_diagram.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_coex/src/coexist_debug.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_common/src/esp_err_to_name.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_coex/libesp_coex.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_coex/libesp_coex.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_cam/esp_cam_ctlr.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_cam/dvp_share_ctrl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_dac/dac_oneshot.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_dac/dac_cosine.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_dac/dac_continuous.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_dac/dac_common.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_cam/libesp_driver_cam.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_cam/libesp_driver_cam.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_dac/esp32/dac_dma.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_gpio/src/gpio.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_gpio/src/gpio_glitch_filter_ops.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_gpio/src/rtc_io.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_gptimer/src/gptimer.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_common/libesp_common.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_gptimer/src/gptimer_common.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_common/libesp_common.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_i2c/i2c_master.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_dac/libesp_driver_dac.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_i2c/i2c_common.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_dac/libesp_driver_dac.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_i2c/i2c_slave.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_i2s/i2s_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_i2s/i2s_std.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_i2s/i2s_pdm.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_gptimer/libesp_driver_gptimer.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_gptimer/libesp_driver_gptimer.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_i2s/i2s_platform.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_ledc/src/ledc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_mcpwm/src/mcpwm_cap.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_gpio/libesp_driver_gpio.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_gpio/libesp_driver_gpio.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_mcpwm/src/mcpwm_cmpr.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_mcpwm/src/mcpwm_com.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_mcpwm/src/mcpwm_fault.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_mcpwm/src/mcpwm_gen.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_mcpwm/src/mcpwm_oper.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_i2c/libesp_driver_i2c.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_mcpwm/src/mcpwm_sync.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_i2c/libesp_driver_i2c.a
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_i2s/libesp_driver_i2s.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_i2s/libesp_driver_i2s.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_mcpwm/src/mcpwm_timer.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_pcnt/src/pulse_cnt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_rmt/src/rmt_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_rmt/src/rmt_encoder.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_rmt/src/rmt_encoder_bytes.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_rmt/src/rmt_encoder_copy.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_ledc/libesp_driver_ledc.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_rmt/src/rmt_encoder_simple.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_ledc/libesp_driver_ledc.a
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_mcpwm/libesp_driver_mcpwm.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_rmt/src/rmt_rx.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_mcpwm/libesp_driver_mcpwm.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_rmt/src/rmt_tx.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_sdio/src/sdio_slave.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_sdm/src/sdm.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_pcnt/libesp_driver_pcnt.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_pcnt/libesp_driver_pcnt.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_sdmmc/src/sdmmc_transaction.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_sdmmc/src/sdmmc_host.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_sdspi/src/sdspi_crc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_sdspi/src/sdspi_host.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_sdspi/src/sdspi_transaction.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_spi/src/gpspi/spi_common.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_sdio/libesp_driver_sdio.a
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_sdm/libesp_driver_sdm.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_sdm/libesp_driver_sdm.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_sdio/libesp_driver_sdio.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_spi/src/gpspi/spi_master.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_rmt/libesp_driver_rmt.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_rmt/libesp_driver_rmt.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_spi/src/gpspi/spi_slave.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_spi/src/gpspi/spi_dma.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_touch_sens/common/touch_sens_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_touch_sens/hw_ver1/touch_version_specific.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_twai/esp_twai.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_sdspi/libesp_driver_sdspi.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_sdspi/libesp_driver_sdspi.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_twai/esp_twai_onchip.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_sdmmc/libesp_driver_sdmmc.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_sdmmc/libesp_driver_sdmmc.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_uart/src/uart.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_uart/src/uart_wakeup.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_driver_uart/src/uart_vfs.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_touch_sens/libesp_driver_touch_sens.a
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_spi/libesp_driver_spi.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_touch_sens/libesp_driver_touch_sens.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_spi/libesp_driver_spi.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/esp_eth.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/phy/esp_eth_phy_802_3.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/esp_eth_netif_glue.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/mac/esp_eth_mac_esp.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/mac/esp_eth_mac_esp_dma.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/mac/esp_eth_mac_esp_gpio.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/phy/esp_eth_phy_generic.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_twai/libesp_driver_twai.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/phy/esp_eth_phy_dp83848.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_twai/libesp_driver_twai.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/phy/esp_eth_phy_ip101.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/phy/esp_eth_phy_ksz80xx.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/phy/esp_eth_phy_lan87xx.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/phy/esp_eth_phy_rtl8201.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_eth/src/phy/esp_eth_phy_jl1101.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_event/default_event_loop.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_event/esp_event.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_event/esp_event_private.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_gdbstub/src/gdbstub.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_eth/libesp_eth.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_gdbstub/src/gdbstub_transport.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_eth/libesp_eth.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_gdbstub/src/packet.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_gdbstub/src/port/xtensa/gdbstub_xtensa.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_gdbstub/src/port/xtensa/gdbstub-entry.S.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_gdbstub/src/port/xtensa/xt_debugexception.S.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hid/src/esp_hidd.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_uart/libesp_driver_uart.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_driver_uart/libesp_driver_uart.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_hid/src/esp_hidh.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_gdbstub/libesp_gdbstub.a
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_event/libesp_event.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_event/libesp_event.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_gdbstub/libesp_gdbstub.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_hid/src/esp_hid_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hid/src/nimble_hidd.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hid/src/nimble_hidh.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_client/esp_http_client.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_client/lib/http_auth.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_client/lib/http_header.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_client/lib/http_utils.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_server/src/httpd_main.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_hid/libesp_hid.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_server/src/httpd_parse.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_hid/libesp_hid.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_server/src/httpd_sess.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_server/src/httpd_txrx.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_server/src/httpd_uri.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_server/src/httpd_ws.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_http_server/src/util/ctrl_sock.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_https_ota/src/esp_https_ota.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_https_server/src/https_server.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/cpu.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/esp_cpu_intr.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_http_server/libesp_http_server.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/esp_memory_utils.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/cpu_region_protect.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_http_server/libesp_http_server.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/esp_clk.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/clk_ctrl_os.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/hw_random.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_http_client/libesp_http_client.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/intr_alloc.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_http_client/libesp_http_client.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/mac_addr.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/periph_ctrl.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_https_server/libesp_https_server.a
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_https_ota/libesp_https_ota.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_https_server/libesp_https_server.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/revision.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_https_ota/libesp_https_ota.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/rtc_module.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/regi2c_ctrl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/esp_gpio_reserve.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/sar_periph_ctrl_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/io_mux.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/esp_clk_tree.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/dma/esp_dma_utils.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/dma/gdma_link.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/spi_bus_lock.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/clk_utils.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp_clk_tree_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/spi_share_hw_ctrl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/adc_share_hw_ctrl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/sleep_modem.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/sleep_modes.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/sleep_console.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/sleep_mspi.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/sleep_usb.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/sleep_gpio.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/sleep_event.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/rtc_wdt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/mspi_timing_tuning/mspi_timing_tuning.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/sleep_wake_stub.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/esp_clock_output.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/power_supply/brownout.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/rtc_clk.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/rtc_clk_init.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/rtc_init.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/rtc_sleep.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/rtc_time.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/chip_info.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/cache_sram_mmu.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_hw_support/port/esp32/sar_periph_ctrl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/src/esp_lcd_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/src/esp_lcd_panel_io.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/src/esp_lcd_panel_nt35510.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/src/esp_lcd_panel_ssd1306.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_hw_support/libesp_hw_support.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/src/esp_lcd_panel_st7789.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/src/esp_lcd_panel_ops.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/i2c/esp_lcd_panel_io_i2c_v1.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_hw_support/libesp_hw_support.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/i2c/esp_lcd_panel_io_i2c_v2.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/spi/esp_lcd_panel_io_spi.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_lcd/i80/esp_lcd_panel_io_i2s.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_local_ctrl/src/esp_local_ctrl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_local_ctrl/src/esp_local_ctrl_handler.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_local_ctrl/proto-c/esp_local_ctrl.pb-c.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_local_ctrl/src/esp_local_ctrl_transport_ble.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_local_ctrl/src/esp_local_ctrl_transport_httpd.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_mm/esp_mmu_map.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_mm/port/esp32/ext_mem_layout.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_mm/esp_cache_msync.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_mm/esp_cache_utils.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_mm/cache_esp32.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_mm/heap_align_hw.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_lcd/libesp_lcd.a
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_local_ctrl/libesp_local_ctrl.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_lcd/libesp_lcd.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_local_ctrl/libesp_local_ctrl.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_netif/esp_netif_handlers.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_mm/libesp_mm.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_netif/esp_netif_objects.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_mm/libesp_mm.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_netif/esp_netif_defaults.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_netif/lwip/esp_netif_lwip.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_netif/lwip/esp_netif_sntp.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_netif/lwip/esp_netif_lwip_defaults.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_netif/lwip/netif/wlanif.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_netif/lwip/netif/ethernetif.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_netif/lwip/netif/esp_pbuf_ref.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_partition/partition.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_partition/partition_target.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_phy/src/phy_override.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_phy/src/lib_printf.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_phy/src/phy_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_phy/src/phy_init.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_phy/esp32/phy_init_data.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_partition/libesp_partition.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_phy/src/btbb_init.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_partition/libesp_partition.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_pm/pm_locks.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_pm/pm_trace.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_pm/pm_impl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_ringbuf/ringbuf.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_rom/patches/esp_rom_sys.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_rom/patches/esp_rom_print.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_rom/patches/esp_rom_crc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_rom/patches/esp_rom_uart.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_phy/libesp_phy.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_phy/libesp_phy.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_rom/patches/esp_rom_spiflash.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_rom/patches/esp_rom_efuse.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_rom/patches/esp_rom_gpio.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_rom/patches/esp_rom_longjmp.S.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_security/src/init.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_pm/libesp_pm.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_security/src/esp_crypto_lock.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_pm/libesp_pm.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_security/src/esp_crypto_periph_clk.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_netif/libesp_netif.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_netif/libesp_netif.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/esp_err.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_ringbuf/libesp_ringbuf.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_ringbuf/libesp_ringbuf.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/crosscore_int.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_security/libesp_security.a
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_rom/libesp_rom.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_security/libesp_security.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_rom/libesp_rom.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/esp_ipc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/esp_system_console.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/freertos_hooks.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/int_wdt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/panic.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/esp_system.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/startup.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/startup_funcs.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/system_time.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/stack_check.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/ubsan.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/xt_wdt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/task_wdt/task_wdt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/task_wdt/task_wdt_impl_timergroup.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/cpu_start.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/panic_handler.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/esp_system_chip.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/image_process.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/esp_ipc_isr.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/esp_ipc_isr_port.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/esp_ipc_isr_handler.S.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/esp_ipc_isr_routines.S.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/panic_arch.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/panic_handler_asm.S.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/expression_with_stack.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/expression_with_stack_asm.S.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/debug_helpers.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/debug_helpers_asm.S.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/debug_stubs.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/arch/xtensa/trax.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/soc/esp32/highint_hdl.S.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/soc/esp32/clk.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/soc/esp32/reset_reason.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/soc/esp32/system_internal.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_system/port/soc/esp32/cache_err_int.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_timer/src/esp_timer.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_timer/src/esp_timer_init.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_timer/src/ets_timer_legacy.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_timer/src/system_time.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_timer/src/esp_timer_impl_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_timer/src/esp_timer_impl_lac.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_vfs_console/vfs_console.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_system/libesp_system.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/src/lib_printf.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_system/libesp_system.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/src/mesh_event.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/src/smartconfig.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/src/wifi_init.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/src/wifi_default.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_timer/libesp_timer.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/src/wifi_netif.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_timer/libesp_timer.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/src/wifi_default_ap.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_vfs_console/libesp_vfs_console.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_vfs_console/libesp_vfs_console.a
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/esp32/esp_adapter.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/regulatory/esp_wifi_regulatory.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp_wifi/src/smartconfig_ack.c.o
+Compiling .pio/build/esp32doit-devkit-v1/espcoredump/src/core_dump_init.c.o
+Compiling .pio/build/esp32doit-devkit-v1/espcoredump/src/core_dump_common.c.o
+Compiling .pio/build/esp32doit-devkit-v1/espcoredump/src/core_dump_flash.c.o
+Compiling .pio/build/esp32doit-devkit-v1/espcoredump/src/core_dump_uart.c.o
+Compiling .pio/build/esp32doit-devkit-v1/espcoredump/src/core_dump_elf.c.o
+Compiling .pio/build/esp32doit-devkit-v1/espcoredump/src/core_dump_binary.c.o
+Compiling .pio/build/esp32doit-devkit-v1/espcoredump/src/core_dump_sha.c.o
+Compiling .pio/build/esp32doit-devkit-v1/espcoredump/src/core_dump_crc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/espcoredump/src/port/xtensa/core_dump_port.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/esp_wifi/libesp_wifi.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborencoder_close_container_checked.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/esp_wifi/libesp_wifi.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborencoder.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborencoder_float.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborerrorstrings.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborparser_dup_string.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborparser.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espcoredump/libespcoredump.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborparser_float.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborpretty_stdio.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espcoredump/libespcoredump.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborpretty.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cbortojson.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/cborvalidation.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__cbor/tinycbor/src/open_memstream.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp-serial-flasher/src/esp_loader.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp-serial-flasher/src/esp_targets.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp-serial-flasher/src/md5_hash.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp-serial-flasher/src/protocol.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp-serial-flasher/src/slip.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp-serial-flasher/port/esp32_port.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__cbor/libespressif__cbor.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__cbor/libespressif__cbor.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_delta_ota/src/esp_delta_ota.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_delta_ota/detools/c/detools.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_delta_ota/detools/c/heatshrink/heatshrink_decoder.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_diag_data_store/src/esp_diag_data_store.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_diag_data_store/src/rtc_store/rtc_store.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_diagnostics/src/esp_diagnostics_log_hook.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp-serial-flasher/libespressif__esp-serial-flasher.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp-serial-flasher/libespressif__esp-serial-flasher.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_diagnostics/src/esp_diagnostics_utils.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_diagnostics/src/esp_diagnostics_metrics.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_diagnostics/src/esp_diagnostics_heap_metrics.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_diagnostics/src/esp_diagnostics_wifi_metrics.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_diagnostics/src/esp_diagnostics_variables.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_delta_ota/libespressif__esp_delta_ota.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_delta_ota/libespressif__esp_delta_ota.a
+In file included from managed_components/espressif__esp_diagnostics/src/esp_diagnostics_utils.c:52:
+/home/robothaler/.platformio/packages/framework-espidf/components/freertos/esp_additions/include/freertos/task_snapshot.h:8:2: warning: #warning freertos/task_snapshot.h header is no longer used, and will be removed in future versions. [-Wcpp]
+    8 | #warning freertos/task_snapshot.h header is no longer used, and will be removed in future versions.
+      |  ^~~~~~~
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_diag_data_store/libespressif__esp_diag_data_store.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_diagnostics/src/esp_diagnostics_network_variables.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_diag_data_store/libespressif__esp_diag_data_store.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_encrypted_img/src/esp_encrypted_img.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_insights/src/esp_insights.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_insights/src/esp_insights_transport.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_insights/src/esp_insights_client_data.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_insights/src/esp_insights_encoder.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_insights/src/esp_insights_cmd_resp.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_diagnostics/libespressif__esp_diagnostics.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_insights/src/esp_insights_cbor_decoder.c.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_diagnostics/libespressif__esp_diagnostics.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_insights/src/esp_insights_cbor_encoder.c.o
+Compiling .pio/build/esp32doit-devkit-v1/.pio/build/esp32doit-devkit-v1/https_server.crt.S.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_insights/src/transport/esp_insights_https.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_encrypted_img/libespressif__esp_encrypted_img.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_encrypted_img/libespressif__esp_encrypted_img.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/access/AccessControl.cpp.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_insights/libespressif__esp_insights.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_insights/libespressif__esp_insights.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/access/examples/ExampleAccessControlDelegate.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/access/examples/PermissiveAccessControlDelegate.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/AttributeAccessInterfaceRegistry.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/AttributePathExpandIterator.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/AttributeReportBuilder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/AttributeValueEncoder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/BufferedReadCallback.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/CASEClient.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/CASESessionManager.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/ChunkedWriteCallback.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/ClusterStateCache.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/CommandHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/CommandHandlerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/CommandHandlerInterfaceRegistry.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/CommandResponseSender.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/CommandSender.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/DeviceProxy.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/EventManagement.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/FailSafeContext.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/GenericEventManagementTestEventTriggerHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/GlobalAttributes.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/InteractionModelDelegatePointers.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/InteractionModelEngine.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/OperationalSessionSetup.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/PendingResponseTrackerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/ReadClient.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/ReadHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/SafeAttributePersistenceProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/SimpleSubscriptionResumptionStorage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/StatusResponse.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/StorageDelegateWrapper.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/SubscriptionResumptionSessionEstablisher.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/TimedHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/TimedRequest.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/TimerDelegates.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/WriteClient.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/WriteHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/data-model/FabricScopedPreEncodedValue.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/data-model/PreEncodedValue.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/data-model/StructDecodeIterator.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/data-model/WrappedStructEncoder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/data-model-provider/ActionReturnStatus.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/data-model-provider/MetadataLookup.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/data-model-provider/ProviderMetadataTree.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/ArrayBuilder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/ArrayParser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/AttributeDataIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/AttributeDataIBs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/AttributePathIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/AttributePathIBs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/AttributeReportIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/AttributeReportIBs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/AttributeStatusIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/AttributeStatusIBs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/Builder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/ClusterPathIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/CommandDataIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/CommandPathIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/CommandStatusIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/DataVersionFilterIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/DataVersionFilterIBs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/EventDataIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/EventFilterIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/EventFilterIBs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/EventPathIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/EventPathIBs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/EventReportIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/EventReportIBs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/EventStatusIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/InvokeRequestMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/InvokeRequests.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/InvokeResponseIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/InvokeResponseIBs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/InvokeResponseMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/ListBuilder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/ListParser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/MessageBuilder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/MessageDefHelper.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/MessageParser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/Parser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/ReadRequestMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/ReportDataMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/StatusIB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/StatusResponseMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/StructBuilder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/StructParser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/SubscribeRequestMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/SubscribeResponseMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/TimedRequestMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/WriteRequestMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/MessageDef/WriteResponseMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/reporting/Engine.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/reporting/ReportSchedulerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/reporting/SynchronizedReportSchedulerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/reporting/reporting.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/AclStorage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/CommissioningWindowManager.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/DefaultAclStorage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/DefaultTermsAndConditionsProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/Dnssd.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/EchoHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/JointFabricDatastore.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/Server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server/TermsAndConditionsManager.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server-cluster/DefaultServerCluster.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/server-cluster/ServerClusterInterface.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/DataModelHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/MatterCallbacks.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/attribute-metadata.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/attribute-storage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/attribute-table.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/binding-table.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/ember-io-storage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/ember-strings.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/generic-callback-stubs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/privilege-storage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/util.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/persistence/AttributePersistenceProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/persistence/DefaultAttributePersistenceProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/util/persistence/DeferredAttributePersistenceProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/ble/BLEEndPoint.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/ble/BleError.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/ble/BleLayer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/ble/BleUUID.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/ble/BtpEngine.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/CHIPCert.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/CHIPCertFromX509.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/CHIPCertToX509.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/CertificationDeclaration.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/DeviceAttestationConstructor.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/DeviceAttestationCredsProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/FabricTable.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/GenerateChipX509Cert.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/GroupDataProviderImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/LastKnownGoodTime.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/PersistentStorageOpCertStore.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/attestation_verifier/DacOnlyPartialAttestationVerifier.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/attestation_verifier/DefaultDeviceAttestationVerifier.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/attestation_verifier/DeviceAttestationVerifier.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/attestation_verifier/TestPAAStore.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/examples/DeviceAttestationCredsExample.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/examples/ExampleDACs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/credentials/examples/ExamplePAI.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/crypto/CHIPCryptoPAL.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/crypto/CHIPCryptoPALmbedTLS.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/crypto/CHIPCryptoPALmbedTLSCert.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/crypto/PersistentStorageOperationalKeystore.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/crypto/RandUtils.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/crypto/RawKeySessionKeystore.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/EndPointStateLwIP.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/IPAddress-StringFuncts.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/IPAddress.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/IPPacketInfo.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/IPPrefix.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/InetArgParser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/InetError.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/InetInterface.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/InetInterfaceImplDefault.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/UDPEndPoint.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/inet/UDPEndPointImplLwIP.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/address_resolve/AddressResolve.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/address_resolve/AddressResolve_DefaultImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/asn1/ASN1Error.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/asn1/ASN1OID.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/asn1/ASN1Reader.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/asn1/ASN1Time.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/asn1/ASN1Writer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/CHIPError.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/CHIPKeyIds.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/ErrorStr.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/OTAImageHeader.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/TLVCircularBuffer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/TLVDebug.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/TLVReader.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/TLVTags.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/TLVUpdater.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/TLVUtilities.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/core/TLVWriter.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/ActiveResolveAttempts.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/Advertiser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/Advertiser_ImplMinimalMdns.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/IPAddressSorter.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/IncrementalResolve.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/MinimalMdnsServer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/Resolver.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/ResolverProxy.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/Resolver_ImplMinimalMdns.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/ServiceNaming.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/TxtFields.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/AddressPolicy.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/AddressPolicy_DefaultImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/Parser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/RecordData.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/ResponseSender.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/Server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/core/QName.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/core/QNameString.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/core/RecordWriter.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/records/IP.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/records/ResourceRecord.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/responders/IP.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/dnssd/minimal_mdns/responders/QueryResponder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/Base64.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/BufferReader.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/BufferWriter.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/BytesCircularBuffer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/BytesToHex.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/CHIPArgParser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/CHIPMem.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/CHIPPlatformMemory.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/FibonacciUtils.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/FixedBufferAllocator.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/IniEscaping.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/PersistentStorageAudit.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/Pool.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/PrivateHeap.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/ReadOnlyBuffer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/StringBuilder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/ThreadOperationalDataset.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/TimeUtils.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/ZclString.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/utf8.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/logging/BinaryLogging.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/logging/TextOnlyLogging.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/verhoeff/Verhoeff.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/lib/support/verhoeff/Verhoeff10.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/messaging/ApplicationExchangeDispatch.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/messaging/ErrorCategory.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/messaging/ExchangeContext.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/messaging/ExchangeMessageDispatch.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/messaging/ExchangeMgr.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/messaging/ReliableMessageContext.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/messaging/ReliableMessageMgr.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/messaging/ReliableMessageProtocolConfig.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/CommissionableDataProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/DeviceControlServer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/DeviceInfoProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/DeviceInstanceInfoProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/DiagnosticDataProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/Entropy.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/GeneralUtils.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/Globals.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/LockTracker.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/PersistedStorage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/PlatformEventSupport.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/RuntimeOptionsProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/SingletonConfigurationManager.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/Protocols.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/bdx/AsyncTransferFacilitator.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/bdx/BdxMessages.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/bdx/BdxTransferDiagnosticLog.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/bdx/BdxTransferProxyDiagnosticLog.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/bdx/BdxTransferServer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/bdx/BdxTransferSession.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/bdx/BdxUri.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/bdx/StatusCode.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/bdx/TransferFacilitator.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/echo/EchoClient.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/echo/EchoServer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/interaction_model/StatusCode.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/CASEDestinationId.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/CASEServer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/CASESession.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/CheckInCounter.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/CheckinMessage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/DefaultSessionResumptionStorage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/MessageCounterManager.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/PASESession.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/PairingSession.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/SessionEstablishmentExchangeDispatch.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/SimpleSessionResumptionStorage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/StatusReport.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/secure_channel/UnsolicitedStatusHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/user_directed_commissioning/UserDirectedCommissioningClient.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/protocols/user_directed_commissioning/UserDirectedCommissioningServer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/AdditionalDataPayloadGenerator.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/AdditionalDataPayloadParser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/Base38Decode.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/Base38Encode.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/ManualSetupPayloadGenerator.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/ManualSetupPayloadParser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/OnboardingCodesUtil.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/QRCodeSetupPayloadGenerator.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/QRCodeSetupPayloadParser.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/SetupPayload.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/setup_payload/SetupPayloadHelper.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/SystemClock.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/SystemError.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/SystemLayer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/SystemLayerImplFreeRTOS.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/SystemMutex.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/SystemPacketBuffer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/SystemStats.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/SystemTimer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/TLVPacketBufferBackingStore.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/system/WakeEvent.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/tracing/registry.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/CryptoContext.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/GroupPeerMessageCounter.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/SecureMessageCodec.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/SecureSession.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/SecureSessionTable.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/Session.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/SessionHolder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/SessionManager.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/TransportMgrBase.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/raw/BLE.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/raw/MessageHeader.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/raw/PeerAddress.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/transport/raw/UDP.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/zzz_generated/app-common/app-common/zap-generated/cluster-objects.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/data-model-providers/codegen/CodegenDataModelProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/data-model-providers/codegen/CodegenDataModelProvider_Read.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/data-model-providers/codegen/CodegenDataModelProvider_Write.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/data-model-providers/codegen/EmberAttributeDataBuffer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/data-model-providers/codegen/EmberMetadata.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/data-model-providers/codegen/Instance.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/data-model-providers/codegen/ServerClusterInterfaceRegistry.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/access-control-server/ArlEncoder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/access-control-server/access-control-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/account-login-server/account-login-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/actions-server/actions-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/resource-monitoring-server/resource-monitoring-cluster-objects.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/resource-monitoring-server/resource-monitoring-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/administrator-commissioning-server/AdministratorCommissioningCluster.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/administrator-commissioning-server/AdministratorCommissioningLogic.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/air-quality-server/air-quality-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/application-basic-server/application-basic-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/application-launcher-server/application-launcher-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/audio-output-server/audio-output-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/basic-information/basic-information.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/bindings/BindingManager.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/bindings/PendingNotificationMap.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/bindings/bindings.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/boolean-state-configuration-server/BooleanStateConfigurationTestEventTriggerHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/boolean-state-configuration-server/boolean-state-configuration-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/bridged-device-basic-information-server/bridged-device-basic-information-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/camera-av-settings-user-level-management-server/camera-av-settings-user-level-management-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/camera-av-stream-management-server/camera-av-stream-management-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/channel-server/channel-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/chime-server/chime-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/closure-control-server/closure-control-cluster-logic.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/closure-dimension-server/closure-dimension-cluster-logic.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/closure-dimension-server/closure-dimension-matter-context.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/closure-dimension-server/closure-dimension-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/color-control-server/color-control-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/commissioner-control-server/commissioner-control-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/commodity-price-server/commodity-price-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/content-launch-server/content-launch-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/content-control-server/content-control-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/content-app-observer/content-app-observer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/descriptor/descriptor.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/device-energy-management-server/device-energy-management-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/mode-base-server/mode-base-cluster-objects.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/mode-base-server/mode-base-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/diagnostic-logs-server/BDXDiagnosticLogsProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/diagnostic-logs-server/diagnostic-logs-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/dishwasher-alarm-server/dishwasher-alarm-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/electrical-grid-conditions-server/electrical-grid-conditions-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/meter-identification-server/meter-identification-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/door-lock-server/door-lock-server-callback.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/door-lock-server/door-lock-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ecosystem-information-server/ecosystem-information-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/electrical-energy-measurement-server/electrical-energy-measurement-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/electrical-power-measurement-server/electrical-power-measurement-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/energy-evse-server/energy-evse-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ethernet-network-diagnostics-server/ethernet-network-diagnostics-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/energy-preference-server/energy-preference-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/fan-control-server/fan-control-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/fault-injection-server/fault-injection-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/fixed-label-server/fixed-label-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/general-commissioning-server/general-commissioning-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/general-diagnostics-server/GenericFaultTestEventTriggerHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/general-diagnostics-server/general-diagnostics-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/groups-server/groups-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/group-key-mgmt-server/group-key-mgmt-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/icd-management-server/icd-management-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/identify-server/identify-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/joint-fabric-datastore-server/joint-fabric-datastore-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/joint-fabric-administrator-server/joint-fabric-administrator-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/keypad-input-server/keypad-input-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/level-control/level-control.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/localization-configuration-server/localization-configuration-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/low-power-server/low-power-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/media-input-server/media-input-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/media-playback-server/media-playback-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/microwave-oven-control-server/microwave-oven-control-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/messages-server/messages-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/mode-select-server/mode-select-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/network-commissioning/CodegenInstance.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/network-commissioning/NetworkCommissioningCluster.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/network-commissioning/NetworkCommissioningLogic.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/network-commissioning/ThreadScanResponse.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/network-commissioning/WifiScanResponse.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/sample-mei-server/sample-mei-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/occupancy-sensor-server/occupancy-sensor-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/on-off-server/on-off-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/power-topology-server/power-topology-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/operational-credentials-server/operational-credentials-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/operational-state-server/operational-state-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ota-provider/ota-provider-cluster.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ota-requestor/BDXDownloader.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ota-requestor/DefaultOTARequestor.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ota-requestor/DefaultOTARequestorDriver.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ota-requestor/DefaultOTARequestorStorage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ota-requestor/ExtendedOTARequestorDriver.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ota-requestor/OTATestEventTriggerHandler.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/ota-requestor/ota-requestor-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/power-source-server/power-source-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/power-source-configuration-server/power-source-configuration-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/pump-configuration-and-control-server/pump-configuration-and-control-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/refrigerator-alarm-server/refrigerator-alarm-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/scenes-server/ExtensionFieldSetsImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/scenes-server/SceneHandlerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/scenes-server/SceneTableImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/scenes-server/scenes-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/service-area-server/service-area-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/service-area-server/service-area-storage-delegate.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/smoke-co-alarm-server/smoke-co-alarm-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/software-diagnostics-server/software-diagnostics-logic.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/software-diagnostics-server/software-fault-listener.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/soil-measurement-server/soil-measurement-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/switch-server/switch-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/target-navigator-server/target-navigator-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/temperature-control-server/temperature-control-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thermostat-server/PresetStructWithOwnedMembers.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thermostat-server/thermostat-server-atomic.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thermostat-server/thermostat-server-presets.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thermostat-server/thermostat-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thermostat-user-interface-configuration-server/thermostat-user-interface-configuration-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thread-border-router-management-server/thread-border-router-management-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thread-network-diagnostics-server/thread-network-diagnostics-provider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thread-network-diagnostics-server/thread-network-diagnostics-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thread-network-directory-server/DefaultThreadNetworkDirectoryStorage.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/thread-network-directory-server/thread-network-directory-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/time-format-localization-server/time-format-localization-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/time-synchronization-server/DefaultTimeSyncDelegate.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/time-synchronization-server/TimeSyncDataProvider.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/time-synchronization-server/time-synchronization-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/unit-localization-server/unit-localization-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/test-cluster-server/test-cluster-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/user-label-server/user-label-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/valve-configuration-and-control-server/valve-configuration-and-control-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/wake-on-lan-server/wake-on-lan-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/laundry-washer-controls-server/laundry-washer-controls-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/laundry-dryer-controls-server/laundry-dryer-controls-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/webrtc-transport-provider-server/webrtc-transport-provider-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/webrtc-transport-requestor-server/webrtc-transport-requestor-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/wifi-network-diagnostics-server/wifi-network-diagnostics-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/wifi-network-management-server/wifi-network-management-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/window-covering-server/window-covering-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/app/clusters/water-heater-management-server/water-heater-management-server.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/zap_common/app/callback-stub.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/zap_common/app/cluster-init-callback.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/administrator_commissioning_codegen_integration.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_attribute.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_attribute_bounds.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_cluster.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_command.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_data_model.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_data_model_utils.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_delegate_callbacks.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_endpoint.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_event.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_feature.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/ota_provider_integration.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/data_model/software_diagnostics_codegen_integration.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/private/esp_matter_nvs.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/esp_matter_attribute_utils.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/esp_matter_client.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/esp_matter_core.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/esp_matter_icd_configuration.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/esp_matter_identify.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/esp_matter_ota.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/esp_matter_providers.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/esp_matter_test_event_trigger.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/network_commissioning_instance.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/weak_functions.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/utils/esp_matter_mem.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter/utils/json_to_tlv.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/zzz_generated/app-common/app-common/zap-generated/attributes/Accessors.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter_console/esp_matter_console.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter_console/esp_matter_console_diagnostics.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter_console/esp_matter_console_factory_reset.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter_console/esp_matter_console_otcli.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter_console/esp_matter_console_udc.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter_console/esp_matter_console_wifi.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter_bridge/esp_matter_bridge.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/components/esp_matter_bridge/esp_matter_console_bridge.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/CHIPMem-PlatformDefault.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/ConfigurationManagerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/ConnectivityManagerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/ConnectivityManagerImpl_WiFi.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/DiagnosticDataProviderImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/ESP32Config.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/ESP32Utils.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/KeyValueStoreManagerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/Logging.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/LwIPCoreLock.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/NetworkCommissioningDriver.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/PlatformManagerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/SystemTimeSupport.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/route_hook/ESP32RouteHook.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/route_hook/ESP32RouteTable.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_matter/connectedhomeip/connectedhomeip/src/platform/ESP32/nimble/BLEManagerImpl.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_rcp_update/src/esp_rcp_ota.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_rcp_update/src/esp_rcp_update.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_secure_cert_mgr/srcs/esp_secure_cert_tlv_read.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__esp_secure_cert_mgr/srcs/esp_secure_cert_crypto.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_rcp_update/libespressif__esp_rcp_update.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_rcp_update/libespressif__esp_rcp_update.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__json_generator/src/json_generator.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__json_parser/src/json_parser.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_secure_cert_mgr/libespressif__esp_secure_cert_mgr.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__esp_secure_cert_mgr/libespressif__esp_secure_cert_mgr.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__lan867x/src/esp_eth_phy_lan867x.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__json_generator/libespressif__json_generator.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__json_generator/libespressif__json_generator.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__lan86xx_common/src/esp_eth_phy_lan86xx.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__json_parser/libespressif__json_parser.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__json_parser/libespressif__json_parser.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__mdns/mdns.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__lan867x/libespressif__lan867x.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__lan867x/libespressif__lan867x.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__mdns/mdns_mem_caps.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__lan86xx_common/libespressif__lan86xx_common.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__lan86xx_common/libespressif__lan86xx_common.a
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__mdns/mdns_networking_lwip.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__mdns/mdns_console.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/work_queue.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/factory.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/time.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/timezone.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/utils.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/cmd_resp.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/console/rmaker_common_cmds.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/console/rmaker_console.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/esp-mqtt/esp-mqtt-glue.c.o
+Compiling .pio/build/esp32doit-devkit-v1/managed_components/espressif__rmaker_common/src/create_APN3_PPI_string.c.o
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/diskio/diskio.c.o
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/diskio/diskio_rawflash.c.o
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/diskio/diskio_wl.c.o
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/src/ff.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__rmaker_common/libespressif__rmaker_common.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__rmaker_common/libespressif__rmaker_common.a
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/src/ffunicode.c.o
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/port/freertos/ffsystem.c.o
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/diskio/diskio_sdmmc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/vfs/vfs_fat.c.o
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/vfs/vfs_fat_sdmmc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/fatfs/vfs/vfs_fat_spiflash.c.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/espressif__mdns/libespressif__mdns.a
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/espressif__mdns/libespressif__mdns.a
+Compiling .pio/build/esp32doit-devkit-v1/base64.cpp.o
+Archiving .pio/build/esp32doit-devkit-v1/esp-idf/fatfs/libfatfs.a
+Compiling .pio/build/esp32doit-devkit-v1/cbuf.cpp.o
+Indexing .pio/build/esp32doit-devkit-v1/esp-idf/fatfs/libfatfs.a
+Compiling .pio/build/esp32doit-devkit-v1/ColorFormat.c.o
+Compiling .pio/build/esp32doit-devkit-v1/chip-debug-report.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-adc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-bt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-cpu.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-dac.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-gpio.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-hosted.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-i2c.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-i2c-ng.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-i2c-slave.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-ledc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-matrix.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-misc.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-periman.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-psram.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-rgb-led.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-sigmadelta.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-spi.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-time.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-timer.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-tinyusb.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-touch.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-touch-ng.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-uart.c.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-rmt.c.o
+Compiling .pio/build/esp32doit-devkit-v1/Esp.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/freertos_stats.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/FunctionalInterrupt.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/HardwareSerial.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/HashBuilder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/HEXBuilder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/IPAddress.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/cdecode.c.o
+Compiling .pio/build/esp32doit-devkit-v1/cencode.c.o
+Compiling .pio/build/esp32doit-devkit-v1/MacAddress.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/main.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/MD5Builder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/Print.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/stdlib_noniso.c.o
+Compiling .pio/build/esp32doit-devkit-v1/Stream.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/StreamString.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/Tone.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/HWCDC.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/USB.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/USBCDC.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/USBMSC.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/FirmwareMSC.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/firmware_msc_fat.c.o
+Compiling .pio/build/esp32doit-devkit-v1/wiring_pulse.c.o
+Compiling .pio/build/esp32doit-devkit-v1/wiring_shift.c.o
+Compiling .pio/build/esp32doit-devkit-v1/WMath.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/WString.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/ArduinoOTA.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/AsyncUDP.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/DNSServer.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/EEPROM.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/ESP_SR.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/esp32-hal-sr.c.o
+Compiling .pio/build/esp32doit-devkit-v1/ESPmDNS.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/ETH.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/FFat.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/FS.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/vfs_api.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/SHA1Builder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/SHA2Builder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/SHA3Builder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/PBKDF2_HMACBuilder.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/HTTPClient.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/Insights.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/LittleFS.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/MatterGenericSwitch.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/MatterOnOffLight.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/MatterDimmableLight.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/MatterColorTemperatureLight.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/MatterColorLight.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/MatterEnhancedColorLight.cpp.o
+Compiling .pio/build/esp32doit-devkit-v1/MatterFan.cpp.o
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorTemperatureLight.cpp: In member function 'virtual bool MatterColorTemperatureLight::begin(bool, uint8_t, uint16_t)':
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorTemperatureLight.cpp:100:23: error: 'esp_matter::cluster::on_off::config_t' {aka 'struct esp_matter::cluster::on_off::config'} has no member named 'lighting'
+  100 |   light_config.on_off.lighting.start_up_on_off = nullptr;
+      |                       ^~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorTemperatureLight.cpp:104:30: error: 'esp_matter::cluster::level_control::config_t' {aka 'struct esp_matter::cluster::level_control::config'} has no member named 'lighting'
+  104 |   light_config.level_control.lighting.start_up_current_level = nullptr;
+      |                              ^~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorTemperatureLight.cpp:109:30: error: 'esp_matter::cluster::color_control::config_t' {aka 'struct esp_matter::cluster::color_control::config'} has no member named 'color_temperature'
+  109 |   light_config.color_control.color_temperature.color_temperature_mireds = ColorTemperature;
+      |                              ^~~~~~~~~~~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorTemperatureLight.cpp:110:30: error: 'esp_matter::cluster::color_control::config_t' {aka 'struct esp_matter::cluster::color_control::config'} has no member named 'color_temperature'
+  110 |   light_config.color_control.color_temperature.startup_color_temperature_mireds = nullptr;
+      |                              ^~~~~~~~~~~~~~~~~
+*** [.pio/build/esp32doit-devkit-v1/MatterColorTemperatureLight.cpp.o] Error 1
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterOnOffLight.cpp: In member function 'virtual bool MatterOnOffLight::begin(bool)':
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterOnOffLight.cpp:70:23: error: 'esp_matter::cluster::on_off::config_t' {aka 'struct esp_matter::cluster::on_off::config'} has no member named 'lighting'
+   70 |   light_config.on_off.lighting.start_up_on_off = nullptr;
+      |                       ^~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp: In function 'esp_err_t esp_matter::endpoint::enhanced_color_light::add(esp_matter::endpoint_t*, config_t*)':
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:68:17: error: too many arguments to function 'esp_matter::cluster_t* esp_matter::cluster::on_off::create(esp_matter::endpoint_t*, config_t*, uint8_t)'
+   68 |   on_off::create(endpoint, &(config->on_off), CLUSTER_FLAG_SERVER, on_off::feature::lighting::get_id());
+      |   ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from managed_components/espressif__esp_matter/components/esp_matter/esp_matter.h:25,
+                 from /home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/Matter.h:20,
+                 from /home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:18:
+managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_cluster.h:283:12: note: declared here
+  283 | cluster_t *create(endpoint_t *endpoint, config_t *config, uint8_t flags);
+      |            ^~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:69:24: error: too many arguments to function 'esp_matter::cluster_t* esp_matter::cluster::level_control::create(esp_matter::endpoint_t*, config_t*, uint8_t)'
+   69 |   level_control::create(
+      |   ~~~~~~~~~~~~~~~~~~~~~^
+   70 |     endpoint, &(config->level_control), CLUSTER_FLAG_SERVER, level_control::feature::on_off::get_id() | level_control::feature::lighting::get_id()
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   71 |   );
+      |   ~                     
+managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_cluster.h:294:12: note: declared here
+  294 | cluster_t *create(endpoint_t *endpoint, config_t *config, uint8_t flags);
+      |            ^~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:72:24: error: too many arguments to function 'esp_matter::cluster_t* esp_matter::cluster::color_control::create(esp_matter::endpoint_t*, config_t*, uint8_t)'
+   72 |   color_control::create(
+      |   ~~~~~~~~~~~~~~~~~~~~~^
+   73 |     endpoint, &(config->color_control), CLUSTER_FLAG_SERVER,
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   74 |     color_control::feature::hue_saturation::get_id() | color_control::feature::color_temperature::get_id()
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   75 |   );
+      |   ~                     
+managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_cluster.h:308:12: note: declared here
+  308 | cluster_t *create(endpoint_t *endpoint, config_t *config, uint8_t flags);
+      |            ^~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp: In member function 'virtual bool MatterEnhancedColorLight::begin(bool, espHsvColor_t, uint8_t, uint16_t)':
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:189:23: error: 'esp_matter::cluster::on_off::config_t' {aka 'struct esp_matter::cluster::on_off::config'} has no member named 'lighting'
+  189 |   light_config.on_off.lighting.start_up_on_off = nullptr;
+      |                       ^~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:193:30: error: 'esp_matter::cluster::level_control::config_t' {aka 'struct esp_matter::cluster::level_control::config'} has no member named 'lighting'
+  193 |   light_config.level_control.lighting.start_up_current_level = nullptr;
+      |                              ^~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:196:30: error: 'esp_matter::cluster::color_control::config_t' {aka 'struct esp_matter::cluster::color_control::config'} has no member named 'color_temperature'
+  196 |   light_config.color_control.color_temperature.color_temperature_mireds = ColorTemperature;
+      |                              ^~~~~~~~~~~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:197:30: error: 'esp_matter::cluster::color_control::config_t' {aka 'struct esp_matter::cluster::color_control::config'} has no member named 'color_temperature'
+  197 |   light_config.color_control.color_temperature.startup_color_temperature_mireds = nullptr;
+      |                              ^~~~~~~~~~~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:201:30: error: 'esp_matter::cluster::color_control::config_t' {aka 'struct esp_matter::cluster::color_control::config'} has no member named 'hue_saturation'
+  201 |   light_config.color_control.hue_saturation.current_hue = _colorHSV.h;
+      |                              ^~~~~~~~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterEnhancedColorLight.cpp:202:30: error: 'esp_matter::cluster::color_control::config_t' {aka 'struct esp_matter::cluster::color_control::config'} has no member named 'hue_saturation'
+  202 |   light_config.color_control.hue_saturation.current_saturation = _colorHSV.s;
+      |                              ^~~~~~~~~~~~~~
+*** [.pio/build/esp32doit-devkit-v1/MatterOnOffLight.cpp.o] Error 1
+*** [.pio/build/esp32doit-devkit-v1/MatterEnhancedColorLight.cpp.o] Error 1
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp: In function 'esp_err_t esp_matter::endpoint::rgb_color_light::add(esp_matter::endpoint_t*, config_t*)':
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp:68:17: error: too many arguments to function 'esp_matter::cluster_t* esp_matter::cluster::on_off::create(esp_matter::endpoint_t*, config_t*, uint8_t)'
+   68 |   on_off::create(endpoint, &(config->on_off), CLUSTER_FLAG_SERVER, on_off::feature::lighting::get_id());
+      |   ~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+In file included from managed_components/espressif__esp_matter/components/esp_matter/esp_matter.h:25,
+                 from /home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/Matter.h:20,
+                 from /home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp:18:
+managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_cluster.h:283:12: note: declared here
+  283 | cluster_t *create(endpoint_t *endpoint, config_t *config, uint8_t flags);
+      |            ^~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp:69:24: error: too many arguments to function 'esp_matter::cluster_t* esp_matter::cluster::level_control::create(esp_matter::endpoint_t*, config_t*, uint8_t)'
+   69 |   level_control::create(
+      |   ~~~~~~~~~~~~~~~~~~~~~^
+   70 |     endpoint, &(config->level_control), CLUSTER_FLAG_SERVER, level_control::feature::on_off::get_id() | level_control::feature::lighting::get_id()
+      |     ~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+   71 |   );
+      |   ~                     
+managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_cluster.h:294:12: note: declared here
+  294 | cluster_t *create(endpoint_t *endpoint, config_t *config, uint8_t flags);
+      |            ^~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp:72:24: error: too many arguments to function 'esp_matter::cluster_t* esp_matter::cluster::color_control::create(esp_matter::endpoint_t*, config_t*, uint8_t)'
+   72 |   color_control::create(endpoint, &(config->color_control), CLUSTER_FLAG_SERVER, color_control::feature::hue_saturation::get_id());
+      |   ~~~~~~~~~~~~~~~~~~~~~^~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~~
+managed_components/espressif__esp_matter/components/esp_matter/data_model/esp_matter_cluster.h:308:12: note: declared here
+  308 | cluster_t *create(endpoint_t *endpoint, config_t *config, uint8_t flags);
+      |            ^~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp: In member function 'virtual bool MatterColorLight::begin(bool, espHsvColor_t)':
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp:173:23: error: 'esp_matter::cluster::on_off::config_t' {aka 'struct esp_matter::cluster::on_off::config'} has no member named 'lighting'
+  173 |   light_config.on_off.lighting.start_up_on_off = nullptr;
+      |                       ^~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp:177:30: error: 'esp_matter::cluster::level_control::config_t' {aka 'struct esp_matter::cluster::level_control::config'} has no member named 'lighting'
+  177 |   light_config.level_control.lighting.start_up_current_level = nullptr;
+      |                              ^~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp:181:30: error: 'esp_matter::cluster::color_control::config_t' {aka 'struct esp_matter::cluster::color_control::config'} has no member named 'hue_saturation'
+  181 |   light_config.color_control.hue_saturation.current_hue = _colorHSV.h;
+      |                              ^~~~~~~~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterColorLight.cpp:182:30: error: 'esp_matter::cluster::color_control::config_t' {aka 'struct esp_matter::cluster::color_control::config'} has no member named 'hue_saturation'
+  182 |   light_config.color_control.hue_saturation.current_saturation = _colorHSV.s;
+      |                              ^~~~~~~~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterDimmableLight.cpp: In member function 'virtual bool MatterDimmableLight::begin(bool, uint8_t)':
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterDimmableLight.cpp:85:23: error: 'esp_matter::cluster::on_off::config_t' {aka 'struct esp_matter::cluster::on_off::config'} has no member named 'lighting'
+   85 |   light_config.on_off.lighting.start_up_on_off = nullptr;
+      |                       ^~~~~~~~
+/home/robothaler/.platformio/packages/framework-arduinoespressif32/libraries/Matter/src/MatterEndpoints/MatterDimmableLight.cpp:89:30: error: 'esp_matter::cluster::level_control::config_t' {aka 'struct esp_matter::cluster::level_control::config'} has no member named 'lighting'
+   89 |   light_config.level_control.lighting.start_up_current_level = nullptr;
+      |                              ^~~~~~~~
+*** [.pio/build/esp32doit-devkit-v1/MatterColorLight.cpp.o] Error 1
+*** [.pio/build/esp32doit-devkit-v1/MatterDimmableLight.cpp.o] Error 1
+========================= [FAILED] Took 748.36 seconds =========================

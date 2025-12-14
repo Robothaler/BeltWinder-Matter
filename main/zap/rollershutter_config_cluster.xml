@@ -1,0 +1,16 @@
+<?xml version="1.0"?>
+<configurator>
+  <cluster manufacturerCode="0xFFF1" > <!-- NOTE: 0xFFF1 is a temporary code for development -->
+    <name>RollerShutterConfiguration</name>
+    <code>0xFC42</code> <!-- A custom cluster ID in the manufacturer-specific range -->
+    <domain>General</domain>
+    <description>Custom cluster for configuring advanced roller shutter settings.</description>
+    
+    <attribute side="server" code="0x0000" define="DIRECTION_INVERTED" type="boolean" writable="true" default="false">DirectionInverted</attribute>
+    
+    <command source="client" code="0x00" name="StartCalibration" isOptional="false">
+        <description>Commands the device to start its calibration sequence.</description>
+    </command>
+    
+  </cluster>
+</configurator>

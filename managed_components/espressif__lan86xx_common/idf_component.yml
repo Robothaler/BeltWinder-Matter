@@ -1,0 +1,9 @@
+dependencies:
+  idf: '>=5.2'
+description: Common PHY implementation for LAN86xx family Ethernet drivers
+repository: git://github.com/espressif/esp-eth-drivers.git
+repository_info:
+  commit_sha: 7e200813a04961b90397286c37e79b8d1e4aeceb
+  path: lan86xx_common
+url: https://github.com/espressif/esp-eth-drivers/tree/master/lan86xx_common
+version: 1.0.0

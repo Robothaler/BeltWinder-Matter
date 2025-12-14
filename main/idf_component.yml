@@ -1,0 +1,8 @@
+dependencies:
+  h2zero/esp-nimble-cpp:
+    version: "^2.3.2"
+  espressif/cmake_utilities:
+    version: "0.*"
+  espressif/esp_matter:
+    version: ">=1.4.0"
+    require: public
