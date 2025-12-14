@@ -1,4 +1,0 @@
-dependencies:
-  espressif/esp_encrypted_img:
-    version: "*"
-    override_path: "../.."
