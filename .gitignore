@@ -1,3 +1,5 @@
-.pio
-managed_components
-main/zap
+.pio/
+.vscode/
+managed_components/
+main/zap/
+sdkconfig*
