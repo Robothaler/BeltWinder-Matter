@@ -78,43 +78,69 @@ void RollerShutter::saveStateToKVS() {
 }
 
 void RollerShutter::moveToPercent(uint8_t percent) {
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "MOVE COMMAND RECEIVED");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    
     if (!calibrated) {
-        ESP_LOGE(TAG, "Not calibrated. Command ignored.");
+        ESP_LOGE(TAG, "✗ ABORT: Not calibrated!");
+        ESP_LOGE(TAG, "  → Run calibration first");
         return;
     }
     
-    if (percent > 100) percent = 100;
+    if (percent > 100) {
+        ESP_LOGW(TAG, "⚠ Invalid percentage: %d%% → Clamping to 100%%", percent);
+        percent = 100;
+    }
     
-    // count target pulses
+    uint8_t currentPercent = getCurrentPercent();
+    ESP_LOGI(TAG, "Current position: %d%%", currentPercent);
+    ESP_LOGI(TAG, "Target position:  %d%%", percent);
+    ESP_LOGI(TAG, "Direction: %s", percent > currentPercent ? "DOWN ↓" : "UP ↑");
+    
+    // Calculate target pulses
     int32_t newTarget = (maxPulseCount * percent) / 100;
     newTarget = constrain(newTarget, 0, maxPulseCount);
     
-    // check if target is reached (1-Pulse-Tolerance)
+    ESP_LOGI(TAG, "Current pulses: %ld", (long)currentPulseCount);
+    ESP_LOGI(TAG, "Target pulses:  %ld", (long)newTarget);
+    ESP_LOGI(TAG, "Max pulses:     %ld", (long)maxPulseCount);
+    
+    // Check if already at target
     if (abs(newTarget - currentPulseCount) <= 1) {
-        ESP_LOGI(TAG, "Already at target position (%d%%).", percent);
+        ESP_LOGI(TAG, "✓ Already at target position (tolerance: ±1 pulse)");
+        ESP_LOGI(TAG, "  → No movement needed");
         targetPulseCount = -1;
         return;
     }
     
-    // window-sensor-logic (only for downward movement)
-    if (percent > getCurrentPercent() && windowIsOpen && 
+    // Window sensor logic
+    if (percent > currentPercent && windowIsOpen && 
         windowLogic != WindowOpenLogic::LOGIC_DISABLED) {
         
-        ESP_LOGW(TAG, "Downward movement while window open. Applying logic.");
+        ESP_LOGW(TAG, "═══════════════════════════════════");
+        ESP_LOGW(TAG, "⚠ WINDOW OPEN - APPLYING LOGIC");
+        ESP_LOGW(TAG, "═══════════════════════════════════");
+        ESP_LOGW(TAG, "Window state: OPEN");
+        ESP_LOGW(TAG, "Movement direction: DOWNWARD");
+        ESP_LOGW(TAG, "Active logic: %d", (int)windowLogic);
         
         switch (windowLogic) {
             case WindowOpenLogic::BLOCK_DOWNWARD:
-                ESP_LOGI(TAG, "Logic: BLOCK. Command ignored.");
+                ESP_LOGI(TAG, "→ Logic: BLOCK_DOWNWARD");
+                ESP_LOGI(TAG, "  ✗ Command rejected - window is open");
                 return;
                 
             case WindowOpenLogic::OPEN_FULLY:
-                ESP_LOGI(TAG, "Logic: OPEN_FULLY. Moving to 0%% instead.");
+                ESP_LOGI(TAG, "→ Logic: OPEN_FULLY");
+                ESP_LOGI(TAG, "  ✓ Overriding target: %d%% → 0%%", percent);
                 percent = 0;
                 newTarget = 0;
                 break;
                 
             case WindowOpenLogic::VENTILATION_POSITION:
-                ESP_LOGI(TAG, "Logic: VENTILATION. Moving to %d%% instead.", VENTILATION_PERCENTAGE);
+                ESP_LOGI(TAG, "→ Logic: VENTILATION_POSITION");
+                ESP_LOGI(TAG, "  ✓ Overriding target: %d%% → %d%%", percent, VENTILATION_PERCENTAGE);
                 percent = VENTILATION_PERCENTAGE;
                 newTarget = (maxPulseCount * VENTILATION_PERCENTAGE) / 100;
                 break;
@@ -122,11 +148,20 @@ void RollerShutter::moveToPercent(uint8_t percent) {
             default: 
                 break;
         }
+        ESP_LOGW(TAG, "═══════════════════════════════════");
     }
     
     targetPulseCount = newTarget;
-    ESP_LOGI(TAG, "New target: %d%% (%ld pulses, current: %ld)", 
-             percent, (long)targetPulseCount, (long)currentPulseCount);
+    
+    int32_t delta = abs(newTarget - currentPulseCount);
+    float estimatedTime = (float)delta / 10.0f;  // Assuming ~10 pulses/sec
+    
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "✓ MOVEMENT STARTED");
+    ESP_LOGI(TAG, "  Target: %d%% (%ld pulses)", percent, (long)newTarget);
+    ESP_LOGI(TAG, "  Distance: %ld pulses", (long)delta);
+    ESP_LOGI(TAG, "  Est. time: %.1f seconds", estimatedTime);
+    ESP_LOGI(TAG, "═══════════════════════════════════");
 }
 
 void RollerShutter::stop() {
