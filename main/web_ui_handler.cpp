@@ -18,6 +18,13 @@
 
 #include "web_ui_handler.h"
 
+struct BLETaskParams {
+    WebUIHandler* handler;
+    int fd;
+    String address;
+    uint32_t passkey;
+};
+
 static const char* TAG = "WebUI";
 
 static const char index_html[] PROGMEM = R"rawliteral(
@@ -884,6 +891,46 @@ static const char index_html[] PROGMEM = R"rawliteral(
             </div>
           </div>
         </div>
+
+        <!-- Matter Integration Toggle -->
+        <div id="ble-matter-toggle" class="hidden" style="margin-top:25px">
+          <div class="card">
+            <h3 style="margin-top:0;color:#888;font-size:1.1em">Matter Integration</h3>
+            
+            <div class="alert">
+              <strong>ℹ️ Contact Sensor for Matter</strong>
+              <p style="margin-top:10px;line-height:1.6">
+                When enabled, the BLE sensor's contact state, battery, and illuminance will be 
+                exposed as a Matter Contact Sensor endpoint. This allows control via 
+                Apple Home, Google Home, Alexa, etc.
+              </p>
+              <p style="margin-top:10px;color:#888">
+                <strong>Note:</strong> The sensor will still control the shutter logic 
+                regardless of this setting.
+              </p>
+            </div>
+            
+            <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:20px">
+              <div class="direction-btn" id="matter-toggle-off" onclick="setContactSensorMatter(false)">
+                <div style="font-size:2em;margin-bottom:8px">❌</div>
+                <div style="font-weight:bold;font-size:1.1em">Matter OFF</div>
+                <div style="font-size:0.85em;color:#888;margin-top:5px">Only for shutter control</div>
+              </div>
+              <div class="direction-btn" id="matter-toggle-on" onclick="setContactSensorMatter(true)">
+                <div style="font-size:2em;margin-bottom:8px">✅</div>
+                <div style="font-weight:bold;font-size:1.1em">Matter ON</div>
+                <div style="font-size:0.85em;color:#888;margin-top:5px">Expose to Matter ecosystem</div>
+              </div>
+            </div>
+            
+            <div id="matter-toggle-status" style="margin-top:20px;padding:15px;background:rgba(255,255,255,0.04);border-radius:12px;text-align:center">
+              <div style="font-size:0.9em;color:#888">Status</div>
+              <div id="matter-toggle-status-text" style="font-size:1.2em;font-weight:bold;margin-top:5px">
+                Loading...
+              </div>
+            </div>
+          </div>
+        </div>
         
         <!-- Scan Interface -->
         <div id="ble-scan-interface">
@@ -894,6 +941,20 @@ static const char index_html[] PROGMEM = R"rawliteral(
           <button class="btn primary" id="ble-scan-btn" onclick="startBLEScan()" style="width:100%;margin-bottom:25px">
             <span>🔍 Start Scan</span>
           </button>
+          
+          <div id="ble-encryption-setup" class="hidden" style="margin-top:20px">
+            <div class="alert warning">
+              <strong>🔒 Enable Encryption</strong>
+              <p style="margin-top:10px">
+                This device is currently unencrypted. You can enable encryption by setting a 6-digit passkey.
+                After enabling, the device will require this passkey for all future connections.
+              </p>
+            </div>
+            
+            <button class="btn primary" onclick="showEnableEncryptionModal()" style="width:100%;margin-top:15px">
+              <span>🔐 Enable Encryption</span>
+            </button>
+          </div>
           
           <h3 style="margin-top:30px;color:#888;font-size:1.1em;font-weight:600">Discovered Devices</h3>
           <ul class="device-list" id="ble-discovered-devices">
@@ -1015,129 +1076,305 @@ static const char index_html[] PROGMEM = R"rawliteral(
 
   <!-- BLE Pairing Modal -->
   <div id="ble-pair-modal" class="modal hidden">
+  <div class="modal-box">
+    <h3>📱 Pair BLE Sensor</h3>
+    
+    <div class="input-group">
+      <label>Device Name</label>
+      <input type="text" id="ble-pair-name" readonly>
+    </div>
+    
+    <div class="input-group">
+      <label>MAC Address</label>
+      <input type="text" id="ble-pair-address" readonly>
+    </div>
+    
+    <div class="input-group">
+      <label id="ble-pair-input-label">Passkey (Optional - 6 digits)</label>
+      <input type="number" 
+             id="ble-pair-passkey" 
+             placeholder="Leave empty for unencrypted pairing" 
+             min="0"
+             max="999999"
+             oninput="validateBLEPairForm()">
+    </div>
+    
+    <!-- ✅ NEU: Pairing Instructions Box -->
+    <div id="ble-pair-instructions" class="alert hidden" style="margin-top:15px">
+      <strong>📋 Pairing Instructions</strong>
+      <ol style="margin:10px 0 0 20px;line-height:1.8">
+        <li>Press and HOLD the button on the device</li>
+        <li>Keep holding for at least <strong>10 seconds</strong></li>
+        <li>Wait for the LED to flash rapidly</li>
+        <li>Then click "Pair Device" below</li>
+      </ol>
+      <p style="margin-top:10px;color:#FF9800">
+        ⚠️ <strong>Important:</strong> The button must be pressed BEFORE clicking Pair!
+      </p>
+    </div>
+    
+    <div id="ble-pair-encryption-info" class="alert hidden">
+      <strong id="ble-pair-encryption-title">ℹ️ Pairing Options</strong>
+      <p id="ble-pair-encryption-text" style="margin-top:8px">
+        You can pair this device with or without encryption.
+      </p>
+    </div>
+    
+    <div class="modal-buttons">
+      <button class="modal-btn modal-btn-secondary" onclick="closeBLEPairModal()">Cancel</button>
+      <button class="modal-btn modal-btn-primary" id="ble-pair-confirm-btn" 
+              onclick="confirmBLEPair()">Pair Device</button>
+    </div>
+  </div>
+</div>
+
+  <!-- BLE Connect Modal (Phase 1) -->
+  <div id="ble-connect-modal" class="modal hidden">
     <div class="modal-box">
-      <h3>📱 Pair BLE Sensor</h3>
+      <h3>🔗 Connect Device (Phase 1)</h3>
       
       <div class="input-group">
         <label>Device Name</label>
-        <input type="text" id="ble-pair-name" readonly>
+        <input type="text" id="connect-device-name" readonly>
       </div>
       
       <div class="input-group">
         <label>MAC Address</label>
-        <input type="text" id="ble-pair-address" readonly>
+        <input type="text" id="connect-device-address" readonly>
       </div>
       
-      <div class="input-group">
-        <label>Bindkey (32 hex characters)</label>
-        <input type="text" id="ble-pair-bindkey" 
-               placeholder="Leave empty if not encrypted" 
-               maxlength="32" 
-               oninput="validateBLEPairForm()">
+      <div class="alert warning">
+        <strong>📋 Instructions</strong>
+        <ol style="margin:10px 0 0 20px;line-height:1.8">
+          <li>Press and HOLD the button on the device</li>
+          <li>Keep holding for at least <strong>10 seconds</strong></li>
+          <li>Wait for the LED to flash rapidly</li>
+          <li>Then click "Connect" below</li>
+        </ol>
       </div>
       
-      <div id="ble-pair-bindkey-hint" class="alert warning hidden">
-        <strong>🔒 Encrypted Device</strong>
-        <p style="margin-top:8px">This sensor uses encryption. Please enter the 32-character bindkey from the Shelly app (Settings → Device → Bluetooth).</p>
+      <div class="alert">
+        <strong>ℹ️ What happens next?</strong>
+        <p style="margin-top:10px">
+          This will establish a basic connection (bonding) without encryption.
+          After connecting, you can optionally enable encryption.
+        </p>
       </div>
       
       <div class="modal-buttons">
-        <button class="modal-btn modal-btn-secondary" onclick="closeBLEPairModal()">Cancel</button>
-        <button class="modal-btn modal-btn-primary" id="ble-pair-confirm-btn" 
-                onclick="confirmBLEPair()" disabled>Pair Device</button>
+        <button class="modal-btn modal-btn-secondary" onclick="closeConnectModal()">Cancel</button>
+        <button class="modal-btn modal-btn-primary" id="connect-confirm-btn" onclick="confirmConnect()">
+          Connect Device
+        </button>
       </div>
     </div>
   </div>
 
+  <!-- BLE Encrypted Pair Modal -->
+  <div id="ble-encrypted-pair-modal" class="modal hidden">
+    <div class="modal-box">
+      <h3>🔐 Pair Encrypted Device</h3>
+      
+      <div class="input-group">
+        <label>Device Name</label>
+        <input type="text" id="enc-pair-device-name" readonly>
+      </div>
+      
+      <div class="input-group">
+        <label>MAC Address</label>
+        <input type="text" id="enc-pair-device-address" readonly>
+      </div>
+      
+      <div class="alert warning">
+        <strong>🔒 Encrypted Device</strong>
+        <p style="margin-top:10px">
+          This device is already encrypted and requires the 6-digit passkey
+          that was set during initial pairing.
+        </p>
+      </div>
+      
+      <div class="input-group">
+        <label>Passkey (Required - 6 digits)</label>
+        <input type="number" 
+               id="enc-pair-passkey" 
+               placeholder="Enter passkey" 
+               min="0"
+               max="999999"
+               oninput="validateEncryptedPairForm()">
+      </div>
+      
+      <div class="modal-buttons">
+        <button class="modal-btn modal-btn-secondary" onclick="closeEncryptedPairModal()">Cancel</button>
+        <button class="modal-btn modal-btn-primary" id="enc-pair-confirm-btn" 
+                onclick="confirmEncryptedPair()" disabled>
+          Pair Device
+        </button>
+      </div>
+    </div>
+  </div>
+
+  <!-- Enable Encryption Modal -->
+<div id="enable-encryption-modal" class="modal hidden">
+  <div class="modal-box">
+    <h3>🔐 Enable Encryption</h3>
+    
+    <div class="alert warning">
+      <strong>⚠️ Important</strong>
+      <p style="margin-top:10px">
+        This will permanently enable encryption on the device. 
+        You will need to remember this passkey for all future connections!
+      </p>
+    </div>
+    
+    <div class="input-group">
+      <label>Device</label>
+      <input type="text" id="enc-device-name" readonly>
+    </div>
+    
+    <div class="input-group">
+      <label>MAC Address</label>
+      <input type="text" id="enc-device-address" readonly>
+    </div>
+    
+    <div class="input-group">
+      <label>Choose Passkey (6 digits, 0-999999)</label>
+      <input type="number" 
+             id="enc-passkey" 
+             placeholder="123456" 
+             min="0" 
+             max="999999"
+             oninput="validateEnableEncryption()">
+    </div>
+    
+    <div class="input-group">
+      <label>Confirm Passkey</label>
+      <input type="number" 
+             id="enc-passkey-confirm" 
+             placeholder="123456" 
+             min="0" 
+             max="999999"
+             oninput="validateEnableEncryption()">
+    </div>
+    
+    <div class="modal-buttons">
+      <button class="modal-btn modal-btn-secondary" onclick="closeEnableEncryptionModal()">Cancel</button>
+      <button class="modal-btn modal-btn-primary" id="enc-confirm-btn" onclick="confirmEnableEncryption()" disabled>
+        Enable Encryption
+      </button>
+    </div>
+  </div>
+</div>
+
+
   <script>
-  let ws;
-  let reconnectInterval;
-  let statusInterval;
-  let matterCommissioned = false;
+let ws;
+let reconnectInterval;
+let statusInterval;
+let matterCommissioned = false;
+let discoveredDevices = [];
+let currentBLEPairDevice = null;
 
-  function connectWebSocket() {
-    ws = new WebSocket('ws://' + location.host + '/ws');
+function connectWebSocket() {
+  ws = new WebSocket('ws://' + location.host + '/ws');
 
-    ws.onopen = () => {
-      console.log('WebSocket connected');
-      clearInterval(reconnectInterval);
+  ws.onopen = () => {
+    console.log('WebSocket connected');
+    clearInterval(reconnectInterval);
+    
+    setTimeout(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send('status');
+        ws.send('matter_status');
+      }
+    }, 100);
+    
+    statusInterval = setInterval(() => {
+      if (ws.readyState === WebSocket.OPEN) {
+        ws.send('status');
+      }
+    }, 2000);
+  };
+
+  ws.onclose = () => {
+    console.log('WebSocket disconnected. Reconnecting...');
+    clearInterval(statusInterval);
+    reconnectInterval = setInterval(connectWebSocket, 5000);
+  };
+
+  ws.onerror = (e) => {
+    console.error('WebSocket error:', e);
+  };
+
+  ws.onmessage = e => {
+    console.log('WebSocket message received:', e.data);
+    let d;
+    
+    try {
+      d = JSON.parse(e.data);
+    } catch (err) {
+      console.error('Failed to parse JSON:', err);
+      return;
+    }
+
+    if (d.type === 'error') {
+      alert('Error: ' + d.message);
+      return;
+    }
+    
+    if (!d || !d.type) {
+      console.error('Invalid message format - missing type:', d);
+      return;
+    }
+    
+    if (d.type === 'status') {
+      document.getElementById('pos').innerText = d.pos + '%';
+      document.getElementById('calib').innerText = d.cal ? 'Yes' : 'No';
+      document.getElementById('inv').innerText = d.inv ? 'Inverted' : 'Normal';
+      updateDirectionButtons(d.inv);
+    } 
+    else if (d.type === 'matter_status') {
+      matterCommissioned = d.commissioned;
+      let statusEl = document.getElementById('matter-status');
       
-      setTimeout(() => {
+      if (d.commissioned) {
+        statusEl.innerHTML = 'Paired <span class="badge commissioned">✓</span>';
+        statusEl.className = 'status-value commissioned';
+      } else {
+        statusEl.innerHTML = 'Not Paired <span class="badge not-commissioned">!</span>';
+        statusEl.className = 'status-value not-commissioned';
+      }
+      
+      updateMatterInfo(d);
+    } 
+    else if (d.type === 'info') {
+      renderSystemInfo(d);
+    }
+    else if (d.type === 'ble_discovered') {
+      renderBLEDiscoveredDevices(d.devices);
+    }
+    else if (d.type === 'ble_status') {
+      let wasPaired = document.getElementById('ble-sensor-status').classList.contains('hidden') === false;
+      let nowPaired = d.paired;
+      
+      renderBLESensorStatus(d);
+      
+      if (!wasPaired && nowPaired) {
+        console.log('Device just paired - requesting continuous scan');
         if (ws.readyState === WebSocket.OPEN) {
-          ws.send('status');
-          ws.send('matter_status');
+          ws.send('ble_start_continuous_scan');
         }
-      }, 100);
-      
-      statusInterval = setInterval(() => {
-        if (ws.readyState === WebSocket.OPEN) {
-          ws.send('status');
-        }
-      }, 2000);
-    };
-
-    ws.onclose = () => {
-      console.log('WebSocket disconnected. Reconnecting...');
-      clearInterval(statusInterval);
-      reconnectInterval = setInterval(connectWebSocket, 5000);
-    };
-
-    ws.onerror = (e) => {
-      console.error('WebSocket error:', e);
-    };
-
-    ws.onmessage = e => {
-      console.log('WebSocket message received:', e.data);
-      let d;
-      
-      try {
-          d = JSON.parse(e.data);
-      } catch (err) {
-          console.error('Failed to parse JSON:', err);
-          return;
       }
-      
-      if (!d || !d.type) {
-          console.error('Invalid message format - missing type:', d);
-          return;
-      }
-      
-      if (d.type === 'status') {
-          document.getElementById('pos').innerText = d.pos + '%';
-          document.getElementById('calib').innerText = d.cal ? 'Yes' : 'No';
-          document.getElementById('inv').innerText = d.inv ? 'Inverted' : 'Normal';
-          updateDirectionButtons(d.inv);
-      } 
-      else if (d.type === 'matter_status') {
-          matterCommissioned = d.commissioned;
-          let statusEl = document.getElementById('matter-status');
-          
-          if (d.commissioned) {
-              statusEl.innerHTML = 'Paired <span class="badge commissioned">✓</span>';
-              statusEl.className = 'status-value commissioned';
-          } else {
-              statusEl.innerHTML = 'Not Paired <span class="badge not-commissioned">!</span>';
-              statusEl.className = 'status-value not-commissioned';
-          }
-          
-          updateMatterInfo(d);
-      } 
-      else if (d.type === 'info') {
-          renderSystemInfo(d);
-      }
-      else if (d.type === 'ble_discovered') {
-          renderBLEDiscoveredDevices(d.devices);
-      }
-      else if (d.type === 'ble_status') {
-          renderBLESensorStatus(d);
-      }
-      else if (d.type === 'ble_scan_complete') {
-          let btn = document.getElementById('ble-scan-btn');
-          btn.disabled = false;
-          btn.innerHTML = '<span>🔍 Start Scan</span>';
-      }
-    };
-  }
+    }
+    else if (d.type === 'ble_scan_complete') {
+      let btn = document.getElementById('ble-scan-btn');
+      btn.disabled = false;
+      btn.innerHTML = '<span>🔍 Start Scan</span>';
+    }
+    else if (d.type === 'contact_sensor_status') {
+      updateContactSensorToggle(d.enabled, d.active);
+    }
+  };
+}
 
   connectWebSocket();
 
@@ -1156,6 +1393,7 @@ static const char index_html[] PROGMEM = R"rawliteral(
     }
     if (id === 'ble' && ws.readyState === WebSocket.OPEN) {
       ws.send('ble_status');
+      ws.send('contact_sensor_status');
     }
   }
 
@@ -1266,8 +1504,6 @@ static const char index_html[] PROGMEM = R"rawliteral(
     document.getElementById('sysinfo').innerHTML = html;
   }
 
-  let currentBLEPairDevice = null;
-
   function startBLEScan() {
     if (ws.readyState === WebSocket.OPEN) {
         ws.send('ble_scan');
@@ -1283,75 +1519,427 @@ static const char index_html[] PROGMEM = R"rawliteral(
     }
   }
 
-  function openBLEPairModal(deviceJson) {
-    let device;
-    try {
-        device = typeof deviceJson === 'string' ? JSON.parse(deviceJson) : deviceJson;
-    } catch (e) {
-        console.error('Failed to parse device JSON:', e, deviceJson);
-        alert('Error: Invalid device data');
+  let currentConnectDevice = null;
+
+function openConnectModal(deviceJson) {
+    let device = typeof deviceJson === 'string' ? JSON.parse(deviceJson) : deviceJson;
+    currentConnectDevice = device;
+    
+    // Erstelle Modal dynamisch
+    let modal = document.getElementById('ble-connect-modal');
+    if (!modal) {
+        // Modal erstellen wenn nicht vorhanden
+        let modalHtml = `
+        <div id="ble-connect-modal" class="modal hidden">
+          <div class="modal-box">
+            <h3>🔗 Connect Device (Phase 1)</h3>
+            
+            <div class="input-group">
+              <label>Device Name</label>
+              <input type="text" id="connect-device-name" readonly>
+            </div>
+            
+            <div class="input-group">
+              <label>MAC Address</label>
+              <input type="text" id="connect-device-address" readonly>
+            </div>
+            
+            <div class="alert warning">
+              <strong>📋 Instructions</strong>
+              <ol style="margin:10px 0 0 20px;line-height:1.8">
+                <li>Press and HOLD the button on the device</li>
+                <li>Keep holding for at least <strong>10 seconds</strong></li>
+                <li>Wait for the LED to flash rapidly</li>
+                <li>Then click "Connect" below</li>
+              </ol>
+            </div>
+            
+            <div class="alert">
+              <strong>ℹ️ What happens next?</strong>
+              <p style="margin-top:10px">
+                This will establish a basic connection (bonding) without encryption.
+                After connecting, you can optionally enable encryption.
+              </p>
+            </div>
+            
+            <div class="modal-buttons">
+              <button class="modal-btn modal-btn-secondary" onclick="closeConnectModal()">Cancel</button>
+              <button class="modal-btn modal-btn-primary" id="connect-confirm-btn" onclick="confirmConnect()">
+                Connect Device
+              </button>
+            </div>
+          </div>
+        </div>`;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('ble-connect-modal');
+    }
+    
+    document.getElementById('connect-device-name').value = device.name || 'Unknown';
+    document.getElementById('connect-device-address').value = device.address || 'Unknown';
+    
+    modal.classList.remove('hidden');
+  }
+
+  function closeConnectModal() {
+    document.getElementById('ble-connect-modal').classList.add('hidden');
+    currentConnectDevice = null;
+}
+
+function confirmConnect() {
+    if (!currentConnectDevice) return;
+    
+    if (ws.readyState !== WebSocket.OPEN) {
+        alert('WebSocket not connected');
         return;
     }
     
-    currentBLEPairDevice = device;
+    console.log('Connecting to device:', currentConnectDevice.address);
     
-    document.getElementById('ble-pair-name').value = device.name || 'Unknown';
-    document.getElementById('ble-pair-address').value = device.address || 'Unknown';
-    document.getElementById('ble-pair-bindkey').value = '';
+    ws.send(JSON.stringify({
+        cmd: 'ble_connect',
+        address: currentConnectDevice.address
+    }));
     
-    let hintEl = document.getElementById('ble-pair-bindkey-hint');
-    if (device.encrypted) {
-        hintEl.classList.remove('hidden');
-    } else {
-        hintEl.classList.add('hidden');
+    // Button-Status
+    let btn = document.getElementById('connect-confirm-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> <span>Connecting...</span>';
+    
+    // Auto-close nach 15 Sekunden
+    setTimeout(() => {
+        closeConnectModal();
+    }, 15000);
+  }
+
+  // ============================================================================
+// Modal: Enable Encryption (Phase 2)
+// ============================================================================
+
+function showEnableEncryptionModal() {
+    // Gerät muss bereits connected sein
+    if (!discoveredDevices || discoveredDevices.length === 0) {
+        alert('No device connected. Use Connect button first!');
+        return;
     }
     
-    validateBLEPairForm();
-    document.getElementById('ble-pair-modal').classList.remove('hidden');
+    // Annahme: Das erste unverschlüsselte Gerät ist das connected device
+    let device = discoveredDevices.find(d => !d.encrypted);
+    if (!device) {
+        alert('No unencrypted device found');
+        return;
+    }
+    
+    currentUnencryptedDevice = device;
+    
+    document.getElementById('enc-device-name').value = device.name;
+    document.getElementById('enc-device-address').value = device.address;
+    document.getElementById('enc-passkey').value = '';
+    document.getElementById('enc-passkey-confirm').value = '';
+    
+    document.getElementById('enable-encryption-modal').classList.remove('hidden');
+}
+
+function closeEnableEncryptionModal() {
+    document.getElementById('enable-encryption-modal').classList.add('hidden');
+    currentUnencryptedDevice = null;
+}
+
+function validateEnableEncryption() {
+    let passkey = document.getElementById('enc-passkey').value;
+    let confirm = document.getElementById('enc-passkey-confirm').value;
+    let btn = document.getElementById('enc-confirm-btn');
+    
+    btn.disabled = (passkey.length !== 6 || passkey !== confirm);
+}
+
+function confirmEnableEncryption() {
+    if (!currentUnencryptedDevice) return;
+    
+    let passkey = document.getElementById('enc-passkey').value;
+    let confirm = document.getElementById('enc-passkey-confirm').value;
+    
+    if (passkey.length !== 6 || passkey !== confirm) {
+        alert('Passkeys must be 6 digits and match!');
+        return;
+    }
+    
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            cmd: 'ble_enable_encryption',
+            address: currentUnencryptedDevice.address,
+            passkey: parseInt(passkey)
+        }));
+        
+        closeEnableEncryptionModal();
+        
+        // Refresh nach 3 Sekunden
+        setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send('ble_status');
+            }
+        }, 3000);
+    }
+}
+
+// ============================================================================
+// Modal: Pair Encrypted Device (Direktes Pairing)
+// ============================================================================
+
+let currentEncryptedDevice = null;
+
+function openEncryptedPairModal(deviceJson) {
+    let device = typeof deviceJson === 'string' ? JSON.parse(deviceJson) : deviceJson;
+    currentEncryptedDevice = device;
+    
+    // Modal erstellen falls nicht vorhanden
+    let modal = document.getElementById('ble-encrypted-pair-modal');
+    if (!modal) {
+        let modalHtml = `
+        <div id="ble-encrypted-pair-modal" class="modal hidden">
+          <div class="modal-box">
+            <h3>🔐 Pair Encrypted Device</h3>
+            
+            <div class="input-group">
+              <label>Device Name</label>
+              <input type="text" id="enc-pair-device-name" readonly>
+            </div>
+            
+            <div class="input-group">
+              <label>MAC Address</label>
+              <input type="text" id="enc-pair-device-address" readonly>
+            </div>
+            
+            <div class="alert warning">
+              <strong>🔒 Encrypted Device</strong>
+              <p style="margin-top:10px">
+                This device is already encrypted and requires the 6-digit passkey
+                that was set during initial pairing.
+              </p>
+            </div>
+            
+            <div class="input-group">
+              <label>Passkey (Required - 6 digits)</label>
+              <input type="number" 
+                     id="enc-pair-passkey" 
+                     placeholder="Enter passkey" 
+                     min="0"
+                     max="999999"
+                     oninput="validateEncryptedPairForm()">
+            </div>
+            
+            <div class="modal-buttons">
+              <button class="modal-btn modal-btn-secondary" onclick="closeEncryptedPairModal()">Cancel</button>
+              <button class="modal-btn modal-btn-primary" id="enc-pair-confirm-btn" 
+                      onclick="confirmEncryptedPair()" disabled>
+                Pair Device
+              </button>
+            </div>
+          </div>
+        </div>`;
+        
+        document.body.insertAdjacentHTML('beforeend', modalHtml);
+        modal = document.getElementById('ble-encrypted-pair-modal');
+    }
+    
+    document.getElementById('enc-pair-device-name').value = device.name || 'Unknown';
+    document.getElementById('enc-pair-device-address').value = device.address || 'Unknown';
+    document.getElementById('enc-pair-passkey').value = '';
+    
+    modal.classList.remove('hidden');
+}
+
+function closeEncryptedPairModal() {
+    document.getElementById('ble-encrypted-pair-modal').classList.add('hidden');
+    currentEncryptedDevice = null;
+}
+
+function validateEncryptedPairForm() {
+    let passkey = document.getElementById('enc-pair-passkey').value.trim();
+    let btn = document.getElementById('enc-pair-confirm-btn');
+    
+    btn.disabled = (passkey.length !== 6);
+}
+
+function confirmEncryptedPair() {
+    if (!currentEncryptedDevice) return;
+    
+    if (ws.readyState !== WebSocket.OPEN) {
+        alert('WebSocket not connected');
+        return;
+    }
+    
+    let passkeyInput = document.getElementById('enc-pair-passkey');
+    let passkey = passkeyInput.value.trim();
+    
+    if (passkey.length !== 6) {
+        alert('Passkey must be exactly 6 digits');
+        return;
+    }
+    
+    console.log('Pairing encrypted device with passkey');
+    
+    ws.send(JSON.stringify({
+        cmd: 'ble_pair_encrypted',
+        address: currentEncryptedDevice.address,
+        passkey: parseInt(passkey)
+    }));
+    
+    // Button-Status
+    let btn = document.getElementById('enc-pair-confirm-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> <span>Pairing...</span>';
+    
+    // Auto-close nach 30 Sekunden
+    setTimeout(() => {
+        closeEncryptedPairModal();
+    }, 30000);
+  }
+
+  function openBLEPairModal(deviceJson) {
+    let device = typeof deviceJson === 'string' ? JSON.parse(deviceJson) : deviceJson;
+    
+    if (device.encrypted) {
+        // Verschlüsselt → Encrypted Pair Modal
+        openEncryptedPairModal(device);
+    } else {
+        // Unverschlüsselt → Connect Modal
+        openConnectModal(device);
+    }
   }
 
   function closeBLEPairModal() {
     document.getElementById('ble-pair-modal').classList.add('hidden');
     currentBLEPairDevice = null;
+    
+    // ✅ Reset button state
+    let btn = document.getElementById('ble-pair-confirm-btn');
+    btn.disabled = false;
+    btn.innerHTML = 'Pair Device';
+    
+    // ✅ Remove any status messages
+    let statusDivs = document.querySelectorAll('#ble-pair-modal .modal-box .alert');
+    statusDivs.forEach(div => {
+        if (div.id !== 'ble-pair-encryption-info' && div.id !== 'ble-pair-instructions') {
+            div.remove();
+        }
+    });
   }
 
   function validateBLEPairForm() {
-    if (!currentBLEPairDevice) return;
-    
-    let bindkey = document.getElementById('ble-pair-bindkey').value.trim();
-    let btn = document.getElementById('ble-pair-confirm-btn');
-    
-    if (currentBLEPairDevice.encrypted) {
-      btn.disabled = (bindkey.length !== 32);
-    } else {
-      btn.disabled = false;
-    }
+      if (!currentBLEPairDevice) return;
+      
+      let btn = document.getElementById('ble-pair-confirm-btn');
+      let passkeyInput = document.getElementById('ble-pair-passkey');
+      let passkey = passkeyInput.value.trim();
+      
+      if (currentBLEPairDevice.encrypted) {
+          // Encrypted device: MUST have 6-digit passkey
+          btn.disabled = (passkey.length !== 6);
+      } else {
+          // Unencrypted device: Can be empty OR 6 digits
+          if (passkey.length === 0) {
+              // Empty = unencrypted pairing (always OK)
+              btn.disabled = false;
+          } else {
+              // If user enters something, must be exactly 6 digits
+              btn.disabled = (passkey.length !== 6);
+          }
+      }
   }
 
   function confirmBLEPair() {
     if (!currentBLEPairDevice) return;
     
-    let bindkey = document.getElementById('ble-pair-bindkey').value.trim();
-    
-    if (currentBLEPairDevice.encrypted && bindkey.length !== 32) {
-      alert('Encrypted device requires a 32-character bindkey');
-      return;
+    if (ws.readyState !== WebSocket.OPEN) {
+        alert('WebSocket not connected');
+        return;
     }
     
-    if (ws.readyState === WebSocket.OPEN) {
-      ws.send(JSON.stringify({
-        cmd: 'ble_pair',
-        address: currentBLEPairDevice.address,
-        bindkey: bindkey
-      }));
-      
-      closeBLEPairModal();
-      
-      setTimeout(() => {
-        ws.send('ble_status');
-      }, 1000);
+    let passkeyInput = document.getElementById('ble-pair-passkey');
+    let passkey = passkeyInput.value.trim();
+    
+    if (currentBLEPairDevice.encrypted) {
+        // ========================================
+        // DEVICE IS ALREADY ENCRYPTED
+        // ========================================
+        if (passkey.length !== 6) {
+            alert('Encrypted device requires a 6-digit passkey');
+            return;
+        }
+        
+        console.log('Pairing encrypted device with passkey');
+        
+        // ✅ Show progress message
+        let statusDiv = document.createElement('div');
+        statusDiv.className = 'alert';
+        statusDiv.style.marginTop = '15px';
+        statusDiv.innerHTML = '<strong>⏳ Pairing in progress...</strong><br>This may take up to 30 seconds.';
+        document.querySelector('#ble-pair-modal .modal-box').appendChild(statusDiv);
+        
+        ws.send(JSON.stringify({
+            cmd: 'ble_pair_encrypted',
+            address: currentBLEPairDevice.address,
+            passkey: parseInt(passkey)
+        }));
+        
+    } else {
+        // ========================================
+        // DEVICE IS UNENCRYPTED
+        // ========================================
+        
+        if (passkey.length === 0) {
+            // Pair WITHOUT encryption
+            console.log('Pairing unencrypted device (no passkey)');
+            ws.send(JSON.stringify({
+                cmd: 'ble_pair',
+                address: currentBLEPairDevice.address,
+                bindkey: ''
+            }));
+            
+        } else if (passkey.length === 6) {
+            // Pair WITH encryption (enable encryption during pairing)
+            console.log('Pairing unencrypted device WITH new passkey');
+            
+            // ✅ Show instruction alert
+            if (!confirm('IMPORTANT:\n\n' +
+                        '1. Press and HOLD the pairing button NOW\n' +
+                        '2. Keep holding for at least 10 seconds\n' +
+                        'Click OK when ready to start pairing.')) {
+                return;
+            }
+            
+            // ✅ Show progress message
+            let statusDiv = document.createElement('div');
+            statusDiv.className = 'alert warning';
+            statusDiv.style.marginTop = '15px';
+            statusDiv.innerHTML = '<strong>⏳ Enabling encryption...</strong><br>' +
+                                 'Keep holding the button!<br>' +
+                                 'This will take about 20 seconds.';
+            document.querySelector('#ble-pair-modal .modal-box').appendChild(statusDiv);
+            
+            ws.send(JSON.stringify({
+                cmd: 'ble_pair_with_encryption',
+                address: currentBLEPairDevice.address,
+                passkey: parseInt(passkey)
+            }));
+            
+        } else {
+            alert('Passkey must be exactly 6 digits or empty');
+            return;
+        }
     }
-  }
+    
+    // ✅ Disable button während Pairing
+    let btn = document.getElementById('ble-pair-confirm-btn');
+    btn.disabled = true;
+    btn.innerHTML = '<span class="spinner"></span> <span>Pairing...</span>';
+    
+    // ✅ Auto-close nach 35 Sekunden (Timeout)
+    setTimeout(() => {
+        closeBLEPairModal();
+    }, 35000);
+}
 
   function unpairBLE() {
     if (!confirm('Remove this sensor? The shutter will no longer react to window open/close events.')) {
@@ -1367,7 +1955,13 @@ static const char index_html[] PROGMEM = R"rawliteral(
     }
   }
 
+  // ============================================================================
+  // BLE Device List - Mit Connect/Encrypt Buttons
+  // ============================================================================
+
   function renderBLEDiscoveredDevices(devices) {
+    discoveredDevices = devices;
+    
     let html = '';
     
     if (devices.length === 0) {
@@ -1386,8 +1980,11 @@ static const char index_html[] PROGMEM = R"rawliteral(
               <div class="device-info">
                 <div class="device-name">${dev.name}`;
             
+            // ✅ Badge: Encrypted or Unencrypted
             if (dev.encrypted) {
-                html += `<span class="badge" style="background:rgba(255,152,0,0.2);color:#FF9800;border:1px solid rgba(255,152,0,0.3)">🔒 Encrypted</span>`;
+                html += `<span class="badge" style="background:rgba(76,175,80,0.2);color:#4CAF50;border:1px solid rgba(76,175,80,0.3)">🔒 Encrypted</span>`;
+            } else {
+                html += `<span class="badge" style="background:rgba(255,152,0,0.2);color:#FF9800;border:1px solid rgba(255,152,0,0.3)">🔓 Not Encrypted</span>`;
             }
             
             html += `</div>
@@ -1396,9 +1993,22 @@ static const char index_html[] PROGMEM = R"rawliteral(
                   <span class="${signalClass}">${dev.rssi} dBm</span>
                 </div>
               </div>
-              <div class="device-actions">
-                <button class="btn secondary" onclick='openBLEPairModal(${JSON.stringify(dev)})'  style="padding:10px 20px"><span>Pair</span></button>
-              </div>
+              <div class="device-actions">`;
+            
+            // ✅ Button-Logik: Connect ODER Pair (je nach Encryption-Status)
+            if (dev.encrypted) {
+                // Bereits verschlüsselt → Direktes Pairing mit Passkey
+                html += `<button class="btn primary" onclick='openEncryptedPairModal(${JSON.stringify(dev)})' style="padding:10px 20px">
+                           <span>🔐 Pair</span>
+                         </button>`;
+            } else {
+                // Nicht verschlüsselt → 2-Phasen-Optionen
+                html += `<button class="btn secondary" onclick='openConnectModal(${JSON.stringify(dev)})' style="padding:10px 20px">
+                           <span>🔗 Connect</span>
+                         </button>`;
+            }
+            
+            html += `</div>
             </li>`;
         });
     }
@@ -1406,24 +2016,195 @@ static const char index_html[] PROGMEM = R"rawliteral(
     document.getElementById('ble-discovered-devices').innerHTML = html;
   }
 
+  let currentUnencryptedDevice = null;
+
+  function showEnableEncryptionModal() {
+    // Find unencrypted device from the stored list
+    let unencrypted = discoveredDevices.find(d => !d.encrypted);
+    if (!unencrypted) {
+        alert('No unencrypted device found');
+        return;
+    }
+    
+    currentUnencryptedDevice = unencrypted;
+    
+    document.getElementById('enc-device-name').value = unencrypted.name;
+    document.getElementById('enc-device-address').value = unencrypted.address;
+    document.getElementById('enc-passkey').value = '';
+    document.getElementById('enc-passkey-confirm').value = '';
+    
+    document.getElementById('enable-encryption-modal').classList.remove('hidden');
+  }
+
+  function closeEnableEncryptionModal() {
+    document.getElementById('enable-encryption-modal').classList.add('hidden');
+    currentUnencryptedDevice = null;
+  }
+
+  function validateEnableEncryption() {
+    let passkey = document.getElementById('enc-passkey').value;
+    let confirm = document.getElementById('enc-passkey-confirm').value;
+    let btn = document.getElementById('enc-confirm-btn');
+    
+    btn.disabled = (passkey.length !== 6 || passkey !== confirm);
+  }
+
+  function confirmEnableEncryption() {
+    if (!currentUnencryptedDevice) return;
+    
+    let passkey = document.getElementById('enc-passkey').value;
+    let confirm = document.getElementById('enc-passkey-confirm').value;
+    
+    if (passkey.length !== 6 || passkey !== confirm) {
+        alert('Passkeys must be 6 digits and match!');
+        return;
+    }
+    
+    if (ws.readyState === WebSocket.OPEN) {
+        ws.send(JSON.stringify({
+            cmd: 'ble_enable_encryption',
+            address: currentUnencryptedDevice.address,
+            passkey: parseInt(passkey)
+        }));
+        
+        closeEnableEncryptionModal();
+        
+        // Refresh device list after encryption
+        setTimeout(() => {
+            if (ws.readyState === WebSocket.OPEN) {
+                ws.send('ble_scan');
+            }
+        }, 2000);
+    }
+}
+
+  // ============================================================================
+  // Contact Sensor Matter Toggle
+  // ============================================================================
+
+  let contactSensorMatterEnabled = false;
+  let contactSensorEndpointActive = false;
+
+  function updateContactSensorToggle(enabled, active) {
+    contactSensorMatterEnabled = enabled;
+    contactSensorEndpointActive = active;
+    
+    // UI State
+    document.getElementById('matter-toggle-off').className = enabled ? 'direction-btn' : 'direction-btn active';
+    document.getElementById('matter-toggle-on').className = enabled ? 'direction-btn active' : 'direction-btn';
+    
+    // Status Text
+    let statusText = '';
+    let statusColor = '';
+    
+    if (enabled && active) {
+      statusText = '✓ Active in Matter';
+      statusColor = '#4CAF50';
+    } else if (enabled && !active) {
+      statusText = '⏳ Waiting for sensor data...';
+      statusColor = '#FF9800';
+    } else {
+      statusText = '❌ Disabled';
+      statusColor = '#888';
+    }
+    
+    let statusEl = document.getElementById('matter-toggle-status-text');
+    statusEl.innerText = statusText;
+    statusEl.style.color = statusColor;
+  }
+
+  function setContactSensorMatter(enable) {
+    if (ws.readyState === WebSocket.OPEN) {
+      let cmd = enable ? 'contact_sensor_enable' : 'contact_sensor_disable';
+      ws.send(cmd);
+      
+      // Optimistic UI Update
+      updateContactSensorToggle(enable, contactSensorEndpointActive);
+      
+      // Status refresh nach 1 Sekunde
+      setTimeout(() => {
+        if (ws.readyState === WebSocket.OPEN) {
+          ws.send('contact_sensor_status');
+        }
+      }, 1000);
+    }
+  }
+
+  function refreshContactSensorStatus() {
+    if (ws.readyState === WebSocket.OPEN) {
+      ws.send('contact_sensor_status');
+    }
+  }
+
   function renderBLESensorStatus(data) {
   if (data.paired) {
     document.getElementById('ble-sensor-status').classList.remove('hidden');
     document.getElementById('ble-scan-interface').classList.add('hidden');
+    document.getElementById('ble-matter-toggle').classList.remove('hidden');
     
     document.getElementById('ble-device-name').innerText = data.name;
     document.getElementById('ble-device-address').innerText = data.address;
     
+    // ✅ NEU: State-abhängige Anzeige
+    let stateIndicator = '';
+    
+    if (data.state === 'connected_unencrypted') {
+      stateIndicator = '<div class="alert warning" style="margin-bottom:15px">' +
+                      '<strong>🔓 Connected (Unencrypted)</strong>' +
+                      '<p style="margin-top:8px">This device is connected but not encrypted. ' +
+                      'Click "Enable Encryption" below to secure the connection.</p>' +
+                      '<button class="btn primary" onclick="showEnableEncryptionModal()" ' +
+                      'style="margin-top:12px;width:100%">' +
+                      '<span>🔐 Enable Encryption</span>' +
+                      '</button>' +
+                      '</div>';
+    } else if (data.state === 'connected_encrypted') {
+      stateIndicator = '<div class="alert success" style="margin-bottom:15px">' +
+                      '<strong>✓ Connected & Encrypted</strong>' +
+                      '<p style="margin-top:8px">This device is securely connected with encryption enabled.</p>' +
+                      '</div>';
+    }
+    
+    // Zeige State Indicator vor den Sensor-Daten
+    let statusContainer = document.getElementById('ble-sensor-status');
+    let existingIndicator = statusContainer.querySelector('.state-indicator');
+    
+    if (existingIndicator) {
+      existingIndicator.remove();
+    }
+    
+    if (stateIndicator) {
+      let indicatorDiv = document.createElement('div');
+      indicatorDiv.className = 'state-indicator';
+      indicatorDiv.innerHTML = stateIndicator;
+      statusContainer.insertBefore(indicatorDiv, statusContainer.firstChild);
+    }
+    
     let contactEl = document.getElementById('ble-contact');
+    
+    // Check if we have valid sensor data
     if (data.sensor_data && data.sensor_data.valid) {
+      // Contact State
       contactEl.innerText = data.sensor_data.window_open ? '🔓 OPEN' : '🔒 CLOSED';
       contactEl.className = 'status-value ' + (data.sensor_data.window_open ? 'not-commissioned' : 'commissioned');
       
-      document.getElementById('ble-battery').innerText = data.sensor_data.battery + '%';
-      document.getElementById('ble-rssi').innerText = data.sensor_data.rssi + ' dBm';
-      document.getElementById('ble-lux').innerText = data.sensor_data.illuminance + ' lux';
-      document.getElementById('ble-rotation').innerText = data.sensor_data.rotation + '°';
+      // Battery
+      let batteryPercent = data.sensor_data.battery || 0;
+      document.getElementById('ble-battery').innerText = batteryPercent + '%';
       
+      // RSSI
+      let rssi = data.sensor_data.rssi || 0;
+      document.getElementById('ble-rssi').innerText = rssi + ' dBm';
+      
+      // Illuminance
+      let lux = data.sensor_data.illuminance || 0;
+      document.getElementById('ble-lux').innerText = lux + ' lux';
+      
+      // Rotation
+      let rotation = data.sensor_data.rotation || 0;
+      document.getElementById('ble-rotation').innerText = rotation + '°';
+      
+      // Last Update
       let secondsAgo = Math.floor((Date.now() - data.sensor_data.last_update) / 1000);
       let timeStr;
       if (secondsAgo < 60) timeStr = secondsAgo + 's ago';
@@ -1432,18 +2213,14 @@ static const char index_html[] PROGMEM = R"rawliteral(
       
       document.getElementById('ble-last-update').innerText = timeStr;
       
-      // ============================================================
-      // NEU: Packet ID anzeigen
-      // ============================================================
+      // Packet ID
       if (typeof data.sensor_data.packet_id !== 'undefined') {
         document.getElementById('ble-packet-id').innerText = data.sensor_data.packet_id;
       } else {
         document.getElementById('ble-packet-id').innerText = '--';
       }
       
-      // ============================================================
-      // NEU: Button Events anzeigen
-      // ============================================================
+      // Button Events
       if (data.sensor_data.has_button_event) {
         let eventName;
         let eventEmoji;
@@ -1458,7 +2235,7 @@ static const char index_html[] PROGMEM = R"rawliteral(
             eventEmoji = '👆';
             break;
           case 128:
-          case 254:  // Firmware < 1.0.20
+          case 254:
             eventName = 'Hold';
             eventEmoji = '⏸️';
             break;
@@ -1470,7 +2247,6 @@ static const char index_html[] PROGMEM = R"rawliteral(
         document.getElementById('ble-button-event').innerText = eventEmoji + ' ' + eventName;
         document.getElementById('ble-button-container').style.display = 'block';
         
-        // Optional: Highlight für kurze Zeit
         let btnContainer = document.getElementById('ble-button-container');
         btnContainer.style.background = 'rgba(33, 150, 243, 0.2)';
         btnContainer.style.borderColor = '#2196F3';
@@ -1478,14 +2254,14 @@ static const char index_html[] PROGMEM = R"rawliteral(
         setTimeout(() => {
           btnContainer.style.background = '';
           btnContainer.style.borderColor = '';
-        }, 3000);  // Highlight für 3 Sekunden
+        }, 3000);
         
       } else {
         document.getElementById('ble-button-container').style.display = 'none';
       }
       
     } else {
-      // Keine gültigen Sensor-Daten
+      // No valid sensor data yet
       contactEl.innerText = 'No Data';
       contactEl.className = 'status-value';
       document.getElementById('ble-battery').innerText = '--%';
@@ -1493,14 +2269,19 @@ static const char index_html[] PROGMEM = R"rawliteral(
       document.getElementById('ble-lux').innerText = '-- lux';
       document.getElementById('ble-rotation').innerText = '--°';
       document.getElementById('ble-last-update').innerText = 'Waiting...';
-      document.getElementById('ble-packet-id').innerText = '--';  // NEU
-      document.getElementById('ble-button-container').style.display = 'none';  // NEU
+      document.getElementById('ble-packet-id').innerText = '--';
+      document.getElementById('ble-button-container').style.display = 'none';
     }
   } else {
+    // Not paired
     document.getElementById('ble-sensor-status').classList.add('hidden');
     document.getElementById('ble-scan-interface').classList.remove('hidden');
+    document.getElementById('ble-matter-toggle').classList.add('hidden');
   }
-}
+  
+  refreshContactSensorStatus();
+  }
+
   </script>
 </body>
 </html>
@@ -1652,7 +2433,6 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
         for (int fd : failed_fds) {
             unregister_client(fd);
         }
-        
         esp_task_wdt_reset();
     }
 }
@@ -1740,6 +2520,27 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     
     buf[ws_pkt.len] = '\0';
     char* cmd = (char*)buf;
+
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "COMMAND DEBUG");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "Command: %s", cmd);
+    ESP_LOGI(TAG, "Length: %d", strlen(cmd));
+
+    // Prüfe ob es JSON ist
+    if (cmd[0] == '{') {
+        ESP_LOGI(TAG, "→ JSON Command detected");
+        
+        // Parse cmd type
+        String json = String(cmd);
+        int cmdStart = json.indexOf("\"cmd\":\"") + 7;
+        int cmdEnd = json.indexOf("\"", cmdStart);
+        String cmdType = json.substring(cmdStart, cmdEnd);
+        
+        ESP_LOGI(TAG, "→ Command Type: %s", cmdType.c_str());
+    }
+
+    ESP_LOGI(TAG, "═══════════════════════════════════");
     
     WebUIHandler* self = (WebUIHandler*)req->user_ctx;
     int fd = httpd_req_to_sockfd(req);
@@ -1962,40 +2763,50 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     
     else if (strcmp(cmd, "ble_scan") == 0) {
     ESP_LOGI(TAG, "═══════════════════════════════════");
-    ESP_LOGI(TAG, "WebSocket: BLE SCAN command received");
+    ESP_LOGI(TAG, "WebSocket: BLE DISCOVERY SCAN");
     ESP_LOGI(TAG, "═══════════════════════════════════");
     
     if (self->bleManager) {
-        ESP_LOGI(TAG, "✓ BLE Manager exists (pointer: %p)", (void*)self->bleManager);
-
-        self->bleManager->startScan(10);
+        ESP_LOGI(TAG, "Starting 10-second discovery scan...");
+        ESP_LOGI(TAG, "Will stop on first Shelly BLU Door/Window found!");
         
-        ESP_LOGI(TAG, "Scan started, scheduling completion notification...");
+        // ✅ NEU: stopOnFirstMatch = true
+        self->bleManager->startScan(10, true);  // 10 Sekunden, Stop bei erstem Fund
         
-        // ✓ Stack-Größe von 3072 auf 4096 erhöht!
+        // Notification Task (angepasste Wartezeit)
         xTaskCreate([](void* param) {
-            vTaskDelay(pdMS_TO_TICKS(11000));
+            // Warte max 12 Sekunden (kann früher enden durch Auto-Stop)
+            for (int i = 0; i < 120; i++) {
+                vTaskDelay(pdMS_TO_TICKS(100));
+                
+                WebUIHandler* handler = (WebUIHandler*)param;
+                
+                // Prüfe ob Scan schon beendet wurde
+                if (handler->bleManager && !handler->bleManager->isScanning()) {
+                    ESP_LOGI("WebUI", "✓ Scan ended early (device found)");
+                    break;
+                }
+            }
             
             WebUIHandler* handler = (WebUIHandler*)param;
             
             // 1. Scan Complete
             const char* complete_msg = "{\"type\":\"ble_scan_complete\"}";
             handler->broadcast_to_all_clients(complete_msg);
-            ESP_LOGI("WebUI", "Sent BLE scan complete notification");
+            ESP_LOGI("WebUI", "✓ BLE scan complete notification sent");
             
-            // 2. Discovery List (falls vorhanden)
+            // 2. Discovery List
             if (handler->bleManager) {
                 vTaskDelay(pdMS_TO_TICKS(100));
                 
                 std::vector<ShellyBLEDevice> discovered = handler->bleManager->getDiscoveredDevices();
                 
                 if (discovered.size() > 0) {
-                    // ✓ Statischer Buffer statt Stack-Allokation
-                    static char json_buf[2048];  // ← WICHTIG: static!
+                    static char json_buf[2048];
                     int offset = snprintf(json_buf, sizeof(json_buf), 
                                           "{\"type\":\"ble_discovered\",\"devices\":[");
                     
-                    for (size_t i = 0; i < discovered.size() && i < 10; i++) {  // Max 10 Geräte
+                    for (size_t i = 0; i < discovered.size() && i < 10; i++) {
                         offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
                                            "%s{\"name\":\"%s\",\"address\":\"%s\",\"rssi\":%d,\"encrypted\":%s}",
                                            i > 0 ? "," : "",
@@ -2007,98 +2818,528 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                     snprintf(json_buf + offset, sizeof(json_buf) - offset, "]}");
                     
                     handler->broadcast_to_all_clients(json_buf);
-                    ESP_LOGI("WebUI", "Sent %d discovered devices to clients", discovered.size());
+                    ESP_LOGI("WebUI", "✓ Sent %d discovered Shelly BLU devices", discovered.size());
+                } else {
+                    const char* empty = "{\"type\":\"ble_discovered\",\"devices\":[]}";
+                    handler->broadcast_to_all_clients(empty);
+                    ESP_LOGI("WebUI", "⚠ No Shelly BLU Door/Window devices found");
                 }
             }
+            
+            ESP_LOGI("WebUI", "✓ Discovery scan complete");
             
             vTaskDelete(NULL);
         }, "ble_scan_notify", 4096, self, 1, NULL);
     }
 }
+
     else if (strcmp(cmd, "ble_status") == 0) {
-        if (self->bleManager) {
-            ESP_LOGI(TAG, "BLE status requested");
+    if (self->bleManager) {
+        ESP_LOGI(TAG, "BLE status requested");
+        
+        // Discovery List
+        std::vector<ShellyBLEDevice> discovered = self->bleManager->getDiscoveredDevices();
+        
+        char json_buf[2048];
+        int offset = snprintf(json_buf, sizeof(json_buf), 
+                              "{\"type\":\"ble_discovered\",\"devices\":[");
+        
+        for (size_t i = 0; i < discovered.size(); i++) {
+            offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+                               "%s{\"name\":\"%s\",\"address\":\"%s\",\"rssi\":%d,\"encrypted\":%s}",
+                               i > 0 ? "," : "",
+                               discovered[i].name.c_str(),
+                               discovered[i].address.c_str(),
+                               discovered[i].rssi,
+                               discovered[i].isEncrypted ? "true" : "false");
+        }
+        snprintf(json_buf + offset, sizeof(json_buf) - offset, "]}");
+        
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)json_buf,
+            .len = strlen(json_buf)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        
+        // Paired Device Status
+        bool paired = self->bleManager->isPaired();
+        
+        // ✅ NEU: Device State abrufen
+        ShellyBLEManager::DeviceState state = self->bleManager->getDeviceState();
+        const char* stateStr = "not_paired";
+        
+        if (state == ShellyBLEManager::STATE_CONNECTED_UNENCRYPTED) {
+            stateStr = "connected_unencrypted";
+        } else if (state == ShellyBLEManager::STATE_CONNECTED_ENCRYPTED) {
+            stateStr = "connected_encrypted";
+        }
+        
+        if (paired) {
+            PairedShellyDevice device = self->bleManager->getPairedDevice();
+            ShellyBLESensorData sensorData;
+            bool hasData = self->bleManager->getSensorData(sensorData);
             
-            // Discovered Devices
-            std::vector<ShellyBLEDevice> discovered = self->bleManager->getDiscoveredDevices();
+            offset = snprintf(json_buf, sizeof(json_buf),
+                             "{\"type\":\"ble_status\","
+                             "\"paired\":true,"
+                             "\"state\":\"%s\","  // ✅ NEU
+                             "\"name\":\"%s\","
+                             "\"address\":\"%s\","
+                             "\"sensor_data\":{",
+                             stateStr,  // ✅ NEU
+                             device.name.c_str(),
+                             device.address.c_str());
             
-            char json_buf[2048];
-            int offset = snprintf(json_buf, sizeof(json_buf), 
-                                  "{\"type\":\"ble_discovered\",\"devices\":[");
-            
-            for (size_t i = 0; i < discovered.size(); i++) {
+            if (hasData) {
                 offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
-                                   "%s{\"name\":\"%s\",\"address\":\"%s\",\"rssi\":%d,\"encrypted\":%s}",
-                                   i > 0 ? "," : "",
-                                   discovered[i].name.c_str(),
-                                   discovered[i].address.c_str(),
-                                   discovered[i].rssi,
-                                   discovered[i].isEncrypted ? "true" : "false");
+                                  "\"valid\":true,"
+                                  "\"packet_id\":%d,"
+                                  "\"window_open\":%s,"
+                                  "\"battery\":%d,"
+                                  "\"illuminance\":%u,"
+                                  "\"rotation\":%d,"
+                                  "\"rssi\":%d,"
+                                  "\"has_button_event\":%s,"
+                                  "\"button_event\":%d,"
+                                  "\"last_update\":%lu",
+                                  sensorData.packetId,
+                                  sensorData.windowOpen ? "true" : "false",
+                                  sensorData.battery,
+                                  sensorData.illuminance,
+                                  sensorData.rotation,
+                                  sensorData.rssi,
+                                  sensorData.hasButtonEvent ? "true" : "false",
+                                  (int)sensorData.buttonEvent,
+                                  (unsigned long)sensorData.lastUpdate);
+            } else {
+                offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+                                  "\"valid\":false");
             }
-            snprintf(json_buf + offset, sizeof(json_buf) - offset, "]}");
             
+            snprintf(json_buf + offset, sizeof(json_buf) - offset, "}}");
+        } else {
+            snprintf(json_buf, sizeof(json_buf),
+                    "{\"type\":\"ble_status\",\"paired\":false,\"state\":\"%s\"}", stateStr);
+        }
+        
+        frame.payload = (uint8_t*)json_buf;
+        frame.len = strlen(json_buf);
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+    }
+}
+
+// ============================================================================
+// BLE Connect Command (Phase 1) - ASYNCHRON
+// ============================================================================
+else if (strncmp(cmd, "{\"cmd\":\"ble_connect\"", 20) == 0) {
+    if (self->bleManager) {
+        String json = String(cmd);
+        int addrStart = json.indexOf("\"address\":\"") + 11;
+        int addrEnd = json.indexOf("\"", addrStart);
+        String address = json.substring(addrStart, addrEnd);
+
+        BLETaskParams* params = new BLETaskParams{self, fd, address, 0};
+
+        xTaskCreate([](void* pvParameters) {
+            BLETaskParams* p = (BLETaskParams*)pvParameters;
+            
+            ESP_LOGI(TAG, "Starting Connection Task for %s", p->address.c_str());
+
+            // 1. Send Instructions
+            const char* instructions = "{\"type\":\"info\",\"message\":\"Press and HOLD the button for 10 seconds NOW!\"}";
+            if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)instructions, .len = strlen(instructions) };
+                httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                xSemaphoreGive(p->handler->client_mutex);
+            }
+
+            // 2. Perform Connection
+            if (p->handler->bleManager->connectDevice(p->address)) {
+                // Success Message
+                const char* success = "{\"type\":\"info\",\"message\":\"Device connected! Updating UI...\"}";
+                if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                    httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)success, .len = strlen(success) };
+                    httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                    xSemaphoreGive(p->handler->client_mutex);
+                }
+                
+                // Start Scan
+                p->handler->bleManager->startContinuousScan();
+                
+                // 3. WICHTIG: UI UPDATE ERZWINGEN!
+                // Wir senden ein komplettes 'ble_status' Paket an ALLE Clients,
+                // damit der Button von "Connect" auf "Enable Encryption" wechselt.
+                vTaskDelay(pdMS_TO_TICKS(500)); // Kurz warten bis Scan läuft
+                
+                PairedShellyDevice dev = p->handler->bleManager->getPairedDevice();
+                char json_buf[1024];
+                snprintf(json_buf, sizeof(json_buf),
+                        "{\"type\":\"ble_status\","
+                        "\"paired\":true,"
+                        "\"state\":\"connected_unencrypted\"," // Zwingt UI in Phase 2 Modus
+                        "\"name\":\"%s\","
+                        "\"address\":\"%s\","
+                        "\"sensor_data\":{\"valid\":false}}",
+                        dev.name.c_str(), dev.address.c_str());
+                        
+                p->handler->broadcast_to_all_clients(json_buf);
+                ESP_LOGI(TAG, "✓ Sent UI Update: Connected (Unencrypted)");
+
+            } else {
+                const char* error = "{\"type\":\"error\",\"message\":\"Connection failed. Button pressed?\"}";
+                 if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                    httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)error, .len = strlen(error) };
+                    httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                    xSemaphoreGive(p->handler->client_mutex);
+                 }
+            }
+
+            delete p;
+            vTaskDelete(NULL);
+        }, "ble_conn_task", 8192, params, 1, NULL);
+    }
+}
+
+else if (strncmp(cmd, "{\"cmd\":\"ble_encrypt\"", 20) == 0) {
+    if (self->bleManager) {
+        String json = String(cmd);
+        
+        // 1. Parameter manuell extrahieren (wie bei ble_connect)
+        int addrStart = json.indexOf("\"address\":\"") + 11;
+        int addrEnd = json.indexOf("\"", addrStart);
+        String address = json.substring(addrStart, addrEnd);
+
+        int passStart = json.indexOf("\"passkey\":") + 10;
+        // Suche das Ende der Zahl (entweder Komma oder schließende Klammer)
+        int passEnd = json.indexOf(",", passStart);
+        if (passEnd == -1) passEnd = json.indexOf("}", passStart);
+        uint32_t passkey = json.substring(passStart, passEnd).toInt();
+
+        // 2. Task-Parameter vorbereiten
+        BLETaskParams* params = new BLETaskParams{self, fd, address, passkey};
+
+        xTaskCreate([](void* pvParameters) {
+            BLETaskParams* p = (BLETaskParams*)pvParameters;
+            
+            ESP_LOGI(TAG, "Starting Encryption Task for %s with Passkey %u", p->address.c_str(), p->passkey);
+
+            // Info an UI senden
+            const char* info = "{\"type\":\"info\",\"message\":\"Enabling encryption... Device will reboot.\"}";
+            if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)info, .len = strlen(info) };
+                httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                xSemaphoreGive(p->handler->client_mutex);
+            }
+
+            // 3. Die eigentliche Verschlüsselung im Manager aufrufen
+            // Hier nutzen wir direkt den bleManager aus deinem 'self' (p->handler)
+            if (p->handler->bleManager->enableEncryption(p->address, p->passkey)) {
+                
+                const char* success = "{\"type\":\"info\",\"message\":\"Encryption successful!\"}";
+                if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                    httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)success, .len = strlen(success) };
+                    httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                    xSemaphoreGive(p->handler->client_mutex);
+                }
+
+                // UI Status-Update senden
+                PairedShellyDevice dev = p->handler->bleManager->getPairedDevice();
+                char json_buf[1024];
+                snprintf(json_buf, sizeof(json_buf),
+                        "{\"type\":\"ble_status\","
+                        "\"paired\":true,"
+                        "\"state\":\"connected_encrypted\"," 
+                        "\"name\":\"%s\","
+                        "\"address\":\"%s\","
+                        "\"sensor_data\":{\"valid\":false}}",
+                        dev.name.c_str(), dev.address.c_str());
+                        
+                p->handler->broadcast_to_all_clients(json_buf);
+            } else {
+                const char* error = "{\"type\":\"error\",\"message\":\"Encryption failed. Check passkey!\"}";
+                if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                    httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)error, .len = strlen(error) };
+                    httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                    xSemaphoreGive(p->handler->client_mutex);
+                }
+            }
+
+            delete p;
+            vTaskDelete(NULL);
+        }, "ble_enc_task", 8192, params, 1, NULL);
+    }
+}
+
+// ============================================================================
+// BLE Enable Encryption Command (Phase 2) - MIT UI UPDATE
+// ============================================================================
+else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
+    if (self->bleManager) {
+        String json = String(cmd);
+        
+        // Parameter extrahieren
+        int addrStart = json.indexOf("\"address\":\"") + 11;
+        int addrEnd = json.indexOf("\"", addrStart);
+        String address = json.substring(addrStart, addrEnd);
+
+        int passStart = json.indexOf("\"passkey\":") + 10;
+        int passEnd = json.indexOf(",", passStart);
+        if (passEnd == -1) passEnd = json.indexOf("}", passStart);
+        uint32_t passkey = json.substring(passStart, passEnd).toInt();
+
+        // Task starten
+        BLETaskParams* params = new BLETaskParams{self, fd, address, passkey};
+
+        xTaskCreate([](void* pvParameters) {
+            BLETaskParams* p = (BLETaskParams*)pvParameters;
+            
+            ESP_LOGI(TAG, "Starting Encryption Task for %s", p->address.c_str());
+
+            // 1. Info an UI
+            const char* info = "{\"type\":\"info\",\"message\":\"Connecting to device for encryption...\"}";
+            if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)info, .len = strlen(info) };
+                httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                xSemaphoreGive(p->handler->client_mutex);
+            }
+
+            // 2. Aufruf im Manager
+            // Hinweis: Falls enableEncryption fehlschlägt, versuche im Manager 
+            // intern erst einen Scan zu machen, um den Address-Type (Public/Random) zu aktualisieren.
+            if (p->handler->bleManager->enableEncryption(p->address, p->passkey)) {
+                
+                const char* success = "{\"type\":\"info\",\"message\":\"Encryption successful! Device is rebooting.\"}";
+                if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                    httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)success, .len = strlen(success) };
+                    httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                    xSemaphoreGive(p->handler->client_mutex);
+                }
+
+                // UI Status Update (Phase 3: Verschlüsselt)
+                vTaskDelay(pdMS_TO_TICKS(2000)); 
+                PairedShellyDevice dev = p->handler->bleManager->getPairedDevice();
+                char json_buf[1024];
+                snprintf(json_buf, sizeof(json_buf),
+                        "{\"type\":\"ble_status\","
+                        "\"paired\":true,"
+                        "\"state\":\"connected_encrypted\"," 
+                        "\"name\":\"%s\","
+                        "\"address\":\"%s\","
+                        "\"sensor_data\":{\"valid\":false}}",
+                        dev.name.c_str(), dev.address.c_str());
+                        
+                p->handler->broadcast_to_all_clients(json_buf);
+
+            } else {
+                const char* error = "{\"type\":\"error\",\"message\":\"Encryption failed! Please wake up the device (press button once).\"}";
+                if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                    httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)error, .len = strlen(error) };
+                    httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                    xSemaphoreGive(p->handler->client_mutex);
+                }
+            }
+
+            delete p;
+            vTaskDelete(NULL);
+        }, "ble_enc_task", 8192, params, 1, NULL);
+    }
+}
+
+else if (strncmp(cmd, "{\"cmd\":\"ble_pair_with_encryption\"", 33) == 0) {
+    if (self->bleManager) {
+        String json = String(cmd);
+        
+        // Parse JSON
+        int addrStart = json.indexOf("\"address\":\"") + 11;
+        int addrEnd = json.indexOf("\"", addrStart);
+        String address = json.substring(addrStart, addrEnd);
+        
+        int passkeyStart = json.indexOf("\"passkey\":") + 10;
+        int passkeyEnd = json.indexOf(",", passkeyStart);
+        if (passkeyEnd == -1) passkeyEnd = json.indexOf("}", passkeyStart);
+        String passkeyStr = json.substring(passkeyStart, passkeyEnd);
+        uint32_t passkey = passkeyStr.toInt();
+        
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "BLE PAIR WITH ENCRYPTION");
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "Address: %s", address.c_str());
+        ESP_LOGI(TAG, "Passkey: %06u", passkey);
+        
+        // Send instruction message to client
+        const char* instructions = "{\"type\":\"info\",\"message\":\"Press and HOLD the pairing button for 10+ seconds NOW!\"}";
+        httpd_ws_frame_t instr_frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)instructions,
+            .len = strlen(instructions)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &instr_frame);
+        
+        // Start pairing process
+        if (self->bleManager->pairDeviceAndEnableEncryption(address, passkey)) {
+            const char* success = "{\"type\":\"info\",\"message\":\"Device paired with encryption successfully!\"}";
             httpd_ws_frame_t frame = {
                 .type = HTTPD_WS_TYPE_TEXT,
-                .payload = (uint8_t*)json_buf,
-                .len = strlen(json_buf)
+                .payload = (uint8_t*)success,
+                .len = strlen(success)
             };
             httpd_ws_send_frame_async(req->handle, fd, &frame);
             
-            // Paired Device Status
-            bool paired = self->bleManager->isPaired();
+            ESP_LOGI(TAG, "✓ Pairing with encryption successful");
             
-            if (paired) {
-                PairedShellyDevice device = self->bleManager->getPairedDevice();
-                ShellyBLESensorData sensorData;
-                bool hasData = self->bleManager->getSensorData(sensorData);
+            // Start continuous scan
+            ESP_LOGI(TAG, "→ Starting continuous scan...");
+            self->bleManager->startContinuousScan();
+            
+            xTaskCreate([](void* param) {
+                vTaskDelay(pdMS_TO_TICKS(1000));
                 
-                offset = snprintf(json_buf, sizeof(json_buf),
-                                 "{\"type\":\"ble_status\","
-                                 "\"paired\":true,"
-                                 "\"name\":\"%s\","
-                                 "\"address\":\"%s\","
-                                 "\"sensor_data\":{",
-                                 device.name.c_str(),
-                                 device.address.c_str());
+                WebUIHandler* handler = (WebUIHandler*)param;
                 
-                if (hasData) {
-                    offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
-                                      "\"valid\":true,"
-                                      "\"packet_id\":%d,"
-                                      "\"window_open\":%s,"
-                                      "\"battery\":%d,"
-                                      "\"illuminance\":%u,"
-                                      "\"rotation\":%d,"
-                                      "\"rssi\":%d,"
-                                      "\"has_button_event\":%s,"
-                                      "\"button_event\":%d,"
-                                      "\"last_update\":%lu",
-                                      sensorData.packetId,
-                                      sensorData.windowOpen ? "true" : "false",
-                                      sensorData.battery,
-                                      sensorData.illuminance,
-                                      sensorData.rotation,
-                                      sensorData.rssi,
-                                      sensorData.hasButtonEvent ? "true" : "false",
-                                      (int)sensorData.buttonEvent,
-                                      (unsigned long)sensorData.lastUpdate);
-                } else {
-                    offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
-                                      "\"valid\":false");
+                // Trigger ble_status update for all clients
+                if (handler->bleManager && handler->bleManager->isPaired()) {
+                    PairedShellyDevice device = handler->bleManager->getPairedDevice();
+                    ShellyBLESensorData sensorData;
+                    bool hasData = handler->bleManager->getSensorData(sensorData);
+                    
+                    char json_buf[1024];
+                    int offset = snprintf(json_buf, sizeof(json_buf),
+                                         "{\"type\":\"ble_status\","
+                                         "\"paired\":true,"
+                                         "\"name\":\"%s\","
+                                         "\"address\":\"%s\","
+                                         "\"sensor_data\":{",
+                                         device.name.c_str(),
+                                         device.address.c_str());
+                    
+                    if (hasData) {
+                        offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+                                          "\"valid\":true,"
+                                          "\"packet_id\":%d,"
+                                          "\"window_open\":%s,"
+                                          "\"battery\":%d,"
+                                          "\"illuminance\":%u,"
+                                          "\"rotation\":%d,"
+                                          "\"rssi\":%d,"
+                                          "\"has_button_event\":%s,"
+                                          "\"button_event\":%d,"
+                                          "\"last_update\":%lu",
+                                          sensorData.packetId,
+                                          sensorData.windowOpen ? "true" : "false",
+                                          sensorData.battery,
+                                          sensorData.illuminance,
+                                          sensorData.rotation,
+                                          sensorData.rssi,
+                                          sensorData.hasButtonEvent ? "true" : "false",
+                                          (int)sensorData.buttonEvent,
+                                          (unsigned long)sensorData.lastUpdate);
+                    } else {
+                        offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+                                          "\"valid\":false");
+                    }
+                    
+                    snprintf(json_buf + offset, sizeof(json_buf) - offset, "}}");
+                    
+                    handler->broadcast_to_all_clients(json_buf);
+                    ESP_LOGI("WebUI", "✓ BLE status broadcasted after pairing");
                 }
                 
-                snprintf(json_buf + offset, sizeof(json_buf) - offset, "}}");
-            } else {
-                snprintf(json_buf, sizeof(json_buf),
-                        "{\"type\":\"ble_status\",\"paired\":false}");
-            }
+                vTaskDelete(NULL);
+            }, "ble_status_task", 4096, self, 1, NULL);
             
-            frame.payload = (uint8_t*)json_buf;
-            frame.len = strlen(json_buf);
+        } else {
+            const char* error = "{\"type\":\"error\",\"message\":\"Failed to enable encryption. Make sure device is in pairing mode!\"}";
+            httpd_ws_frame_t frame = {
+                .type = HTTPD_WS_TYPE_TEXT,
+                .payload = (uint8_t*)error,
+                .len = strlen(error)
+            };
             httpd_ws_send_frame_async(req->handle, fd, &frame);
+            
+            ESP_LOGE(TAG, "✗ Encryption failed");
         }
     }
-    else if (strncmp(cmd, "{\"cmd\":\"ble_pair\"", 17) == 0) {
+}
+
+
+// ============================================================================
+// BLE Pair Encrypted (Direct) - ASYNCHRON
+// ============================================================================
+else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted\"", 27) == 0) {
+    if (self->bleManager) {
+        String json = String(cmd);
+        int addrStart = json.indexOf("\"address\":\"") + 11;
+        int addrEnd = json.indexOf("\"", addrStart);
+        String address = json.substring(addrStart, addrEnd);
+        
+        int passkeyStart = json.indexOf("\"passkey\":") + 10;
+        int passkeyEnd = json.indexOf(",", passkeyStart);
+        if (passkeyEnd == -1) passkeyEnd = json.indexOf("}", passkeyStart);
+        String passkeyStr = json.substring(passkeyStart, passkeyEnd);
+
+        BLETaskParams* params = new BLETaskParams{self, fd, address, (uint32_t)passkeyStr.toInt()};
+
+        xTaskCreate([](void* pvParameters) {
+            BLETaskParams* p = (BLETaskParams*)pvParameters;
+
+            const char* working = "{\"type\":\"info\",\"message\":\"Pairing encrypted device...\"}";
+            if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)working, .len = strlen(working) };
+                httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                xSemaphoreGive(p->handler->client_mutex);
+            }
+
+            if (p->handler->bleManager->pairEncryptedDevice(p->address, p->passkey, 30)) {
+                const char* success = "{\"type\":\"info\",\"message\":\"Encrypted device paired successfully!\"}";
+                if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                    httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)success, .len = strlen(success) };
+                    httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                    xSemaphoreGive(p->handler->client_mutex);
+                }
+                p->handler->bleManager->startContinuousScan();
+            } else {
+                const char* error = "{\"type\":\"error\",\"message\":\"Failed to pair encrypted device. Check passkey!\"}";
+                if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
+                    httpd_ws_frame_t frame = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)error, .len = strlen(error) };
+                    httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                    xSemaphoreGive(p->handler->client_mutex);
+                }
+            }
+            delete p;
+            vTaskDelete(NULL);
+        }, "ble_pair_task", 8192, params, 1, NULL);
+    }
+}
+
+else if (strncmp(cmd, "{\"cmd\":\"ble_unpair\"", 19) == 0) {
+    if (self->bleManager) {
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "BLE UNPAIRING");
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        
+        if (self->bleManager->unpairDevice()) {
+            // ✓ Callback für Contact Sensor Endpoint Removal
+            if (self->remove_contact_sensor_callback) {
+                ESP_LOGI(TAG, "→ Removing Contact Sensor endpoint...");
+                self->remove_contact_sensor_callback();
+            }
+            
+            const char* success = "{\"type\":\"info\",\"message\":\"Device unpaired\"}";
+            httpd_ws_frame_t frame = {
+                .type = HTTPD_WS_TYPE_TEXT,
+                .payload = (uint8_t*)success,
+                .len = strlen(success)
+            };
+            httpd_ws_send_frame_async(req->handle, fd, &frame);
+            
+            ESP_LOGI(TAG, "✓ Device unpaired");
+            ESP_LOGI(TAG, "✓ Continuous scan stopped");
+        }
+    }
+}
+
+else if (strncmp(cmd, "{\"cmd\":\"ble_pair\"", 17) == 0) {
     if (self->bleManager) {
         String json = String(cmd);
         
@@ -2110,10 +3351,14 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         int bindEnd = json.indexOf("\"", bindStart);
         String bindkey = json.substring(bindStart, bindEnd);
         
-        ESP_LOGI(TAG, "Pairing BLE device: %s", address.c_str());
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "BLE PAIRING (Unencrypted)");
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "Address: %s", address.c_str());
+        ESP_LOGI(TAG, "Bindkey: %s", bindkey.length() > 0 ? "[provided]" : "[empty]");
         
         if (self->bleManager->pairDevice(address, bindkey)) {
-            const char* success = "{\"type\":\"info\",\"message\":\"Device paired successfully\"}";
+            const char* success = "{\"type\":\"info\",\"message\":\"Device paired successfully!\"}";
             httpd_ws_frame_t frame = {
                 .type = HTTPD_WS_TYPE_TEXT,
                 .payload = (uint8_t*)success,
@@ -2121,9 +3366,10 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
             };
             httpd_ws_send_frame_async(req->handle, fd, &frame);
             
-            ESP_LOGI(TAG, "BLE device paired successfully");
+            ESP_LOGI(TAG, "✓ Pairing successful");
             
-            ESP_LOGI(TAG, "Starting continuous scan for sensor data...");
+            // ✅ Continuous Scan starten
+            ESP_LOGI(TAG, "→ Starting continuous scan for sensor data...");
             self->bleManager->startContinuousScan();
             
         } else {
@@ -2135,32 +3381,87 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
             };
             httpd_ws_send_frame_async(req->handle, fd, &frame);
             
-            ESP_LOGE(TAG, "Failed to pair BLE device");
+            ESP_LOGE(TAG, "✗ Pairing failed");
         }
     }
 }
-else if (strncmp(cmd, "{\"cmd\":\"ble_unpair\"", 19) == 0) {
-        if (self->bleManager) {
-            ESP_LOGI(TAG, "Unpairing BLE device");
+
+else if (strcmp(cmd, "ble_start_continuous_scan") == 0) {
+    if (self->bleManager) {
+        if (self->bleManager->isPaired()) {
+            ESP_LOGI(TAG, "Starting continuous BLE scan (paired device exists)");
+            self->bleManager->startContinuousScan();
             
-            if (self->bleManager->unpairDevice()) {
-                if (self->remove_contact_sensor_callback) {
-                    self->remove_contact_sensor_callback();
-                } else {
-                    ESP_LOGW(TAG, "No callback registered for endpoint removal");
-                }
-                
-                const char* success = "{\"type\":\"info\",\"message\":\"Device unpaired\"}";
-                httpd_ws_frame_t frame = {
-                    .type = HTTPD_WS_TYPE_TEXT,
-                    .payload = (uint8_t*)success,
-                    .len = strlen(success)
-                };
-                httpd_ws_send_frame_async(req->handle, fd, &frame);
-                
-                ESP_LOGI(TAG, "✓ BLE device unpaired");
-            }
+            const char* success = "{\"type\":\"info\",\"message\":\"Continuous scanning started\"}";
+            httpd_ws_frame_t frame = {
+                .type = HTTPD_WS_TYPE_TEXT,
+                .payload = (uint8_t*)success,
+                .len = strlen(success)
+            };
+            httpd_ws_send_frame_async(req->handle, fd, &frame);
+        } else {
+            ESP_LOGW(TAG, "Cannot start continuous scan - no device paired");
+            
+            const char* error = "{\"type\":\"error\",\"message\":\"No device paired\"}";
+            httpd_ws_frame_t frame = {
+                .type = HTTPD_WS_TYPE_TEXT,
+                .payload = (uint8_t*)error,
+                .len = strlen(error)
+            };
+            httpd_ws_send_frame_async(req->handle, fd, &frame);
         }
+    }
+}
+    // ============================================================================
+    // Contact Sensor Matter Toggle Commands
+    // ============================================================================
+
+    else if (strcmp(cmd, "contact_sensor_enable") == 0) {
+        ESP_LOGI(TAG, "WebSocket: Enable Contact Sensor for Matter");
+        
+        extern void enableContactSensorMatter();
+        enableContactSensorMatter();
+        
+        const char* success = "{\"type\":\"info\",\"message\":\"Contact Sensor enabled for Matter\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)success,
+            .len = strlen(success)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+    }
+    else if (strcmp(cmd, "contact_sensor_disable") == 0) {
+        ESP_LOGI(TAG, "WebSocket: Disable Contact Sensor for Matter");
+        
+        extern void disableContactSensorMatter();
+        disableContactSensorMatter();
+        
+        const char* success = "{\"type\":\"info\",\"message\":\"Contact Sensor disabled for Matter\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)success,
+            .len = strlen(success)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+    }
+    else if (strcmp(cmd, "contact_sensor_status") == 0) {
+        extern bool contact_sensor_matter_enabled;
+        extern bool contact_sensor_endpoint_active;
+        
+        char status_buf[128];
+        snprintf(status_buf, sizeof(status_buf),
+                "{\"type\":\"contact_sensor_status\","
+                "\"enabled\":%s,"
+                "\"active\":%s}",
+                contact_sensor_matter_enabled ? "true" : "false",
+                contact_sensor_endpoint_active ? "true" : "false");
+        
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)status_buf,
+            .len = strlen(status_buf)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
     }
     else {
         ESP_LOGW(TAG, "Unknown command: '%s'", cmd);

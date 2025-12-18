@@ -2,6 +2,7 @@
 
 #include <Arduino.h>
 #include <NimBLEDevice.h>
+#include <NimBLEClient.h> 
 #include <vector>
 #include <functional>
 
@@ -9,7 +10,7 @@
 // BTHome v2 Konstanten
 // ============================================================================
 
-#define BTHOME_SERVICE_UUID     "181C"
+#define BTHOME_SERVICE_UUID "0000fcd2-0000-1000-8000-00805f9b34fb"
 
 // BTHome Object IDs
 #define BTHOME_OBJ_PACKET_ID    0x00
@@ -74,9 +75,10 @@ struct ShellyBLEDevice {
     int8_t rssi;
     bool isEncrypted;
     uint32_t lastSeen;  // millis()
+    uint8_t addressType;
     
     ShellyBLEDevice() 
-        : rssi(0), isEncrypted(false), lastSeen(0) {}
+        : rssi(0), isEncrypted(false), lastSeen(0), addressType(BLE_ADDR_RANDOM) {}
 };
 
 /**
@@ -115,282 +117,174 @@ typedef std::function<void(const String& address, const ShellyBLESensorData& dat
 class ShellyBLEManager {
 public:
     // ========================================================================
-    // Lifecycle
+    // Constructor / Destructor
     // ========================================================================
-    
     ShellyBLEManager();
     ~ShellyBLEManager();
     
-    /**
-     * @brief Initialisiert BLE und lädt gespeichertes Pairing
-     * @return true bei Erfolg
-     */
+    // ========================================================================
+    // Initialization
+    // ========================================================================
     bool begin();
-    
-    /**
-     * @brief Beendet BLE-Manager und gibt Ressourcen frei
-     */
     void end();
     
-    /**
-     * @brief Muss regelmäßig aufgerufen werden (Discovery-Cleanup)
-     */
-    void loop();
-    
     // ========================================================================
-    // Scanning
+    // Discovery / Scanning
     // ========================================================================
-    
-    /**
-     * @brief Startet BLE-Scan nach Shelly-Geräten (SBDW-*, SBBT-*)
-     * @param durationSeconds Scan-Dauer in Sekunden
-     */
-    void startScan(uint16_t durationSeconds = 10);
-    
-    /**
-     * @brief Stoppt laufenden Scan
-     */
+    void startScan(uint16_t durationSeconds = 10, bool stopOnFirstMatch = false);
     void stopScan();
-    
-    /**
-     * @brief Startet kontinuierlichen Scan (Auto-Restart nach Ende)
-     */
     void startContinuousScan();
-    
-    /**
-     * @brief Prüft, ob gerade gescannt wird
-     */
     bool isScanning() const { return scanning; }
+    bool isContinuousScanActive() const;
+    String getScanStatus() const;
     
-    /**
-     * @brief Gibt Liste aller entdeckten Geräte zurück
-     */
-    std::vector<ShellyBLEDevice> getDiscoveredDevices() const { return discoveredDevices; }
+    std::vector<ShellyBLEDevice> getDiscoveredDevices() const { 
+        return discoveredDevices; 
+    }
     
     // ========================================================================
-    // Pairing (nur 1 Gerät!)
+    // State Management
     // ========================================================================
+    enum DeviceState {
+        STATE_NOT_PAIRED = 0,
+        STATE_CONNECTED_UNENCRYPTED = 1,
+        STATE_CONNECTED_ENCRYPTED = 2
+    };
     
-    /**
-     * @brief Pairt mit unverschlüsseltem Gerät oder mit bekanntem Bindkey
-     * @param address MAC-Adresse (Format: "AA:BB:CC:DD:EE:FF")
-     * @param bindkey 32 hex chars (leer = unverschlüsselt)
-     * @return true bei Erfolg
-     */
+    DeviceState getDeviceState() const;
+    
+    // ========================================================================
+    // Pairing (Single Device!)
+    // ========================================================================
     bool pairDevice(const String& address, const String& bindkey = "");
-    
-    /**
-     * @brief Pairt mit verschlüsseltem Gerät und liest Bindkey automatisch aus
-     * @param address MAC-Adresse
-     * @param passkey 6-stelliger Code (0-999999)
-     * @param timeout Timeout in Sekunden
-     * @return true bei Erfolg
-     */
     bool pairEncryptedDevice(const String& address, uint32_t passkey, uint16_t timeout = 30);
-    
-    /**
-     * @brief Entfernt Pairing
-     * @return true bei Erfolg
-     */
     bool unpairDevice();
     
-    /**
-     * @brief Prüft, ob ein Gerät gepairt ist
-     */
-    bool isPaired() const { return pairedDevice.address.length() > 0; }
+    // 2-Phasen-Workflow
+    bool connectDevice(const String& address);  // Phase 1: Bonding
+    bool enableEncryption(const String& address, uint32_t passkey);  // Phase 2: Encrypt
     
-    /**
-     * @brief Gibt gepairtes Gerät zurück
-     */
-    PairedShellyDevice getPairedDevice() const { return pairedDevice; }
+    // Alte Funktion (kann entfernt werden wenn nicht mehr gebraucht)
+    bool pairDeviceAndEnableEncryption(const String& address, uint32_t passkey);
+    
+    bool isPaired() const { 
+        return pairedDevice.address.length() > 0; 
+    }
+    
+    PairedShellyDevice getPairedDevice() const { 
+        return pairedDevice; 
+    }
     
     // ========================================================================
-    // Sensor Data
+    // Sensor Data Access
     // ========================================================================
-    
-    /**
-     * @brief Liest aktuelle Sensor-Daten vom gepairten Gerät
-     * @param data Output-Parameter für Sensor-Daten
-     * @return true wenn gültige Daten vorhanden
-     */
     bool getSensorData(ShellyBLESensorData& data) const;
     
-    /**
-     * @brief Registriert Callback für Sensor-Daten-Updates
-     */
-    void setSensorDataCallback(SensorDataCallback cb) { sensorDataCallback = cb; }
-    
     // ========================================================================
-    // GATT Configuration (erfordert Bonding!)
+    // GATT Configuration
     // ========================================================================
-    
-    /**
-     * @brief Aktiviert/deaktiviert Beacon Mode (periodisches Broadcasting)
-     * @param address MAC-Adresse
-     * @param enabled true = aktiviert
-     * @return true bei Erfolg
-     */
     bool setBeaconMode(const String& address, bool enabled);
-    
-    /**
-     * @brief Setzt minimalen Winkel für Rotation-Reports
-     * @param address MAC-Adresse
-     * @param degrees Schwellwert in Grad (0-180)
-     * @return true bei Erfolg
-     */
     bool setAngleThreshold(const String& address, uint8_t degrees);
-    
-    /**
-     * @brief Factory Reset (deaktiviert Verschlüsselung!)
-     * @param address MAC-Adresse
-     * @return true bei Erfolg
-     */
     bool factoryResetDevice(const String& address);
     
-    /**
-     * @brief Liest Device-Konfiguration aus
-     * @param address MAC-Adresse
-     * @param config Output-Parameter
-     * @return true bei Erfolg
-     */
+    struct DeviceConfig {
+        bool beaconModeEnabled;
+        uint8_t angleThreshold;
+        bool valid;
+    };
+    
     bool readDeviceConfig(const String& address, DeviceConfig& config);
+    
+    // ========================================================================
+    // Callback Registration
+    // ========================================================================
+    typedef void (*SensorDataCallback)(const String& address, const ShellyBLESensorData& data);
+    
+    void setSensorDataCallback(SensorDataCallback callback) {
+        sensorDataCallback = callback;
+    }
+    
+    // ========================================================================
+    // Loop & Cleanup
+    // ========================================================================
+    void loop();
     
 private:
     // ========================================================================
-    // Scan Callback (Nested Class)
+    // Scan Callback
     // ========================================================================
-    
     class ScanCallback : public NimBLEScanCallbacks {
-    public:
-        ScanCallback(ShellyBLEManager* manager) : mgr(manager) {}
-        
-        void onResult(const NimBLEAdvertisedDevice* advertisedDevice) override;
-        void onScanEnd(const NimBLEScanResults& results, int reason) override;
-        
     private:
         ShellyBLEManager* mgr;
+    public:
+        ScanCallback(ShellyBLEManager* manager) : mgr(manager) {}
+        void onResult(const NimBLEAdvertisedDevice* advertisedDevice) override;
+        void onScanEnd(const NimBLEScanResults& results, int reason) override;
     };
     
     // ========================================================================
-    // Private Members
+    // Pairing Callbacks
     // ========================================================================
-    
-    bool initialized;
-    bool scanning;
-    bool continuousScan;
-    
-    NimBLEScan* pBLEScan;
-    ScanCallback* scanCallback;
-    
-    PairedShellyDevice pairedDevice;
-    std::vector<ShellyBLEDevice> discoveredDevices;
-    
-    SensorDataCallback sensorDataCallback;
+    class PairingCallbacks : public NimBLEClientCallbacks {
+    public:
+        bool pairingComplete = false;
+        bool pairingSuccess = false;
+        
+        void onConnect(NimBLEClient* pClient) override;
+        void onDisconnect(NimBLEClient* pClient, int reason) override;
+        bool onConnParamsUpdateRequest(NimBLEClient* pClient, 
+                                       const ble_gap_upd_params* params) override;
+        void onAuthenticationComplete(NimBLEConnInfo& connInfo) override;
+        void onPassKeyEntry(NimBLEConnInfo& connInfo) override;
+        void onConfirmPasskey(NimBLEConnInfo& connInfo, uint32_t pass_key) override;
+    };
     
     // ========================================================================
-    // Private Methods - Persistence
+    // Private Helper Functions
     // ========================================================================
+    void onAdvertisedDevice(NimBLEAdvertisedDevice* advertisedDevice);
+    void onScanComplete(int reason);
+    void cleanupOldDiscoveries();
+    
+    bool connectAndReadEncryptionKey(const String& address, uint32_t passkey, String& bindkey);
+    bool connectAndReadBindkey(const String& address, String& bindkey);
+    
+    bool writeGattCharacteristic(const String& address, const String& uuid, uint8_t value);
+    bool readGattCharacteristic(const String& address, const String& uuid, uint8_t& value);
+    
+    bool parseBTHomePacket(const uint8_t* data, size_t length,
+                          const String& bindkey, 
+                          const String& macAddress,
+                          ShellyBLESensorData& sensorData);
+    
+    size_t getBTHomeObjectLength(uint8_t objectId);
+    
+    bool decryptBTHome(const uint8_t* encryptedData, size_t length,
+                      const String& bindkey, 
+                      const String& macAddress,
+                      uint8_t* decrypted,
+                      size_t& decryptedLen);
+    
+    bool parseMacAddress(const String& macStr, uint8_t* mac);
     
     void loadPairedDevice();
     void savePairedDevice();
     void clearPairedDevice();
     
     // ========================================================================
-    // Private Methods - BTHome Parsing
+    // Private Member Variables
     // ========================================================================
+    bool initialized;
+    bool scanning;
+    bool continuousScan;
+    bool stopOnFirstMatch;
     
-    /**
-     * @brief Parst BTHome v2 Paket
-     * @param data Raw packet data
-     * @param length Packet length
-     * @param bindkey Encryption key (32 hex chars, leer = unverschlüsselt)
-     * @param macAddress MAC-Adresse für Nonce (Format: "AA:BB:CC:DD:EE:FF")
-     * @param sensorData Output-Parameter
-     * @return true bei Erfolg
-     */
-    bool parseBTHomePacket(const uint8_t* data, size_t length, 
-                          const String& bindkey, 
-                          const String& macAddress,
-                          ShellyBLESensorData& sensorData);
+    NimBLEScan* pBLEScan;
+    ScanCallback* scanCallback;
+    SensorDataCallback sensorDataCallback;
     
-    /**
-     * @brief Entschlüsselt BTHome v2 Paket (AES-CCM)
-     * @param encryptedData Encrypted packet
-     * @param length Packet length
-     * @param bindkey Encryption key (32 hex chars)
-     * @param macAddress MAC-Adresse für Nonce
-     * @param decrypted Output-Buffer
-     * @param decryptedLen Output-Länge
-     * @return true bei Erfolg
-     */
-    bool decryptBTHome(const uint8_t* encryptedData, size_t length,
-                      const String& bindkey, 
-                      const String& macAddress,
-                      uint8_t* decrypted, 
-                      size_t& decryptedLen);
-    
-    /**
-     * @brief Gibt BTHome Object Length zurück (für sicheres Parsing)
-     * @param objectId BTHome Object ID
-     * @return Länge in Bytes (0 = unbekannt)
-     */
-    size_t getBTHomeObjectLength(uint8_t objectId);
-    
-    // ========================================================================
-    // Private Methods - GATT Client
-    // ========================================================================
-    
-    /**
-     * @brief Verbindet, bonded und liest Encryption Key aus
-     * @param address MAC-Adresse
-     * @param passkey 6-stelliger Code
-     * @param bindkey Output: 32 hex chars
-     * @return true bei Erfolg
-     */
-    bool connectAndReadEncryptionKey(const String& address, uint32_t passkey, String& bindkey);
-    
-    /**
-     * @brief Schreibt GATT Characteristic
-     * @param address MAC-Adresse
-     * @param uuid Characteristic UUID
-     * @param value Wert (1 byte)
-     * @return true bei Erfolg
-     */
-    bool writeGattCharacteristic(const String& address, const String& uuid, uint8_t value);
-    
-    /**
-     * @brief Liest GATT Characteristic
-     * @param address MAC-Adresse
-     * @param uuid Characteristic UUID
-     * @param value Output-Parameter
-     * @return true bei Erfolg
-     */
-    bool readGattCharacteristic(const String& address, const String& uuid, uint8_t& value);
-    
-    // ========================================================================
-    // Private Methods - Helpers
-    // ========================================================================
-    
-    /**
-     * @brief Parst MAC-Adresse von String zu Byte-Array
-     * @param macStr Format: "AA:BB:CC:DD:EE:FF"
-     * @param mac Output: 6 bytes
-     * @return true bei gültigem Format
-     */
-    bool parseMacAddress(const String& macStr, uint8_t* mac);
-    
-    /**
-     * @brief Scan Callback Handler
-     */
-    void onAdvertisedDevice(NimBLEAdvertisedDevice* advertisedDevice);
-    
-    /**
-     * @brief Scan-Ende Callback Handler
-     */
-    void onScanComplete(int reason);
-    
-    /**
-     * @brief Entfernt alte Discoveries (>5 Minuten)
-     */
-    void cleanupOldDiscoveries();
+    std::vector<ShellyBLEDevice> discoveredDevices;
+    PairedShellyDevice pairedDevice;
+
+    DeviceState deviceState;
 };
