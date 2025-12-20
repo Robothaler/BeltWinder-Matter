@@ -4,6 +4,7 @@
 #include <NimBLEDevice.h>
 #include <NimBLEClient.h> 
 #include <vector>
+#include <map>
 #include <functional>
 
 // ============================================================================
@@ -40,25 +41,24 @@
 enum ShellyButtonEvent {
     BUTTON_NONE = 0x00,
     BUTTON_SINGLE_PRESS = 0x01,
-    BUTTON_HOLD = 0x80  // auch 0xFE bei Firmware < 1.0.20
+    BUTTON_HOLD = 0x80
 };
 
 /**
  * @brief Sensor-Daten vom Shelly BLU Door/Window Sensor
  */
 struct ShellyBLESensorData {
-    uint8_t battery;              // Battery level (0-100%)
-    uint32_t illuminance;         // Illuminance in lux
-    bool windowOpen;              // true = open, false = closed
-    int16_t rotation;             // Rotation in degrees from closed position
-    int8_t rssi;                  // Signal strength
-    uint32_t lastUpdate;          // millis() timestamp
-    bool dataValid;               // true = data was successfully parsed
+    uint8_t battery;
+    uint32_t illuminance;
+    bool windowOpen;
+    int16_t rotation;
+    int8_t rssi;
+    uint32_t lastUpdate;
+    bool dataValid;
     
-    // Erweiterte Felder
-    uint8_t packetId;             // Revolving counter (0x00)
-    ShellyButtonEvent buttonEvent; // Button event (0x3A)
-    bool hasButtonEvent;          // true = button event in diesem Paket
+    uint8_t packetId;
+    ShellyButtonEvent buttonEvent;
+    bool hasButtonEvent;
     
     ShellyBLESensorData() 
         : battery(0), illuminance(0), windowOpen(false), rotation(0),
@@ -74,7 +74,7 @@ struct ShellyBLEDevice {
     String name;
     int8_t rssi;
     bool isEncrypted;
-    uint32_t lastSeen;  // millis()
+    uint32_t lastSeen;
     uint8_t addressType;
     
     ShellyBLEDevice() 
@@ -87,7 +87,7 @@ struct ShellyBLEDevice {
 struct PairedShellyDevice {
     String address;
     String name;
-    String bindkey;  // 32 hex chars (16 bytes AES key)
+    String bindkey;
     ShellyBLESensorData sensorData;
     
     PairedShellyDevice() {}
@@ -98,7 +98,7 @@ struct PairedShellyDevice {
  */
 struct DeviceConfig {
     bool beaconModeEnabled;
-    uint8_t angleThreshold;  // in degrees
+    uint8_t angleThreshold;
     bool valid;
     
     DeviceConfig() 
@@ -142,6 +142,9 @@ public:
         return discoveredDevices; 
     }
     
+    void savePasskey(uint32_t passkey);
+    uint32_t getPasskey();
+
     // ========================================================================
     // State Management
     // ========================================================================
@@ -154,18 +157,17 @@ public:
     DeviceState getDeviceState() const;
     
     // ========================================================================
-    // Pairing (Single Device!)
+    // Pairing (Single Device!) - OPTIMIERT
     // ========================================================================
+    
+    // Einfaches Pairing (für unverschlüsselte Geräte)
     bool pairDevice(const String& address, const String& bindkey = "");
-    bool pairEncryptedDevice(const String& address, uint32_t passkey, uint16_t timeout = 30);
+    
+    bool connectDevice(const String& address);                           // Phase 1: Connect
+    bool enableEncryption(const String& address, uint32_t passkey);      // Phase 2: Encrypt
+    
+    // Unpair
     bool unpairDevice();
-    
-    // 2-Phasen-Workflow
-    bool connectDevice(const String& address);  // Phase 1: Bonding
-    bool enableEncryption(const String& address, uint32_t passkey);  // Phase 2: Encrypt
-    
-    // Alte Funktion (kann entfernt werden wenn nicht mehr gebraucht)
-    bool pairDeviceAndEnableEncryption(const String& address, uint32_t passkey);
     
     bool isPaired() const { 
         return pairedDevice.address.length() > 0; 
@@ -186,22 +188,22 @@ public:
     bool setBeaconMode(const String& address, bool enabled);
     bool setAngleThreshold(const String& address, uint8_t degrees);
     bool factoryResetDevice(const String& address);
-    
-    struct DeviceConfig {
-        bool beaconModeEnabled;
-        uint8_t angleThreshold;
-        bool valid;
-    };
-    
     bool readDeviceConfig(const String& address, DeviceConfig& config);
     
     // ========================================================================
     // Callback Registration
     // ========================================================================
-    typedef void (*SensorDataCallback)(const String& address, const ShellyBLESensorData& data);
-    
     void setSensorDataCallback(SensorDataCallback callback) {
         sensorDataCallback = callback;
+    }
+
+    // ========================================================================
+    // State Callback
+    // ========================================================================
+    typedef std::function<void(DeviceState oldState, DeviceState newState)> StateChangeCallback;
+
+    void setStateChangeCallback(StateChangeCallback callback) {
+        stateChangeCallback = callback;
     }
     
     // ========================================================================
@@ -223,22 +225,26 @@ private:
     };
     
     // ========================================================================
-    // Pairing Callbacks
+    // Client Callbacks (Connection Events)
     // ========================================================================
     class PairingCallbacks : public NimBLEClientCallbacks {
+    private:
+        ShellyBLEManager* mgr;
     public:
         bool pairingComplete = false;
         bool pairingSuccess = false;
         
+        PairingCallbacks(ShellyBLEManager* manager) : mgr(manager) {}
+        
         void onConnect(NimBLEClient* pClient) override;
         void onDisconnect(NimBLEClient* pClient, int reason) override;
         bool onConnParamsUpdateRequest(NimBLEClient* pClient, 
-                                       const ble_gap_upd_params* params) override;
+                                    const ble_gap_upd_params* params) override;
         void onAuthenticationComplete(NimBLEConnInfo& connInfo) override;
-        void onPassKeyEntry(NimBLEConnInfo& connInfo) override;
         void onConfirmPasskey(NimBLEConnInfo& connInfo, uint32_t pass_key) override;
+        void onPassKeyEntry(NimBLEConnInfo& connInfo) override;
     };
-    
+
     // ========================================================================
     // Private Helper Functions
     // ========================================================================
@@ -246,12 +252,24 @@ private:
     void onScanComplete(int reason);
     void cleanupOldDiscoveries();
     
-    bool connectAndReadEncryptionKey(const String& address, uint32_t passkey, String& bindkey);
-    bool connectAndReadBindkey(const String& address, String& bindkey);
+    bool quickEncryptionActivation(const String& address, uint32_t passkey);
+    bool fullEncryptionSetup(const String& address, uint32_t passkey);
     
+    // ✅ NEU: State Management Helper
+    void updateDeviceState(DeviceState newState);
+    const char* stateToString(DeviceState state) const;
+    
+    // Helper für Characteristic-Suche
+    NimBLERemoteCharacteristic* findCharacteristic(
+        std::vector<NimBLERemoteService*>& services,
+        const String& uuid
+    );
+    
+    // GATT Operations
     bool writeGattCharacteristic(const String& address, const String& uuid, uint8_t value);
     bool readGattCharacteristic(const String& address, const String& uuid, uint8_t& value);
     
+    // BTHome Parsing
     bool parseBTHomePacket(const uint8_t* data, size_t length,
                           const String& bindkey, 
                           const String& macAddress,
@@ -259,6 +277,7 @@ private:
     
     size_t getBTHomeObjectLength(uint8_t objectId);
     
+    // Encryption
     bool decryptBTHome(const uint8_t* encryptedData, size_t length,
                       const String& bindkey, 
                       const String& macAddress,
@@ -267,9 +286,11 @@ private:
     
     bool parseMacAddress(const String& macStr, uint8_t* mac);
     
+    // Persistence
     void loadPairedDevice();
     void savePairedDevice();
     void clearPairedDevice();
+    void closeActiveConnection();
     
     // ========================================================================
     // Private Member Variables
@@ -278,13 +299,19 @@ private:
     bool scanning;
     bool continuousScan;
     bool stopOnFirstMatch;
+    uint32_t activeClientTimestamp;
     
     NimBLEScan* pBLEScan;
     ScanCallback* scanCallback;
     SensorDataCallback sensorDataCallback;
+    StateChangeCallback stateChangeCallback;
+
+    NimBLEClient* activeClient = nullptr;
+    PairingCallbacks* activeClientCallbacks = nullptr;
     
     std::vector<ShellyBLEDevice> discoveredDevices;
     PairedShellyDevice pairedDevice;
-
     DeviceState deviceState;
+    
+    std::map<String, uint32_t> recentConnections;  // address -> millis() timestamp
 };

@@ -27,6 +27,14 @@ public:
         remove_contact_sensor_callback = cb;
     }
 
+    void broadcastBLEStateChange(ShellyBLEManager::DeviceState oldState, 
+                                  ShellyBLEManager::DeviceState newState);
+    
+    void broadcastSensorDataUpdate(const String& address, 
+                                    const ShellyBLESensorData& data);
+    void sendModalClose(int fd, const char* modal_id);
+    
+
 private:
     app_driver_handle_t handle;
     ShellyBLEManager* bleManager;
@@ -41,7 +49,7 @@ private:
 
     endpoint_callback_t remove_contact_sensor_callback = nullptr;
     
-    std::vector<ClientInfo> active_clients;  // ✓ GEÄNDERT: ClientInfo statt int
+    std::vector<ClientInfo> active_clients;
     
     static const int MAX_CLIENTS = 5;
     static const uint32_t WS_TIMEOUT_MS = 60000;  // 60 Sekunden

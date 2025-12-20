@@ -107,9 +107,20 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     
     ESP_LOGI(TAG, "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛");
     ESP_LOGI(TAG, "");
-    
+
     // ========================================================================
-    // Matter Contact Sensor Update (nur wenn enabled)
+    // ✅ KRITISCH: WebUI Update ZUERST
+    // ========================================================================
+    if (webUI) {
+        ESP_LOGI(TAG, "→ Broadcasting sensor data to WebUI clients...");
+        webUI->broadcastSensorDataUpdate(address, data);
+        ESP_LOGI(TAG, "✓ WebUI broadcast complete");
+    } else {
+        ESP_LOGW(TAG, "⚠ WebUI is NULL - cannot broadcast sensor data!");
+    }
+
+    // ========================================================================
+    // Matter Contact Sensor Update
     // ========================================================================
     
     if (contact_sensor_matter_enabled) {
@@ -130,7 +141,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
         
         // Attribute aktualisieren
         if (contact_sensor_endpoint_active && contact_sensor_endpoint_id != 0) {
-            ESP_LOGI(TAG, "Updating Matter attributes...");
+            ESP_LOGI(TAG, "→ Updating Matter attributes...");
             
             // Contact State
             esp_matter_attr_val_t contact_val = esp_matter_bool(data.windowOpen);
@@ -184,9 +195,9 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     // Rolladen-Logik (IMMER aktiv)
     // ========================================================================
     
-    ESP_LOGI(TAG, "Applying window logic to shutter (always active)...");
+    ESP_LOGI(TAG, "→ Applying window logic to shutter (always active)...");
     shutter_driver_set_window_state(shutter_handle, data.windowOpen);
-    ESP_LOGI(TAG, "  Window state updated in shutter driver");
+    ESP_LOGI(TAG, "✓ Window state updated in shutter driver");
     
     ESP_LOGI(TAG, "");
 }
@@ -667,13 +678,23 @@ void setup() {
     // ========================================================================
     
     bleManager = new ShellyBLEManager();
+
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   REGISTERING BLE CALLBACKS       ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+
+    // Sensor Data Callback ZUERST registrieren
+    bleManager->setSensorDataCallback(onBLESensorData);
+    ESP_LOGI(TAG, "✓ Sensor Data Callback registered");
+    
     if (bleManager->begin()) {
-        ESP_LOGI(TAG, "✓ Shelly BLE Manager initialized");
-        bleManager->setSensorDataCallback(onBLESensorData);
-        
-        if (bleManager->isPaired()) {
-            ESP_LOGI(TAG, "Device is paired → Starting continuous scan for sensor data...");
-            bleManager->startContinuousScan();
+    ESP_LOGI(TAG, "✓ Shelly BLE Manager initialized");
+    
+    if (bleManager->isPaired()) {
+        ESP_LOGI(TAG, "Device is paired → Starting continuous scan for sensor data...");
+        bleManager->startContinuousScan();
             
             matterPref.begin("matter", true);
             bool was_active = matterPref.getBool("cs_active", false);
@@ -836,6 +857,7 @@ void loop() {
     // BLE Manager Loop
     if (bleManager) {
         bleManager->loop();
+        esp_task_wdt_reset();
     }
 
     // WebSocket Cleanup every 10 Seconds
