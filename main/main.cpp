@@ -445,13 +445,14 @@ void setup() {
     Serial.begin(115200);
 
     esp_log_level_set("*", ESP_LOG_INFO);           // Global: INFO
-    esp_log_level_set("ShellyBLE", ESP_LOG_INFO);   // BLE: INFO
+    esp_log_level_set("ShellyBLE", ESP_LOG_NONE);   // BLE: INFO
+    esp_log_level_set("BLESimple", ESP_LOG_NONE);   // BLE: INFO
     esp_log_level_set("NimBLE", ESP_LOG_NONE);      // NimBLE: INFO
     esp_log_level_set("chip[DL]", ESP_LOG_WARN);    // Matter: WARN
     esp_log_level_set("wifi", ESP_LOG_NONE);       // WiFi: ERROR
-    esp_log_level_set("Shutter", ESP_LOG_NONE);     // Shutter: DEBUG
+    esp_log_level_set("Shutter", ESP_LOG_INFO);     // Shutter: DEBUG
     esp_log_level_set("Main", ESP_LOG_NONE);        // Main: DEBUG
-    esp_log_level_set("WebUI", ESP_LOG_INFO);       // WebUI: DEBUG
+    esp_log_level_set("WebUI", ESP_LOG_NONE);       // WebUI: DEBUG
 
     ESP_LOGI(TAG, "=== BeltWinder Matter - Starting ===");
 
@@ -896,6 +897,8 @@ void loop() {
         ESP_LOGI(TAG, "");
     }
 
+    #ifdef DEBUG_MODE
+
     // Periodic Status Report (every 5 minutes)
     static uint32_t last_status_report = 0;
     if (millis() - last_status_report >= 300000) {  // 5 minutes
@@ -963,8 +966,14 @@ void loop() {
         }
         
         ESP_LOGI(TAG, "═══════════════════════════════════");
-        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "");   
     }
+
+    #else
+    ESP_LOGI(TAG, "Status: Heap=%u KB, WiFi=%d dBm, Matter=%s", 
+            esp_get_free_heap_size()/1024, WiFi.RSSI(),
+            is_commissioned ? "OK" : "NC");
+    #endif
 
     delay(1);
 }
