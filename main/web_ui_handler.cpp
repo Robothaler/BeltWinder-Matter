@@ -4361,18 +4361,48 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     // BLE Commands
     // ============================================================================
 
-    else if (strcmp(cmd, "ble_scan") == 0)
-    {
-        ESP_LOGI(TAG, "═══════════════════════════════════");
-        ESP_LOGI(TAG, "WebSocket: BLE DISCOVERY SCAN");
-        ESP_LOGI(TAG, "═══════════════════════════════════");
-
-        if (self->bleManager)
-        {
-            ESP_LOGI(TAG, "Starting 10-second discovery scan...");
-            ESP_LOGI(TAG, "Will stop on first Shelly BLU Door/Window found!");
-
-            self->bleManager->startScan(10, true);
+    else if (strcmp(cmd, "ble_scan") == 0) {
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "WebSocket: BLE DISCOVERY SCAN");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    
+    if (self->bleManager) {
+        // ════════════════════════════════════════════════════════════════
+        // ✅ Ensure BLE is started BEFORE scanning
+        // ════════════════════════════════════════════════════════════════
+        
+        if (!self->bleManager->isBLEStarted()) {
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "→ BLE not started yet");
+            ESP_LOGI(TAG, "  Starting BLE for discovery scan...");
+            
+            if (!self->bleManager->ensureBLEStarted()) {
+                ESP_LOGE(TAG, "✗ Failed to start BLE");
+                
+                const char* error = "{\"type\":\"error\",\"message\":\"Failed to start BLE\"}";
+                httpd_ws_frame_t frame = {
+                    .type = HTTPD_WS_TYPE_TEXT,
+                    .payload = (uint8_t*)error,
+                    .len = strlen(error)
+                };
+                httpd_ws_send_frame_async(req->handle, fd, &frame);
+                
+                free(buf);
+                return ESP_OK;
+            }
+            
+            ESP_LOGI(TAG, "✓ BLE started successfully");
+            ESP_LOGI(TAG, "");
+            
+            // Kurze Pause für BLE Stack
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+        
+        ESP_LOGI(TAG, "Starting 10-second discovery scan...");
+        ESP_LOGI(TAG, "Will stop on first Shelly BLU Door/Window found!");
+        
+        // Start Scan
+        self->bleManager->startScan(10, true);
 
             xTaskCreate([](void *param) {
                 WebUIHandler *handler = (WebUIHandler *)param;
@@ -4759,8 +4789,11 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
             
             delete p;
             vTaskDelete(NULL);
+
+            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+            ESP_LOGI(TAG, "Task Stack (ble_smart) usage: %u bytes free", highWater * sizeof(StackType_t));  
             
-        }, "ble_smart", 8192, params, 5, NULL);
+        }, "ble_smart", 4096, params, 5, NULL);
         
         ESP_LOGI(TAG, "✓ Smart Connect task created");
     }
@@ -4937,7 +4970,11 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_encrypt\"", 20) == 0) {
 
             delete p;
             vTaskDelete(NULL);
-        }, "ble_enc_task", 8192, params, 1, NULL);
+
+            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+            ESP_LOGI(TAG, "Task Stack (ble_enc_task) usage: %u bytes free", highWater * sizeof(StackType_t));
+
+        }, "ble_enc_task", 6144, params, 1, NULL);
     }
 }
 
@@ -5102,8 +5139,11 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
             
             delete p;
             vTaskDelete(NULL);
+
+            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+            ESP_LOGI(TAG, "Task Stack (ble_enc) usage: %u bytes free", highWater * sizeof(StackType_t));
             
-        }, "ble_enc", 8192, params, 5, NULL);  // ✅ Stack: 8KB, Priorität: 5
+        }, "ble_enc", 4096, params, 5, NULL);  // ✅ Stack: 8KB, Priorität: 5
         
         ESP_LOGI(TAG, "✓ Encryption task created");
     }
@@ -5468,8 +5508,11 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
             
             delete p;
             vTaskDelete(NULL);
+
+            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+            ESP_LOGI(TAG, "Task Stack (ble_enc_known)usage: %u bytes free", highWater * sizeof(StackType_t));
             
-        }, "ble_enc_known", 8192, params, 5, NULL);
+        }, "ble_enc_known", 4096, params, 5, NULL);
         
         ESP_LOGI(TAG, "✓ Already-Encrypted pairing task created");
     }
@@ -5772,8 +5815,11 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
                 
                 delete p;
                 vTaskDelete(NULL);
+
+                UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+                ESP_LOGI(TAG, "Task Stack (ble_read) usage: %u bytes free", highWater * sizeof(StackType_t));
                 
-            }, "ble_read", 6144, params, 5, NULL);
+            }, "ble_read", 4096, params, 5, NULL);
             
             // Sofort Info an User senden
             const char* info = "{\"type\":\"info\",\"message\":\"Reading sensor data via GATT...\"}";

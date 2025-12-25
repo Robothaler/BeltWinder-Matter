@@ -51,7 +51,7 @@ private:
     
     std::vector<ClientInfo> active_clients;
     
-    static const int MAX_CLIENTS = 5;
+    static const int MAX_CLIENTS = 3;
     static const uint32_t WS_TIMEOUT_MS = 60000;  // 60 Sekunden
     
     void register_client(int fd);
