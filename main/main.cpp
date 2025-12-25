@@ -56,10 +56,17 @@ static bool hardware_initialized = false;
 static TaskHandle_t loop_task_handle = nullptr;
 
 static uint16_t window_covering_endpoint_id = 0;
+
+// Contact Sensor
 static endpoint_t* contact_sensor_endpoint = nullptr;
 static uint16_t contact_sensor_endpoint_id = 0;
 bool contact_sensor_endpoint_active = false;
 bool contact_sensor_matter_enabled = false;
+
+// Power Source Endpoint
+static endpoint_t* power_source_endpoint = nullptr;
+static uint16_t power_source_endpoint_id = 0;
+bool power_source_endpoint_active = false;
 
 // ============================================================================
 // Forward Declarations
@@ -72,7 +79,9 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &command_path,
                                 TLV::TLVReader &tlv_reader, void *priv_data);
 
 static endpoint_t* createContactSensorEndpoint(node_t* node);
+static endpoint_t* createPowerSourceEndpoint(node_t* node); 
 static void removeContactSensorEndpoint();
+static void removePowerSourceEndpoint();
 void enableContactSensorMatter();
 void disableContactSensorMatter();
 
@@ -81,125 +90,120 @@ void disableContactSensorMatter();
 // ============================================================================
 
 void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "┏━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┓");
-    ESP_LOGI(TAG, "┃         BLE SENSOR DATA UPDATE                       ┃");
-    ESP_LOGI(TAG, "┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫");
-    ESP_LOGI(TAG, "┃ Device: %-45s┃", address.c_str());
-    ESP_LOGI(TAG, "┣━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┫");
-    ESP_LOGI(TAG, "┃ Packet ID:      %-3d                                  ┃", data.packetId);
-    ESP_LOGI(TAG, "┃ Contact State:  %-35s ┃", 
-             data.windowOpen ? "🔓 OPEN  " : "🔒 CLOSED");
-    ESP_LOGI(TAG, "┃ Battery Level:  %3d%%                                 ┃", data.battery);
-    ESP_LOGI(TAG, "┃ Illuminance:    %5u lux                            ┃", data.illuminance);
-    ESP_LOGI(TAG, "┃ Rotation:       %4d°                               ┃", data.rotation);
-    ESP_LOGI(TAG, "┃ Signal:         %4d dBm                            ┃", data.rssi);
+    ESP_LOGI(TAG, "BLE Sensor: %s | Contact: %s | Battery: %d%% | Illuminance: %u lux | Rotation: %d° | RSSI: %d dBm",
+             address.c_str(),
+             data.windowOpen ? "OPEN" : "CLOSED",
+             data.battery,
+             data.illuminance,
+             data.rotation,
+             data.rssi);
     
     if (data.hasButtonEvent) {
-        const char* eventName;
-        switch (data.buttonEvent) {
-            case BUTTON_SINGLE_PRESS: eventName = "SINGLE PRESS 👆"; break;
-            case BUTTON_HOLD: eventName = "HOLD ⏸️"; break;
-            default: eventName = "UNKNOWN";
-        }
-        ESP_LOGI(TAG, "┃ Button Event:   %-35s ┃", eventName);
+        const char* eventName = (data.buttonEvent == BUTTON_SINGLE_PRESS) ? "SINGLE PRESS" : 
+                               (data.buttonEvent == BUTTON_HOLD) ? "HOLD" : "UNKNOWN";
+        ESP_LOGI(TAG, "  Button Event: %s", eventName);
     }
-    
-    ESP_LOGI(TAG, "┗━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━━┛");
-    ESP_LOGI(TAG, "");
 
-    // ========================================================================
-    // ✅ KRITISCH: WebUI Update ZUERST
-    // ========================================================================
+    // WebUI Update
     if (webUI) {
-        ESP_LOGI(TAG, "→ Broadcasting sensor data to WebUI clients...");
         webUI->broadcastSensorDataUpdate(address, data);
-        ESP_LOGI(TAG, "✓ WebUI broadcast complete");
-    } else {
-        ESP_LOGW(TAG, "⚠ WebUI is NULL - cannot broadcast sensor data!");
     }
 
-    // ========================================================================
-    // Matter Contact Sensor Update
-    // ========================================================================
-    
+    // Matter Update (nur wenn commissioned)
     if (contact_sensor_matter_enabled) {
-        ESP_LOGI(TAG, "Matter Contact Sensor: ENABLED");
+        bool is_commissioned = Matter.isDeviceCommissioned() && 
+                              (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
         
-        // Endpoint erstellen falls noch nicht vorhanden
-        if (!contact_sensor_endpoint_active) {
-            ESP_LOGI(TAG, "→ First sensor data received, creating endpoint...");
+        if (is_commissioned) {
+            // ✅ Contact Sensor Endpoint erstellen (NUR EINMAL!)
+            if (!contact_sensor_endpoint_active) {
+                ESP_LOGI(TAG, "→ Creating Contact Sensor endpoint...");
+                node_t* node = node::get();
+                if (node) {
+                    createContactSensorEndpoint(node);
+                }
+            }
             
-            node_t* node = node::get();
-            if (node) {
-                createContactSensorEndpoint(node);
-            } else {
-                ESP_LOGE(TAG, "✗ Failed to get Matter node!");
-                return;
+            // ✅ Power Source Endpoint erstellen (NUR EINMAL!)
+            if (!power_source_endpoint_active) {  // ← WICHTIGE PRÜFUNG!
+                ESP_LOGI(TAG, "→ Creating Power Source endpoint...");
+                node_t* node = node::get();
+                if (node) {
+                    createPowerSourceEndpoint(node);
+                }
+            }
+            
+            // ✅ Attribute updaten (NUR wenn Endpoints aktiv sind)
+            if (contact_sensor_endpoint_active && contact_sensor_endpoint_id != 0) {
+                ESP_LOGD(TAG, "→ Updating Contact Sensor attributes...");
+                
+                // Contact State
+                esp_matter_attr_val_t contact_val = esp_matter_bool(!data.windowOpen);
+                attribute::update(contact_sensor_endpoint_id,
+                                 chip::app::Clusters::BooleanState::Id,
+                                 chip::app::Clusters::BooleanState::Attributes::StateValue::Id,
+                                 &contact_val);
+                
+                // Illuminance
+                esp_matter_attr_val_t illum_val = esp_matter_uint16(data.illuminance);
+                attribute::update(contact_sensor_endpoint_id,
+                                 chip::app::Clusters::IlluminanceMeasurement::Id,
+                                 chip::app::Clusters::IlluminanceMeasurement::Attributes::MeasuredValue::Id,
+                                 &illum_val);
+            }
+            
+            // ✅ Power Source Attribute updaten (NUR wenn Endpoint aktiv ist)
+            if (power_source_endpoint_active && power_source_endpoint_id != 0) {
+                ESP_LOGD(TAG, "→ Updating Power Source attributes...");
+                
+                // Battery Percentage (0-200, where 200 = 100%)
+                esp_matter_attr_val_t battery_val = esp_matter_nullable_uint8(data.battery * 2);
+                attribute::update(power_source_endpoint_id,
+                                 chip::app::Clusters::PowerSource::Id,
+                                 chip::app::Clusters::PowerSource::Attributes::BatPercentRemaining::Id,
+                                 &battery_val);
+
+                // Battery Charge Level
+                chip::app::Clusters::PowerSource::BatChargeLevelEnum charge_level;
+                if (data.battery < 10) {
+                    charge_level = chip::app::Clusters::PowerSource::BatChargeLevelEnum::kCritical;
+                } else if (data.battery < 20) {
+                    charge_level = chip::app::Clusters::PowerSource::BatChargeLevelEnum::kWarning;
+                } else {
+                    charge_level = chip::app::Clusters::PowerSource::BatChargeLevelEnum::kOk;
+                }
+                
+                esp_matter_attr_val_t charge_val = esp_matter_enum8((uint8_t)charge_level);
+                attribute::update(power_source_endpoint_id,
+                                 chip::app::Clusters::PowerSource::Id,
+                                 chip::app::Clusters::PowerSource::Attributes::BatChargeLevel::Id,
+                                 &charge_val);
+                
+                // Battery Replacement Needed
+                esp_matter_attr_val_t replacement_val = esp_matter_bool(data.battery < 10);
+                attribute::update(power_source_endpoint_id,
+                                 chip::app::Clusters::PowerSource::Id,
+                                 chip::app::Clusters::PowerSource::Attributes::BatReplacementNeeded::Id,
+                                 &replacement_val);
+                
+                // Battery Voltage
+                uint16_t voltage_mv = 2400 + (data.battery * 6);
+                esp_matter_attr_val_t voltage_val = esp_matter_nullable_uint16(voltage_mv);
+                attribute::update(power_source_endpoint_id,
+                                 chip::app::Clusters::PowerSource::Id,
+                                 chip::app::Clusters::PowerSource::Attributes::BatVoltage::Id,
+                                 &voltage_val);
+                
+                ESP_LOGD(TAG, "✓ Power Source attributes updated (Battery: %d%%, Level: %s)",
+                         data.battery,
+                         charge_level == chip::app::Clusters::PowerSource::BatChargeLevelEnum::kCritical ? "CRITICAL" :
+                         charge_level == chip::app::Clusters::PowerSource::BatChargeLevelEnum::kWarning ? "WARNING" : "OK");
             }
         }
-        
-        // Attribute aktualisieren
-        if (contact_sensor_endpoint_active && contact_sensor_endpoint_id != 0) {
-            ESP_LOGI(TAG, "→ Updating Matter attributes...");
-            
-            // Contact State
-            esp_matter_attr_val_t contact_val = esp_matter_bool(data.windowOpen);
-            esp_err_t ret = attribute::update(contact_sensor_endpoint_id,
-                                             chip::app::Clusters::BooleanState::Id,
-                                             chip::app::Clusters::BooleanState::Attributes::StateValue::Id,
-                                             &contact_val);
-            ESP_LOGI(TAG, "  Contact State → Matter: %s", ret == ESP_OK ? "✓" : "✗");
-            
-            // Battery (0-200, where 200 = 100%)
-            esp_matter_attr_val_t battery_val = esp_matter_nullable_uint8(data.battery * 2);
-            ret = attribute::update(contact_sensor_endpoint_id,
-                                   chip::app::Clusters::PowerSource::Id,
-                                   chip::app::Clusters::PowerSource::Attributes::BatPercentRemaining::Id,
-                                   &battery_val);
-            ESP_LOGI(TAG, "  Battery Level → Matter: %s", ret == ESP_OK ? "✓" : "✗");
-            
-            // Battery Warning
-            esp_matter_attr_val_t replacement_val = esp_matter_bool(data.battery < 20);
-            ret = attribute::update(contact_sensor_endpoint_id,
-                                   chip::app::Clusters::PowerSource::Id,
-                                   chip::app::Clusters::PowerSource::Attributes::BatReplacementNeeded::Id,
-                                   &replacement_val);
-            ESP_LOGI(TAG, "  Battery Warning → Matter: %s", ret == ESP_OK ? "✓" : "✗");
-            
-            // Voltage
-            uint16_t voltage_mv = 2400 + (data.battery * 6);
-            esp_matter_attr_val_t voltage_val = esp_matter_nullable_uint16(voltage_mv);
-            ret = attribute::update(contact_sensor_endpoint_id,
-                                   chip::app::Clusters::PowerSource::Id,
-                                   chip::app::Clusters::PowerSource::Attributes::BatVoltage::Id,
-                                   &voltage_val);
-            ESP_LOGI(TAG, "  Battery Voltage → Matter: %s (est. %u mV)", 
-                     ret == ESP_OK ? "✓" : "✗", voltage_mv);
-            
-            // Illuminance
-            esp_matter_attr_val_t illum_val = esp_matter_uint16(data.illuminance);
-            ret = attribute::update(contact_sensor_endpoint_id,
-                                   chip::app::Clusters::IlluminanceMeasurement::Id,
-                                   chip::app::Clusters::IlluminanceMeasurement::Attributes::MeasuredValue::Id,
-                                   &illum_val);
-            ESP_LOGI(TAG, "  Illuminance → Matter: %s", ret == ESP_OK ? "✓" : "✗");
-            
-            ESP_LOGI(TAG, "✓ Matter attributes updated");
-        }
-    } else {
-        ESP_LOGI(TAG, "Matter Contact Sensor: DISABLED (toggle is off)");
     }
     
-    // ========================================================================
     // Rolladen-Logik (IMMER aktiv)
-    // ========================================================================
-    
-    ESP_LOGI(TAG, "→ Applying window logic to shutter (always active)...");
     shutter_driver_set_window_state(shutter_handle, data.windowOpen);
-    ESP_LOGI(TAG, "✓ Window state updated in shutter driver");
-    
-    ESP_LOGI(TAG, "");
 }
 
 
@@ -218,7 +222,10 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     ESP_LOGI(TAG, "║   CREATING CONTACT SENSOR         ║");
     ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
     
-    // Contact Sensor erstellen
+    // ========================================================================
+    // Contact Sensor Endpoint
+    // ========================================================================
+    
     contact_sensor::config_t cs_config;
     contact_sensor_endpoint = contact_sensor::create(node, &cs_config, 
                                                      ENDPOINT_FLAG_NONE, NULL);
@@ -266,67 +273,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     }
     
     // ========================================================================
-    // Power Source Cluster (OHNE Features Config!)
-    // ========================================================================
-    
-    cluster::power_source::config_t ps_config;
-    // ⚠️ Features NICHT hier setzen - das macht ESP Matter automatisch!
-    
-    cluster_t* ps_cluster = cluster::power_source::create(contact_sensor_endpoint, 
-                                                          &ps_config, 
-                                                          CLUSTER_FLAG_SERVER);
-    
-    if (!ps_cluster) {
-        ESP_LOGE(TAG, "✗ Failed to create Power Source cluster");
-    } else {
-        ESP_LOGI(TAG, "✓ Power Source cluster created");
-        
-        // ========================================================================
-        // Battery Feature MANUELL hinzufügen
-        // ========================================================================
-        
-        cluster::power_source::feature::battery::config_t battery_config;
-        cluster::power_source::feature::battery::add(ps_cluster, &battery_config);
-        ESP_LOGI(TAG, "✓ Battery feature added");
-        
-        // ========================================================================
-        // Battery Attributes setzen
-        // ========================================================================
-        
-        // Battery Percentage (0-200, where 200 = 100%)
-        esp_matter_attr_val_t battery_val = esp_matter_nullable_uint8(0);
-        attribute::update(contact_sensor_endpoint_id,
-                         chip::app::Clusters::PowerSource::Id,
-                         chip::app::Clusters::PowerSource::Attributes::BatPercentRemaining::Id,
-                         &battery_val);
-        
-        // Battery Charge Level
-        esp_matter_attr_val_t charge_level = esp_matter_enum8(
-            (uint8_t)chip::app::Clusters::PowerSource::BatChargeLevelEnum::kOk);
-        attribute::update(contact_sensor_endpoint_id,
-                         chip::app::Clusters::PowerSource::Id,
-                         chip::app::Clusters::PowerSource::Attributes::BatChargeLevel::Id,
-                         &charge_level);
-        
-        // Battery Replacement Warning
-        esp_matter_attr_val_t replacement_val = esp_matter_bool(false);
-        attribute::update(contact_sensor_endpoint_id,
-                         chip::app::Clusters::PowerSource::Id,
-                         chip::app::Clusters::PowerSource::Attributes::BatReplacementNeeded::Id,
-                         &replacement_val);
-        
-        // Battery Voltage (mV)
-        esp_matter_attr_val_t voltage_val = esp_matter_nullable_uint16(3000);
-        attribute::update(contact_sensor_endpoint_id,
-                         chip::app::Clusters::PowerSource::Id,
-                         chip::app::Clusters::PowerSource::Attributes::BatVoltage::Id,
-                         &voltage_val);
-        
-        ESP_LOGI(TAG, "✓ Battery attributes configured");
-    }
-    
-    // ========================================================================
-    // Endpoint-Status speichern
+    // Endpoint Status speichern
     // ========================================================================
     
     contact_sensor_endpoint_active = true;
@@ -340,6 +287,121 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     
     return contact_sensor_endpoint;
 }
+
+    // ============================================================================
+    // Power Source Endpoint (Matter 1.2 Spec Section 11.7)
+    // ============================================================================
+
+    static endpoint_t* createPowerSourceEndpoint(node_t* node) {
+    if (power_source_endpoint != nullptr) {
+        ESP_LOGW(TAG, "Power Source endpoint already exists");
+        return power_source_endpoint;
+    }
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   CREATING POWER SOURCE ENDPOINT  ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    
+    uint8_t flags = ENDPOINT_FLAG_DESTROYABLE;
+    power_source_endpoint = endpoint::create(node, flags, nullptr);
+    
+    if (!power_source_endpoint) {
+        ESP_LOGE(TAG, "✗ Failed to create generic endpoint");
+        return nullptr;
+    }
+    
+    power_source_endpoint_id = endpoint::get_id(power_source_endpoint);
+    ESP_LOGI(TAG, "✓ Generic endpoint created (ID: %d)", power_source_endpoint_id);
+    
+    endpoint::add_device_type(power_source_endpoint, 0x0011, 1);
+    ESP_LOGI(TAG, "✓ Device Type set to Power Source (0x0011)");
+    
+    descriptor::config_t descriptor_config;
+    descriptor::create(power_source_endpoint, &descriptor_config, CLUSTER_FLAG_SERVER);
+    ESP_LOGI(TAG, "✓ Descriptor cluster added");
+    
+    cluster_t* ps_cluster = cluster::create(power_source_endpoint,
+                                            chip::app::Clusters::PowerSource::Id,
+                                            CLUSTER_FLAG_SERVER);
+    
+    if (!ps_cluster) {
+        ESP_LOGE(TAG, "✗ Failed to create Power Source cluster");
+        power_source_endpoint = nullptr;
+        return nullptr;
+    }
+    
+    ESP_LOGI(TAG, "✓ Power Source cluster created");
+    
+    // ========================================================================
+    // Mandatory Attributes mit FESTEN Buffer-Größen
+    // ========================================================================
+    
+    // Status
+    attribute::create(ps_cluster,
+                     chip::app::Clusters::PowerSource::Attributes::Status::Id,
+                     ATTRIBUTE_FLAG_NONE,
+                     esp_matter_enum8((uint8_t)chip::app::Clusters::PowerSource::PowerSourceStatusEnum::kActive));
+    
+    // Order
+    attribute::create(ps_cluster,
+                     chip::app::Clusters::PowerSource::Attributes::Order::Id,
+                     ATTRIBUTE_FLAG_NONE,
+                     esp_matter_uint8(0));
+    
+    attribute::create(ps_cluster,
+                    chip::app::Clusters::PowerSource::Attributes::Description::Id,
+                    ATTRIBUTE_FLAG_NONE,
+                    esp_matter_char_str("Battery", 16));
+
+    ESP_LOGI(TAG, "✓ Description attribute configured");
+    
+    // FeatureMap
+    attribute::create(ps_cluster,
+                     chip::app::Clusters::Globals::Attributes::FeatureMap::Id,
+                     ATTRIBUTE_FLAG_NONE,
+                     esp_matter_uint32(0x02));
+    
+    ESP_LOGI(TAG, "✓ Mandatory attributes configured");
+    
+    // Battery Attributes
+    attribute::create(ps_cluster,
+                     chip::app::Clusters::PowerSource::Attributes::BatPercentRemaining::Id,
+                     ATTRIBUTE_FLAG_NULLABLE,
+                     esp_matter_nullable_uint8(0));
+    ESP_LOGI(TAG, "✓ Attribute 0x000C (BatPercentRemaining) configured");
+    
+    attribute::create(ps_cluster,
+                     chip::app::Clusters::PowerSource::Attributes::BatChargeLevel::Id,
+                     ATTRIBUTE_FLAG_NONE,
+                     esp_matter_enum8((uint8_t)chip::app::Clusters::PowerSource::BatChargeLevelEnum::kOk));
+    ESP_LOGI(TAG, "✓ Attribute 0x000D (BatChargeLevel) configured");
+    
+    attribute::create(ps_cluster,
+                     chip::app::Clusters::PowerSource::Attributes::BatReplacementNeeded::Id,
+                     ATTRIBUTE_FLAG_NONE,
+                     esp_matter_bool(false));
+    ESP_LOGI(TAG, "✓ Attribute 0x000F (BatReplacementNeeded) configured");
+    
+    attribute::create(ps_cluster,
+                     chip::app::Clusters::PowerSource::Attributes::BatVoltage::Id,
+                     ATTRIBUTE_FLAG_NULLABLE,
+                     esp_matter_nullable_uint16(3000));
+    ESP_LOGI(TAG, "✓ Attribute BatVoltage configured");
+    
+    power_source_endpoint_active = true;
+    
+    matterPref.begin("matter", false);
+    matterPref.putBool("ps_active", true);
+    matterPref.end();
+    
+    ESP_LOGI(TAG, "✓ Power Source endpoint fully configured");
+    ESP_LOGI(TAG, "");
+    
+    return power_source_endpoint;
+}
+
+
 
     static void removeContactSensorEndpoint() {
     if (contact_sensor_endpoint == nullptr) {
@@ -371,6 +433,30 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     // Wir setzen nur das Flag zurück, damit keine Updates mehr gesendet werden
 }
 
+    static void removePowerSourceEndpoint() {
+        if (power_source_endpoint == nullptr) {
+            ESP_LOGW(TAG, "No Power Source endpoint to remove");
+            return;
+        }
+        
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   DEACTIVATING POWER SOURCE       ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        
+        power_source_endpoint_active = false;
+        
+        matterPref.begin("matter", false);
+        matterPref.putBool("ps_active", false);
+        matterPref.end();
+        
+        ESP_LOGI(TAG, "✓ Power Source endpoint marked as inactive");
+        ESP_LOGI(TAG, "⚠️  Note: Endpoint remains in Matter structure!");
+        ESP_LOGI(TAG, "⚠️  To fully remove: Factory Reset required");
+        ESP_LOGI(TAG, "");
+    }
+
+
 void enableContactSensorMatter() {
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
@@ -379,11 +465,11 @@ void enableContactSensorMatter() {
     ESP_LOGI(TAG, "");
     
     if (!bleManager || !bleManager->isPaired()) {
-        ESP_LOGW(TAG, "⚠ No BLE sensor paired - endpoint will be created on first data");
+        ESP_LOGW(TAG, "⚠ No BLE sensor paired - endpoints will be created on first data");
     }
     
     if (!Matter.isDeviceCommissioned()) {
-        ESP_LOGW(TAG, "⚠ Matter not commissioned - endpoint will be created after commissioning");
+        ESP_LOGW(TAG, "⚠ Matter not commissioned - endpoints will be created after commissioning");
     }
     
     contact_sensor_matter_enabled = true;
@@ -393,11 +479,19 @@ void enableContactSensorMatter() {
     matterPref.putBool("cs_matter_en", true);
     matterPref.end();
     
-    // Endpoint erstellen wenn möglich
+    // Endpoints erstellen wenn möglich
     if (Matter.isDeviceCommissioned() && bleManager && bleManager->isPaired()) {
         node_t* node = node::get();
-        if (node && !contact_sensor_endpoint_active) {
-            createContactSensorEndpoint(node);
+        if (node) {
+            // Contact Sensor Endpoint
+            if (!contact_sensor_endpoint_active) {
+                createContactSensorEndpoint(node);
+            }
+            
+            // Power Source Endpoint
+            if (!power_source_endpoint_active) {
+                createPowerSourceEndpoint(node);
+            }
             
             // Wenn bereits Daten vorhanden, sofort updaten
             ShellyBLESensorData data;
@@ -426,10 +520,16 @@ void disableContactSensorMatter() {
     matterPref.putBool("cs_matter_en", false);
     matterPref.end();
     
-    // Endpoint deaktivieren (aber nicht löschen - Matter unterstützt das nicht)
+    // Contact Sensor Endpoint deaktivieren
     if (contact_sensor_endpoint_active) {
         removeContactSensorEndpoint();
         ESP_LOGI(TAG, "✓ Contact Sensor endpoint deactivated");
+    }
+    
+    // Power Source Endpoint deaktivieren
+    if (power_source_endpoint_active) {
+        removePowerSourceEndpoint();
+        ESP_LOGI(TAG, "✓ Power Source endpoint deactivated");
     }
     
     ESP_LOGI(TAG, "✓ Matter Contact Sensor disabled");
@@ -445,13 +545,20 @@ void setup() {
     Serial.begin(115200);
 
     esp_log_level_set("*", ESP_LOG_INFO);           // Global: INFO
+
+    esp_log_level_set("chip[DL]", ESP_LOG_WARN);    // Matter: WARN
+    esp_log_level_set("chip[DMG]", ESP_LOG_ERROR);  
+    esp_log_level_set("chip[SC]", ESP_LOG_ERROR);
+    esp_log_level_set("esp_matter_attribute", ESP_LOG_ERROR);
+    esp_log_level_set("esp_matter_command", ESP_LOG_INFO);
+    esp_log_level_set("esp_matter_cluster", ESP_LOG_WARN);
+    esp_log_level_set("BLEAutoStart", ESP_LOG_NONE); // BLE: INFO
     esp_log_level_set("ShellyBLE", ESP_LOG_NONE);   // BLE: INFO
     esp_log_level_set("BLESimple", ESP_LOG_NONE);   // BLE: INFO
     esp_log_level_set("NimBLE", ESP_LOG_NONE);      // NimBLE: INFO
-    esp_log_level_set("chip[DL]", ESP_LOG_WARN);    // Matter: WARN
     esp_log_level_set("wifi", ESP_LOG_NONE);       // WiFi: ERROR
     esp_log_level_set("Shutter", ESP_LOG_INFO);     // Shutter: DEBUG
-    esp_log_level_set("Main", ESP_LOG_NONE);        // Main: DEBUG
+    esp_log_level_set("Main", ESP_LOG_INFO);        // Main: DEBUG
     esp_log_level_set("WebUI", ESP_LOG_NONE);       // WebUI: DEBUG
 
     ESP_LOGI(TAG, "=== BeltWinder Matter - Starting ===");
@@ -460,34 +567,6 @@ void setup() {
         ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
         ESP_LOGI(TAG, "Classic BT memory released for BLE");
     #endif
-
-    // ═══════════════════════════════════════════════════════════
-    // ✓ Initialize NimBLE Stack
-    // ═══════════════════════════════════════════════════════════
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   INITIALIZING NimBLE STACK       ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
-
-    ESP_LOGI(TAG, "NimBLE status BEFORE init: %s", 
-            NimBLEDevice::isInitialized() ? "initialized" : "NOT initialized");
-
-    NimBLEDevice::init("BeltWinder");
-
-    ESP_LOGI(TAG, "NimBLE status AFTER init: %s", 
-            NimBLEDevice::isInitialized() ? "initialized ✓" : "NOT initialized ✗");
-
-    if (!NimBLEDevice::isInitialized()) {
-        ESP_LOGE(TAG, "✗ CRITICAL: NimBLE initialization failed!");
-        ESP_LOGE(TAG, "  BLE scanning will NOT work!");
-    } else {
-        ESP_LOGI(TAG, "✓ NimBLE initialized successfully");
-        ESP_LOGI(TAG, "  MTU: %d", NimBLEDevice::getMTU());
-    }
-
-    ESP_LOGI(TAG, "");
-    // ═══════════════════════════════════════════════════════════
 
     pinMode(CONFIG_PULSE_COUNTER_PIN, INPUT_PULLUP);
     pinMode(CONFIG_MOTOR_UP_PIN, INPUT_PULLUP);
@@ -501,6 +580,7 @@ void setup() {
     loop_task_handle = xTaskGetCurrentTaskHandle();
     esp_task_wdt_add(loop_task_handle);
 
+    // Shutter Init
     shutter_handle = (RollerShutter*)shutter_driver_init();
     if (!shutter_handle) {
         ESP_LOGE(TAG, "Failed to initialize shutter driver");
@@ -513,6 +593,9 @@ void setup() {
         ESP_LOGI(TAG, "Already commissioned. Initializing hardware NOW...");
         ((RollerShutter*)shutter_handle)->initHardware();
         hardware_initialized = true;
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "→ Matter commissioned - BLE is free for our use");
+        ESP_LOGI(TAG, "");
     } else {
         ESP_LOGI(TAG, "Not commissioned. Hardware will init after pairing.");
     }
@@ -530,9 +613,12 @@ void setup() {
         return;
     }
 
+    // ========================================================================
+    // Window Covering Endpoint
+    // ========================================================================
+    
     window_covering_device::config_t wc_config;
     wc_config.window_covering.type = 0;  // ROLLERSHADE
-    
     wc_config.window_covering.feature_flags = 
         (uint32_t)chip::app::Clusters::WindowCovering::Feature::kLift |
         (uint32_t)chip::app::Clusters::WindowCovering::Feature::kPositionAwareLift |
@@ -568,27 +654,45 @@ void setup() {
                  INSTALLED_OPEN_LIMIT_LIFT_CM, INSTALLED_CLOSED_LIMIT_LIFT_CM);
     }
 
-    // Custom Cluster
+    // ========================================================================
+    // Custom Cluster - Device IP
+    // ========================================================================
+
     cluster_t *custom_cluster = cluster::create(ep, CLUSTER_ID_ROLLERSHUTTER_CONFIG, 
                                                 CLUSTER_FLAG_SERVER);
     if (custom_cluster) {
+        // Direction Inverted
         bool inverted = shutter_driver_get_direction_inverted(shutter_handle);
         attribute::create(custom_cluster, ATTR_ID_DIRECTION_INVERTED, 
                         ATTRIBUTE_FLAG_WRITABLE, esp_matter_bool(inverted));
         
-        #define DEVICE_IP_MAX_LENGTH 16
+        // String vorbereiten
+        snprintf(device_ip_str, sizeof(device_ip_str), "0.0.0.0");
+
+        esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
         
-        attribute_t* ip_attr = attribute::create(custom_cluster, ATTR_ID_DEVICE_IP, 
-                                                ATTRIBUTE_FLAG_NONE, 
-                                                esp_matter_invalid(nullptr));
-        
+        // ✅ Attribut mit char_str UND fixed size erstellen
+        attribute_t* ip_attr = attribute::create(
+            custom_cluster, 
+            ATTR_ID_DEVICE_IP, 
+            ATTRIBUTE_FLAG_NONE,
+            ip_val
+        );
+
         if (ip_attr) {
-            snprintf(device_ip_str, sizeof(device_ip_str), "0.0.0.0");
+            ESP_LOGI(TAG, "✓ Device IP attribute initialized: %s (buffer: %d bytes)", 
+                     device_ip_str, DEVICE_IP_MAX_LENGTH);
             
-            esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
-            attribute::set_val(ip_attr, &ip_val);
+            esp_matter_attr_val_t stored_val;
+            esp_err_t err = attribute::get_val(ip_attr, &stored_val);
             
-            ESP_LOGI(TAG, "Device IP attribute initialized: %s", device_ip_str);
+            if (err == ESP_OK) {
+                ESP_LOGI(TAG, "  → Stored type: %d", stored_val.type);
+                if (stored_val.type == ESP_MATTER_VAL_TYPE_CHAR_STRING) {
+                    ESP_LOGI(TAG, "  → Buffer size: %zu bytes", stored_val.val.a.s);
+                    ESP_LOGI(TAG, "  → String: %s", (char*)stored_val.val.a.b);
+                }
+            }
         }
 
         command::create(custom_cluster, CMD_ID_START_CALIBRATION, 
@@ -596,6 +700,38 @@ void setup() {
         
         ESP_LOGI(TAG, "Custom cluster 0x%04X created", CLUSTER_ID_ROLLERSHUTTER_CONFIG);
     }
+
+    // ========================================================================
+    // Contact Sensor & Power Source
+    // ========================================================================
+    
+    // Contact Sensor Status laden
+    matterPref.begin("matter", true);
+    contact_sensor_matter_enabled = matterPref.getBool("cs_matter_en", false);
+    bool cs_was_active = matterPref.getBool("cs_active", false);
+    bool ps_was_active = matterPref.getBool("ps_active", false);
+    matterPref.end();
+
+    ESP_LOGI(TAG, "Contact Sensor Matter Status:");
+    ESP_LOGI(TAG, "  User Enabled: %s", contact_sensor_matter_enabled ? "YES" : "NO");
+    ESP_LOGI(TAG, "  Contact Sensor was active: %s", cs_was_active ? "YES" : "NO");
+    ESP_LOGI(TAG, "  Power Source was active: %s", ps_was_active ? "YES" : "NO");
+
+    // ✅ Endpoints JETZT erstellen wenn User enabled (unabhängig von BLE Pairing!)
+    if (contact_sensor_matter_enabled && (cs_was_active || ps_was_active)) {
+        ESP_LOGI(TAG, "→ Creating Contact Sensor endpoints NOW (before Matter start)...");
+        
+        if (cs_was_active) {
+            createContactSensorEndpoint(node);
+        }
+        if (cs_was_active || ps_was_active) {
+            createPowerSourceEndpoint(node);
+        }
+    }
+
+    // Scenes Management Cluster
+    //cluster::scenes_management::config_t scenes_config;
+    //cluster::scenes_management::create(window_covering_endpoint_id, &scenes_config, CLUSTER_FLAG_SERVER);
 
     // ========================================================================
     // WiFi
@@ -618,10 +754,36 @@ void setup() {
             Serial.println("\nWiFi connected");
             snprintf(device_ip_str, sizeof(device_ip_str), "%s", WiFi.localIP().toString().c_str());
             
-            esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, strlen(device_ip_str));
-            attribute::update(window_covering_endpoint_id, CLUSTER_ID_ROLLERSHUTTER_CONFIG, 
-                            ATTR_ID_DEVICE_IP, &ip_val);
+            // ✅ KORRIGIERT: Hole Cluster & Attribut, dann set_val()
+            cluster_t* custom_cluster_local = cluster::get(window_covering_endpoint_id, 
+                                                        CLUSTER_ID_ROLLERSHUTTER_CONFIG);
+            
+            if (custom_cluster_local) {
+                attribute_t* ip_attr = attribute::get(custom_cluster_local, ATTR_ID_DEVICE_IP);
+                
+                if (ip_attr) {
+                    // ✅ Erstelle char_str Wert mit VOLLER Buffer-Größe
+                    char ip_buffer[DEVICE_IP_MAX_LENGTH];
+                    snprintf(ip_buffer, sizeof(ip_buffer), "%s", device_ip_str);
+                    
+                    esp_matter_attr_val_t ip_val;
+                    ip_val.type = ESP_MATTER_VAL_TYPE_CHAR_STRING;
+                    ip_val.val.a.b = (uint8_t*)ip_buffer;
+                    ip_val.val.a.s = DEVICE_IP_MAX_LENGTH;  // ← Buffer-Größe, nicht strlen!
+                    ip_val.val.a.n = strlen(ip_buffer);     // ← String-Länge
+                    ip_val.val.a.t = 0;                     // ← Flags
+                    
+                    esp_err_t ret = attribute::set_val(ip_attr, &ip_val);
+                    
+                    if (ret == ESP_OK) {
+                        ESP_LOGI(TAG, "✓ Device IP updated: %s", device_ip_str);
+                    } else {
+                        ESP_LOGE(TAG, "✗ Failed to update Device IP: %s", esp_err_to_name(ret));
+                    }
+                }
+            }
         }
+
     #endif
 
     // ========================================================================
@@ -674,89 +836,196 @@ void setup() {
         hardware_initialized = true;
     }
 
-    // ========================================================================
-    // BLE Manager & Contact Sensor Endpoint
-    // ========================================================================
+    // ════════════════════════════════════════════════════════════════════
+    // Shelly BLE Manager (LAZY INIT - BLE bleibt aus!)
+    // ════════════════════════════════════════════════════════════════════
     
-    bleManager = new ShellyBLEManager();
-
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   REGISTERING BLE CALLBACKS       ║");
+    ESP_LOGI(TAG, "║  INITIALIZING SHELLY BLE MANAGER  ║");
     ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
     ESP_LOGI(TAG, "");
-
-    // Sensor Data Callback ZUERST registrieren
+    
+    bleManager = new ShellyBLEManager();
     bleManager->setSensorDataCallback(onBLESensorData);
-    ESP_LOGI(TAG, "✓ Sensor Data Callback registered");
     
-    if (bleManager->begin()) {
-    ESP_LOGI(TAG, "✓ Shelly BLE Manager initialized");
-    
-    if (bleManager->isPaired()) {
-        ESP_LOGI(TAG, "Device is paired → Starting continuous scan for sensor data...");
-        bleManager->startContinuousScan();
-            
-            matterPref.begin("matter", true);
-            bool was_active = matterPref.getBool("cs_active", false);
-            matterPref.end();
-            
-            if (was_active && Matter.isDeviceCommissioned()) {
-                ESP_LOGI(TAG, "");
-                ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-                ESP_LOGI(TAG, "║   RESTORING CONTACT SENSOR        ║");
-                ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-                ESP_LOGI(TAG, "Contact sensor was active before reboot");
-                ESP_LOGI(TAG, "Recreating endpoint...");
-                
-                node_t* node = node::get();
-                if (node) {
-                    createContactSensorEndpoint(node);
-                    
-                    // Prüfen ob bereits Sensordaten vorhanden
-                    ShellyBLESensorData existingData;
-                    if (bleManager->getSensorData(existingData) && existingData.dataValid) {
-                        ESP_LOGI(TAG, "→ Existing sensor data found, updating attributes...");
-                        onBLESensorData(bleManager->getPairedDevice().address, existingData);
-                    } else {
-                        ESP_LOGI(TAG, "→ Waiting for first sensor data from BLE scan...");
-                    }
-                } else {
-                    ESP_LOGE(TAG, "✗ Failed to get Matter node!");
-                }
-            } else {
-                ESP_LOGI(TAG, "No contact sensor endpoint to restore");
-            }
-        } else {
-            ESP_LOGI(TAG, "No BLE sensor paired yet");
-        }
+    if (!bleManager->begin()) {
+        ESP_LOGE(TAG, "✗ Shelly BLE Manager init failed");
+        delete bleManager;
+        bleManager = nullptr;
+    } else {
+        ESP_LOGI(TAG, "✓ Shelly BLE Manager initialized (lazy mode)");
+        ESP_LOGI(TAG, "  BLE is NOT started yet");
+        ESP_LOGI(TAG, "  Will start after boot if needed");
     }
+    
+    ESP_LOGI(TAG, "");
+    
+    // ══════════════════════════════════════════════════════════════════════
+    // DELAYED BLE AUTO-START TASK (with manual init fallback)
+    // ══════════════════════════════════════════════════════════════════════
 
-    // Contact Sensor Matter-Status laden
+    struct AutoStartParams {
+        ShellyBLEManager** bleManagerPtr;
+    };
+
+    AutoStartParams* params = new AutoStartParams{&bleManager};
+
+    xTaskCreate([](void* param) {
+        const char* TASK_TAG = "BLEAutoStart";
+        AutoStartParams* p = (AutoStartParams*)param;
+        
+        ESP_LOGI(TASK_TAG, "");
+        ESP_LOGI(TASK_TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TASK_TAG, "║  DELAYED BLE AUTO-START CHECK     ║");
+        ESP_LOGI(TASK_TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TASK_TAG, "");
+        
+        // ✅ STRATEGY: Wait for Matter, then try manual init if needed
+        ESP_LOGI(TASK_TAG, "→ Waiting 8 seconds for Matter to settle...");
+        ESP_LOGI(TASK_TAG, "");
+        
+        vTaskDelay(pdMS_TO_TICKS(8000));
+        
+        // ══════════════════════════════════════════════════════════════════
+        // CHECK: Did Matter initialize NimBLE?
+        // ══════════════════════════════════════════════════════════════════
+        
+        ESP_LOGI(TASK_TAG, "→ Checking NimBLE status...");
+        
+        bool nimble_ready = NimBLEDevice::isInitialized();
+        
+        if (nimble_ready) {
+            ESP_LOGI(TASK_TAG, "✓ NimBLE was initialized by Matter");
+        } else {
+            ESP_LOGW(TASK_TAG, "⚠ NimBLE NOT initialized by Matter!");
+            ESP_LOGI(TASK_TAG, "  → This is expected - Matter uses isolated BLE");
+            ESP_LOGI(TASK_TAG, "  → We will initialize NimBLE ourselves");
+        }
+        
+        ESP_LOGI(TASK_TAG, "");
+        
+        // ══════════════════════════════════════════════════════════════════
+        // CHECK: Should we start BLE?
+        // ══════════════════════════════════════════════════════════════════
+        
+        bool matter_commissioned = Matter.isDeviceCommissioned();
+        uint8_t fabric_count = chip::Server::GetInstance().GetFabricTable().FabricCount();
+        bool has_shelly = ShellyBLEManager::hasAnyPairedDevice();
+        
+        ESP_LOGI(TASK_TAG, "System Status:");
+        ESP_LOGI(TASK_TAG, "  Matter Commissioned: %s", matter_commissioned ? "YES" : "NO");
+        ESP_LOGI(TASK_TAG, "  Fabrics: %d", fabric_count);
+        ESP_LOGI(TASK_TAG, "  Shelly Paired: %s", has_shelly ? "YES" : "NO");
+        ESP_LOGI(TASK_TAG, "");
+        
+        ShellyBLEManager* ble = *(p->bleManagerPtr);
+        
+        if (!ble) {
+            ESP_LOGE(TASK_TAG, "✗ BLE Manager is NULL - cannot start");
+            delete p;
+            vTaskDelete(NULL);
+            return;
+        }
+        
+        // ══════════════════════════════════════════════════════════════════
+        // DECISION: Start BLE?
+        // ══════════════════════════════════════════════════════════════════
+        
+        if (has_shelly) {
+            ESP_LOGI(TASK_TAG, "╔═══════════════════════════════════╗");
+            ESP_LOGI(TASK_TAG, "║  ✅ AUTO-START BLE                ║");
+            ESP_LOGI(TASK_TAG, "╚═══════════════════════════════════╝");
+            ESP_LOGI(TASK_TAG, "");
+            ESP_LOGI(TASK_TAG, "Reason: Paired Shelly device found");
+            ESP_LOGI(TASK_TAG, "");
+            
+            // ✅ Start BLE (will do manual init if needed)
+            if (ble->ensureBLEStarted()) {
+                ESP_LOGI(TASK_TAG, "✓ BLE started successfully");
+                ESP_LOGI(TASK_TAG, "");
+                
+                // Check Continuous Scan Preference
+                Preferences prefs;
+                prefs.begin("ShellyBLE", true);
+                bool should_scan = prefs.getBool("continuous_scan", true);
+                prefs.end();
+                
+                if (should_scan) {
+                    ESP_LOGI(TASK_TAG, "→ Starting Continuous Scan...");
+                    ble->startContinuousScan();
+                    ESP_LOGI(TASK_TAG, "✓ Continuous Scan active");
+                } else {
+                    ESP_LOGI(TASK_TAG, "ℹ Continuous Scan was disabled");
+                    ESP_LOGI(TASK_TAG, "  NOT starting automatically");
+                }
+                
+            } else {
+                ESP_LOGE(TASK_TAG, "✗ Failed to start BLE");
+                ESP_LOGE(TASK_TAG, "  Device will work WITHOUT BLE sensor");
+            }
+            
+        } else {
+            ESP_LOGI(TASK_TAG, "╔═══════════════════════════════════╗");
+            ESP_LOGI(TASK_TAG, "║  ℹ BLE STAYS IDLE                 ║");
+            ESP_LOGI(TASK_TAG, "╚═══════════════════════════════════╝");
+            ESP_LOGI(TASK_TAG, "");
+            ESP_LOGI(TASK_TAG, "Reason: No paired Shelly device");
+            ESP_LOGI(TASK_TAG, "BLE scanner not started (saves resources)");
+            ESP_LOGI(TASK_TAG, "");
+        }
+        
+        ESP_LOGI(TASK_TAG, "");
+        ESP_LOGI(TASK_TAG, "✓ Auto-start check complete");
+        ESP_LOGI(TASK_TAG, "");
+        
+        delete p;
+        vTaskDelete(NULL);
+        
+    }, "ble_autostart", 6144, params, 1, NULL);
+
+
+    // Contact Sensor Status laden
     matterPref.begin("matter", true);
     contact_sensor_matter_enabled = matterPref.getBool("cs_matter_en", false);
-    bool was_active = matterPref.getBool("cs_active", false);
     matterPref.end();
 
     ESP_LOGI(TAG, "Contact Sensor Matter Status:");
     ESP_LOGI(TAG, "  User Enabled: %s", contact_sensor_matter_enabled ? "YES" : "NO");
-    ESP_LOGI(TAG, "  Was Active: %s", was_active ? "YES" : "NO");
+    ESP_LOGI(TAG, "  Contact Sensor was active: %s", cs_was_active ? "YES" : "NO");
+    ESP_LOGI(TAG, "  Power Source was active: %s", ps_was_active ? "YES" : "NO");
 
-    // Endpoint wiederherstellen wenn:
-    // 1. User hat es enabled
-    // 2. Gerät ist gepairt
-    // 3. Matter ist commissioned
+    // ✅ NEUE LOGIK: Power Source sollte IMMER mit Contact Sensor erstellt werden
+    if (contact_sensor_matter_enabled && cs_was_active) {
+        ps_was_active = true;  // ← Force enable!
+        ESP_LOGI(TAG, "  → Power Source will be created with Contact Sensor");
+    }
+
+    // Endpoints wiederherstellen wenn möglich
     if (contact_sensor_matter_enabled && 
         bleManager->isPaired() && 
-        Matter.isDeviceCommissioned() &&
-        was_active) {
+        Matter.isDeviceCommissioned()) {
         
-        ESP_LOGI(TAG, "→ Restoring Contact Sensor endpoint...");
+        ESP_LOGI(TAG, "→ Restoring Contact Sensor endpoints...");
         node_t* node = node::get();
         if (node) {
-            createContactSensorEndpoint(node);
+            if (cs_was_active) {
+                createContactSensorEndpoint(node);
+            }
+            // ✅ Power Source IMMER wenn Contact Sensor aktiv ist
+            if (cs_was_active || ps_was_active) {
+                createPowerSourceEndpoint(node);
+            }
         }
-    }                   
+    } else {
+        ESP_LOGI(TAG, "ℹ Contact Sensor endpoints will be created when:");
+        ESP_LOGI(TAG, "  • Device is commissioned: %s", 
+                Matter.isDeviceCommissioned() ? "✓" : "✗");
+        ESP_LOGI(TAG, "  • BLE sensor paired: %s", 
+                (bleManager && bleManager->isPaired()) ? "✓" : "✗");
+    }
+
+                 
 
     // ========================================================================
     // Web UI
@@ -782,7 +1051,7 @@ void loop() {
     bool has_fabrics = (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
     bool is_commissioned = Matter.isDeviceCommissioned() && has_fabrics;
     
-    if (!was_commissioned && is_commissioned) {
+    if (!was_commissioned && is_commissioned && !hardware_initialized) {
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "█████████████████████████████████████████████████████████");
         ESP_LOGI(TAG, "█                                                       █");
@@ -831,14 +1100,28 @@ void loop() {
         String new_ip = WiFi.localIP().toString();
         
         if (strcmp(device_ip_str, new_ip.c_str()) != 0) {
-            ESP_LOGI(TAG, "IP address changed: %s → %s", device_ip_str, new_ip.c_str());
+            ESP_LOGI(TAG, "IP changed: %s → %s", device_ip_str, new_ip.c_str());
             snprintf(device_ip_str, sizeof(device_ip_str), "%s", new_ip.c_str());
             
-            esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, strlen(device_ip_str));
-            attribute::update(window_covering_endpoint_id, CLUSTER_ID_ROLLERSHUTTER_CONFIG, 
-                            ATTR_ID_DEVICE_IP, &ip_val);
+            // ✅ LÖSUNG: Verwende set_val() statt update()
+            cluster_t* custom_cluster = cluster::get(window_covering_endpoint_id, 
+                                                    CLUSTER_ID_ROLLERSHUTTER_CONFIG);
+            
+            if (custom_cluster) {
+                attribute_t* ip_attr = attribute::get(custom_cluster, ATTR_ID_DEVICE_IP);
+                
+                if (ip_attr) {
+                    esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
+                    esp_err_t ret = attribute::set_val(ip_attr, &ip_val);
+                    
+                    if (ret != ESP_OK) {
+                        ESP_LOGE(TAG, "✗ Failed to update Device IP: %s", esp_err_to_name(ret));
+                    }
+                }
+            }
         }
     }
+
 
     // Web UI Updates
     static uint32_t last_web = 0;
@@ -861,9 +1144,9 @@ void loop() {
         esp_task_wdt_reset();
     }
 
-    // WebSocket Cleanup every 10 Seconds
+    // WebSocket Cleanup every 3 Seconds
     static uint32_t last_ws_cleanup = 0;
-    if (millis() - last_ws_cleanup >= 10000) {
+    if (millis() - last_ws_cleanup >= 3000) {
         last_ws_cleanup = millis();
         if (webUI) {
             webUI->cleanup_idle_clients();
@@ -872,7 +1155,7 @@ void loop() {
     
     // Memory-Status every 30 Seconds
     static uint32_t last_mem_check = 0;
-    if (millis() - last_mem_check >= 30000) {
+    if (millis() - last_mem_check >= 300000) {  // ← 2 Minuten
         last_mem_check = millis();
         
         uint32_t free_heap = esp_get_free_heap_size();
@@ -897,8 +1180,64 @@ void loop() {
         ESP_LOGI(TAG, "");
     }
 
-    #ifdef DEBUG_MODE
+    // ========================================================================
+    // Keep-Alive: Regelmäßig Attribute updaten (alle 30 Sekunden)
+    // ========================================================================
 
+    static uint32_t last_keepalive = 0;
+    if (millis() - last_keepalive >= 30000) {
+        last_keepalive = millis();
+        
+        bool updates_sent = false;
+        
+        // Contact Sensor Keep-Alive
+        if (contact_sensor_endpoint_active && contact_sensor_endpoint_id != 0) {
+            ShellyBLESensorData data;
+            if (bleManager && bleManager->getSensorData(data) && data.dataValid) {
+                // ✅ Contact State
+                esp_matter_attr_val_t contact_val = esp_matter_bool(!data.windowOpen);
+                esp_err_t ret = attribute::update(contact_sensor_endpoint_id,
+                                                chip::app::Clusters::BooleanState::Id,
+                                                chip::app::Clusters::BooleanState::Attributes::StateValue::Id,
+                                                &contact_val);
+                
+                if (ret == ESP_OK) {
+                    updates_sent = true;
+                }
+                
+                // ✅ Illuminance
+                esp_matter_attr_val_t illum_val = esp_matter_uint16(data.illuminance);
+                attribute::update(contact_sensor_endpoint_id,
+                                chip::app::Clusters::IlluminanceMeasurement::Id,
+                                chip::app::Clusters::IlluminanceMeasurement::Attributes::MeasuredValue::Id,
+                                &illum_val);
+            }
+        }
+        
+        // Power Source Keep-Alive
+        if (power_source_endpoint_active && power_source_endpoint_id != 0) {
+            ShellyBLESensorData data;
+            if (bleManager && bleManager->getSensorData(data) && data.dataValid) {
+                // ✅ Battery Percentage
+                esp_matter_attr_val_t battery_val = esp_matter_nullable_uint8(data.battery * 2);
+                esp_err_t ret = attribute::update(power_source_endpoint_id,
+                                                chip::app::Clusters::PowerSource::Id,
+                                                chip::app::Clusters::PowerSource::Attributes::BatPercentRemaining::Id,
+                                                &battery_val);
+                
+                if (ret == ESP_OK) {
+                    updates_sent = true;
+                }
+            }
+        }
+        
+        if (updates_sent) {
+            ESP_LOGD(TAG, "✓ Keep-alive updates sent to controller");
+        }
+    }
+
+
+    /*
     // Periodic Status Report (every 5 minutes)
     static uint32_t last_status_report = 0;
     if (millis() - last_status_report >= 300000) {  // 5 minutes
@@ -968,12 +1307,7 @@ void loop() {
         ESP_LOGI(TAG, "═══════════════════════════════════");
         ESP_LOGI(TAG, "");   
     }
-
-    #else
-    ESP_LOGI(TAG, "Status: Heap=%u KB, WiFi=%d dBm, Matter=%s", 
-            esp_get_free_heap_size()/1024, WiFi.RSSI(),
-            is_commissioned ? "OK" : "NC");
-    #endif
+        */
 
     delay(1);
 }
