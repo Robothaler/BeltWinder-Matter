@@ -23,3 +23,5 @@ enum class WindowOpenLogic {
 
 #define DEFAULT_WINDOW_LOGIC WindowOpenLogic::BLOCK_DOWNWARD
 #define VENTILATION_PERCENTAGE 15
+
+#define DEVICE_IP_MAX_LENGTH 16
