@@ -44,8 +44,22 @@ SimpleBLEScanner::~SimpleBLEScanner() {
 // ═══════════════════════════════════════════════════════════════════════
 
 bool SimpleBLEScanner::setup() {
-    ESP_LOGI(TAG, "Setting up Simple BLE Scanner (NimBLE backend)...");
-    ESP_LOGI(TAG, "Simple BLE Scanner setup complete");
+    ESP_LOGI(TAG, "Setting up Simple BLE Scanner...");
+    
+    // ✅ NO NimBLE INIT HERE!
+    // Matter hat es bereits initialisiert!
+    
+    ESP_LOGI(TAG, "→ Verifying NimBLE Host...");
+    
+    if (!ble_hs_is_enabled()) {
+        ESP_LOGE(TAG, "✗ NimBLE Host not enabled!");
+        ESP_LOGE(TAG, "  Matter should have initialized it");
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "✓ NimBLE Host is enabled by Matter");
+    ESP_LOGI(TAG, "✓ Simple BLE Scanner setup complete");
+    
     return true;
 }
 
@@ -76,43 +90,45 @@ bool SimpleBLEScanner::start_scan(uint32_t duration_sec) {
         return false;
     }
     
-    // ════════════════════════════════════════════════════════════════════
-    // ✅ PRE-CHECK: Ist NimBLE Stack bereit?
-    // ════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
+    // ✅ NEW: Check if NimBLE is ready (Matter might have initialized it)
+    // ══════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Checking NimBLE Host status...");
     
     if (!ble_hs_is_enabled()) {
-        ESP_LOGE(TAG, "✗ NimBLE Host is not enabled!");
-        ESP_LOGE(TAG, "  Call NimBLEDevice::init() first");
+        ESP_LOGE(TAG, "✗ NimBLE Host is NOT enabled!");
+        ESP_LOGE(TAG, "  This should not happen - Matter should have started it");
         return false;
     }
     
+    ESP_LOGI(TAG, "✓ NimBLE Host is enabled");
+    
+    // Wait for Host-Controller sync (Matter might still be syncing)
     if (ble_hs_synced() == 0) {
-        ESP_LOGW(TAG, "⚠ NimBLE Host not yet synced with controller");
-        ESP_LOGW(TAG, "  Waiting for sync...");
+        ESP_LOGI(TAG, "→ Waiting for Host-Controller sync...");
         
-        // Warte bis zu 5 Sekunden auf Sync
-        for (int i = 0; i < 50; i++) {
+        for (int i = 0; i < 100; i++) {  // Max 10 Sekunden
             vTaskDelay(pdMS_TO_TICKS(100));
             if (ble_hs_synced()) {
-                ESP_LOGI(TAG, "✓ NimBLE Host synced after %d ms", i * 100);
+                ESP_LOGI(TAG, "✓ Synced after %d ms", i * 100);
                 break;
             }
         }
         
         if (ble_hs_synced() == 0) {
-            ESP_LOGE(TAG, "✗ NimBLE Host sync timeout!");
+            ESP_LOGE(TAG, "✗ Sync timeout after 10 seconds!");
             return false;
         }
+    } else {
+        ESP_LOGI(TAG, "✓ Host-Controller already synced");
     }
     
-    ESP_LOGI(TAG, "✓ NimBLE Stack Status:");
-    ESP_LOGI(TAG, "  Host enabled: YES");
-    ESP_LOGI(TAG, "  Host synced: YES");
     ESP_LOGI(TAG, "");
     
-    // ════════════════════════════════════════════════════════════════════
-    // Rest of start_scan() code...
-    // ════════════════════════════════════════════════════════════════════
+    // ══════════════════════════════════════════════════════════════════
+    // Rest of start_scan() bleibt UNVERÄNDERT!
+    // ══════════════════════════════════════════════════════════════════
     
     scan_duration_ = duration_sec;
     scan_start_time_ = xTaskGetTickCount() * portTICK_PERIOD_MS;
