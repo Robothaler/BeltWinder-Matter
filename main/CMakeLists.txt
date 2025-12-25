@@ -28,9 +28,9 @@ idf_component_register(
         # Crypto (für BTHome Decryption)
         mbedtls
         
-    PRIV_REQUIRES
+    #PRIV_REQUIRES
         # h2zero/NimBLE-Komponente
-        esp-nimble-cpp
+        #esp-nimble-cpp
         
     WHOLE_ARCHIVE
         esp_netif
