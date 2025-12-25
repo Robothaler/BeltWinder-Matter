@@ -52,112 +52,74 @@ bool ShellyBLEManager::begin() {
     ESP_LOGI(TAG, "═══════════════════════════════════");
     ESP_LOGI(TAG, "Initializing Shelly BLE Manager");
     ESP_LOGI(TAG, "═══════════════════════════════════");
-    ESP_LOGI(TAG, "Using esp32_ble_simple scanner");
+    ESP_LOGI(TAG, "Mode: LAZY (BLE NOT started yet)");
     ESP_LOGI(TAG, "");
     
-    // Initialize NimBLE (für GATT Connections)
-    NimBLEDevice::init("ShellyBridge");
-    NimBLEDevice::setPower(ESP_PWR_LVL_P9);
+    // ════════════════════════════════════════════════════════════════════
+    // ✅ LAZY MODE: NUR State laden, BLE NICHT starten!
+    // ════════════════════════════════════════════════════════════════════
     
-    // Initialize Simple BLE Scanner
+    loadPairedDevice();
+    
+    initialized = true;
+    
+    ESP_LOGI(TAG, "✓ Manager initialized (lazy mode)");
+    ESP_LOGI(TAG, "  BLE will start when needed");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "");
+    
+    return true;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Ensure BLE is Started (Lazy Init) - NO EXCEPTIONS
+// ════════════════════════════════════════════════════════════════════════
+
+bool ShellyBLEManager::ensureBLEStarted() {
+    if (bleScanner != nullptr) {
+        ESP_LOGV(TAG, "BLE already started");
+        return true;
+    }
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   BLE STARTUP (ON-DEMAND)        ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // ✅ Matter hat NimBLE bereits gestartet!
+    // Wir erstellen einfach den Scanner - er nutzt Matter's NimBLE!
+    
+    ESP_LOGI(TAG, "→ Creating scanner (using Matter's NimBLE)...");
+    
     bleScanner = new esp32_ble_simple::SimpleBLEScanner();
+    
+    if (!bleScanner) {
+        ESP_LOGE(TAG, "✗ Scanner allocation failed");
+        return false;
+    }
+    
+    // Scanner konfigurieren
     bleScanner->set_scan_active(true);
     bleScanner->set_scan_continuous(false);
-    bleScanner->set_scan_interval_ms(200);
-    bleScanner->set_scan_window_ms(150);
-    
-    // Register THIS as listener
+    bleScanner->set_scan_interval_ms(500);
+    bleScanner->set_scan_window_ms(100);
     bleScanner->register_listener(this);
     
-    // Setup BLE Stack
+    // Setup (prüft intern ob NimBLE bereit ist)
     if (!bleScanner->setup()) {
-        ESP_LOGE(TAG, "✗ Failed to setup BLE scanner");
+        ESP_LOGE(TAG, "✗ Scanner setup failed");
         delete bleScanner;
         bleScanner = nullptr;
         return false;
     }
     
-    // Load paired device
-    loadPairedDevice();
-    
-    initialized = true;
-    
-    ESP_LOGI(TAG, "✓ Initialization complete");
-    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "✓ Scanner ready");
     ESP_LOGI(TAG, "");
-    
-    // ════════════════════════════════════════════════════════════════════
-    // ✅ AUTO-START CONTINUOUS SCAN LOGIC
-    // ════════════════════════════════════════════════════════════════════
-    
-    if (isPaired()) {
-        // Device State setzen
-        if (pairedDevice.bindkey.length() > 0) {
-            updateDeviceState(STATE_CONNECTED_ENCRYPTED);
-        } else {
-            updateDeviceState(STATE_CONNECTED_UNENCRYPTED);
-        }
-        
-        // Check ob Continuous Scan aktiv sein soll
-        Preferences prefs;
-        prefs.begin("ShellyBLE", true);  // Read-only
-        bool shouldScan = prefs.getBool("continuous_scan", true);  // Default: true
-        prefs.end();
-        
-        if (shouldScan) {
-            ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-            ESP_LOGI(TAG, "║  AUTO-START CONTINUOUS SCAN       ║");
-            ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-            ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "Paired device:");
-            ESP_LOGI(TAG, "  Name: %s", pairedDevice.name.c_str());
-            ESP_LOGI(TAG, "  Address: %s", pairedDevice.address.c_str());
-            ESP_LOGI(TAG, "  Encryption: %s", 
-                     pairedDevice.bindkey.length() > 0 ? "ENABLED" : "DISABLED");
-            ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "→ Starting Continuous Scan in 3 seconds...");
-            ESP_LOGI(TAG, "   (Allowing BLE stack to stabilize)");
-            ESP_LOGI(TAG, "");
-            
-            // ✅ Delayed Auto-Start via Task
-            struct AutoStartParams {
-                ShellyBLEManager* manager;
-            };
-            
-            AutoStartParams* params = new AutoStartParams{this};
-            
-            xTaskCreate([](void* param) {
-                AutoStartParams* p = (AutoStartParams*)param;
-                
-                // Warte 3 Sekunden
-                vTaskDelay(pdMS_TO_TICKS(3000));
-                
-                ESP_LOGI(TAG, "🚀 Auto-starting Continuous Scan NOW...");
-                p->manager->startContinuousScan();
-                
-                delete p;
-                vTaskDelete(NULL);
-                
-            }, "ble_autostart", BLE_AUTOSTART_TASK_STACK_SIZE, params, 1, NULL);
-            
-        } else {
-            ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "ℹ Continuous Scan was DISABLED before reboot");
-            ESP_LOGI(TAG, "  NOT auto-starting");
-            ESP_LOGI(TAG, "  Use 'Start Continuous Scan' button to enable");
-            ESP_LOGI(TAG, "");
-        }
-        
-    } else {
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "ℹ No paired device found");
-        ESP_LOGI(TAG, "  Continuous scan will NOT start");
-        ESP_LOGI(TAG, "  Pair a device first to enable event monitoring");
-        ESP_LOGI(TAG, "");
-        
-        updateDeviceState(STATE_NOT_PAIRED);
-    }
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║  ✓ BLE FULLY OPERATIONAL          ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
     
     return true;
 }
@@ -188,7 +150,9 @@ void ShellyBLEManager::loop() {
                 bleScanner->loop();
     }
     
-    cleanupOldDiscoveries();
+    if (bleScanner) {
+        cleanupOldDiscoveries();
+    }
 }
 
 // ═══════════════════════════════════════════════════════════════════════
@@ -260,6 +224,31 @@ void ShellyBLEManager::startScan(uint16_t durationSeconds, bool stopOnFirst) {
     if (!initialized) {
         ESP_LOGE(TAG, "✗ Cannot start scan: Manager not initialized");
         return;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // ✅ CRITICAL: Ensure BLE is started (lazy init)
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (!bleScanner) {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║  BLE NOT STARTED YET              ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "→ Starting BLE on-demand for discovery scan...");
+        
+        if (!ensureBLEStarted()) {
+            ESP_LOGE(TAG, "✗ Failed to start BLE");
+            ESP_LOGE(TAG, "  Cannot perform scan");
+            return;
+        }
+        
+        ESP_LOGI(TAG, "✓ BLE started successfully");
+        ESP_LOGI(TAG, "");
+        
+        // Kurze Pause für BLE Stack Stabilisierung
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
     
     // ✅ Stoppe immer zuerst einen laufenden Scan
@@ -604,6 +593,25 @@ void ShellyBLEManager::startContinuousScan() {
         ESP_LOGW(TAG, "Cannot start continuous scan: No device paired!");
         ESP_LOGW(TAG, "");
         return;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // ✅ Ensure BLE is started
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (!bleScanner) {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "→ BLE not started yet, starting now...");
+        
+        if (!ensureBLEStarted()) {
+            ESP_LOGE(TAG, "✗ Failed to start BLE");
+            return;
+        }
+        
+        ESP_LOGI(TAG, "✓ BLE started");
+        ESP_LOGI(TAG, "");
+        
+        vTaskDelay(pdMS_TO_TICKS(1000));
     }
     
     ESP_LOGI(TAG, "");
@@ -978,28 +986,69 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
     ESP_LOGI(TAG, "Passkey: %s", passkey > 0 ? "PROVIDED" : "NONE");
     ESP_LOGI(TAG, "");
     
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   USING DISCOVERY SCAN RESULTS    ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "Available devices from previous scan: %d", discoveredDevices.size());
+    // ════════════════════════════════════════════════════════════════════
+    // ✅ ENSURE BLE STARTED
+    // ════════════════════════════════════════════════════════════════════
     
-    if (discoveredDevices.empty()) {
-        ESP_LOGE(TAG, "✗ No devices found in previous scan!");
-        ESP_LOGE(TAG, "");
-        ESP_LOGE(TAG, "Please:");
-        ESP_LOGE(TAG, "  1. Start a Discovery Scan");
-        ESP_LOGE(TAG, "  2. Press button on Shelly (while scanning)");
-        ESP_LOGE(TAG, "  3. Wait for device to appear in list");
-        ESP_LOGE(TAG, "  4. Then try Connect again");
-        ESP_LOGE(TAG, "");
+    if (!ensureBLEStarted()) {
+        ESP_LOGE(TAG, "✗ Cannot connect: BLE unavailable");
         return false;
     }
     
-    for (const auto& dev : discoveredDevices) {
-        ESP_LOGI(TAG, "  - %s (%s)", dev.name.c_str(), dev.address.c_str());
-    }
+    // ════════════════════════════════════════════════════════════════════
+    // ✅ WAKE-UP SCAN (OHNE discoveredDevices.clear()!)
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   PRE-CONNECTION WAKE-UP          ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
     ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "→ Quick scan to wake up device...");
+    ESP_LOGI(TAG, "  (Ensuring device is ready for connection)");
+    ESP_LOGI(TAG, "");
+    
+    // ✅ WICHTIG: NICHT discoveredDevices.clear()!
+    // Die Liste enthält bereits das Device vom Discovery Scan
+    
+    if (bleScanner) {
+        bleScanner->clear_scan_whitelist();
+        bleScanner->set_scan_continuous(false);
+        bleScanner->start_scan(2);  // 2 Sekunden
+        
+        scanning = true;
+        vTaskDelay(pdMS_TO_TICKS(2500));
+        
+        if (bleScanner->is_scanning()) {
+            bleScanner->stop_scan();
+        }
+        
+        scanning = false;
+        
+        ESP_LOGI(TAG, "✓ Wake-up scan complete");
+        ESP_LOGI(TAG, "  Total devices in list: %d", discoveredDevices.size());
+        
+        // Debug Output
+        bool targetPresent = false;
+        for (const auto& dev : discoveredDevices) {
+            ESP_LOGI(TAG, "    - %s (%s) | RSSI: %d dBm", 
+                     dev.name.c_str(), dev.address.c_str(), dev.rssi);
+            
+            if (dev.address.equalsIgnoreCase(address)) {
+                targetPresent = true;
+            }
+        }
+        
+        if (targetPresent) {
+            ESP_LOGI(TAG, "  ✓ Target device present");
+        } else {
+            ESP_LOGW(TAG, "  ⚠ Target NOT in list (continuing anyway)");
+        }
+        
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "→ Waiting 500ms before GATT connection...");
+        vTaskDelay(pdMS_TO_TICKS(500));
+        ESP_LOGI(TAG, "");
+    }
     
     // ════════════════════════════════════════════════════════════════════
     // WORKFLOW DECISION
@@ -1189,10 +1238,22 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ PRE-CHECK: NimBLE & Scanner Status
+    // ✅ Ensure BLE is started
     // ════════════════════════════════════════════════════════════════════
     
-    // Prüfe ob NimBLE initialisiert ist
+    if (!bleScanner) {
+        ESP_LOGI(TAG, "→ BLE not started yet, starting now...");
+        
+        if (!ensureBLEStarted()) {
+            ESP_LOGE(TAG, "✗ Failed to start BLE");
+            return false;
+        }
+        
+        ESP_LOGI(TAG, "✓ BLE started");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    }
+    
+    // ✅ PRE-CHECK: NimBLE & Scanner Status
     if (!NimBLEDevice::isInitialized()) {
         ESP_LOGE(TAG, "✗ NimBLE not initialized!");
         return false;
@@ -2848,7 +2909,7 @@ bool ShellyBLEManager::unpairDevice() {
         continuousScan = false;
         
         if (scanning) {
-            stopScan();
+            stopScan(true);  // Manual stop
         }
     }
     
@@ -2856,10 +2917,23 @@ bool ShellyBLEManager::unpairDevice() {
     updateDeviceState(STATE_NOT_PAIRED);
     
     ESP_LOGI(TAG, "✓ Device unpaired successfully");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // ✅ OPTIONAL: BLE herunterfahren wenn kein Device mehr gepairt
+    // ════════════════════════════════════════════════════════════════════
+    
     ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "→ No paired device remaining");
+    ESP_LOGI(TAG, "  BLE will stay active (for future pairing)");
+    ESP_LOGI(TAG, "  To save power, restart device");
+    ESP_LOGI(TAG, "");
+    
+    // Alternative: BLE komplett herunterfahren
+    // shutdownBLE();
     
     return true;
 }
+
 
 // ═══════════════════════════════════════════════════════════════════════
 // State Management
@@ -3446,4 +3520,25 @@ void ShellyBLEManager::PairingCallbacks::onConfirmPasskey(
     
     ESP_LOGI(TAG, "✓ Confirmed");
     ESP_LOGI(TAG, "");
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Static: Check if ANY Device is Paired (without starting BLE)
+// ════════════════════════════════════════════════════════════════════════
+
+bool ShellyBLEManager::hasAnyPairedDevice() {
+    Preferences prefs;
+    if (!prefs.begin("ShellyBLE", true)) {  // Read-only
+        return false;
+    }
+    
+    String address = prefs.getString("address", "");
+    prefs.end();
+    
+    bool hasPaired = (address.length() > 0);
+    
+    ESP_LOGI(TAG, "Static check: %s device in NVS", 
+             hasPaired ? "FOUND" : "NO");
+    
+    return hasPaired;
 }

@@ -144,6 +144,9 @@ public:
     void startContinuousScan();
     bool isScanActive() const { return scanning; }
     bool isContinuousScanActive() const { return continuousScan && scanning; }
+    bool isBLEStarted() const { return bleScanner != nullptr; }
+    static bool hasAnyPairedDevice();
+    bool ensureBLEStarted();
     String getScanStatus() const;
     void updateDeviceState(DeviceState newState);
     
@@ -191,6 +194,7 @@ private:
     
     NimBLEClient* activeClient;
     uint32_t activeClientTimestamp;
+    bool ble_manually_disabled;
     
     // ✅ Pairing Callbacks (vollständige Klassen-Definition)
     class PairingCallbacks : public NimBLEClientCallbacks {
