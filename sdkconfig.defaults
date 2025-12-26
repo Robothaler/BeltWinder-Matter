@@ -207,3 +207,25 @@ CONFIG_BOOTLOADER_LOG_LEVEL_WARN=y
 
 # Memory Debugging (disabled for production)
 CONFIG_CHIP_ENABLE_MEMORY_DEBUG=n
+
+# ============================================================================
+# Matter over WiFi Configuration
+# ============================================================================
+
+# WiFi Power Save (DISABLE!)
+CONFIG_ESP_WIFI_PS_ENABLED=n
+
+# MRP (Message Reliability Protocol) Configuration
+CONFIG_CHIP_CONFIG_MRP_LOCAL_IDLE_RETRY_INTERVAL_MS=500
+CONFIG_CHIP_CONFIG_MRP_LOCAL_ACTIVE_RETRY_INTERVAL_MS=200
+
+# Matter Subscription Configuration
+CONFIG_CHIP_CONFIG_SUBSCRIPTION_MAX_INTERVAL_PUBLISHER_LIMIT_SEC=60
+CONFIG_CHIP_CONFIG_SUBSCRIPTION_TIMEOUT_RESUMPTION=y
+
+# TCP Keep-Alive für WiFi
+CONFIG_LWIP_TCP_KEEP_ALIVE=y
+CONFIG_LWIP_TCP_KEEPIDLE_DEFAULT=120
+CONFIG_LWIP_TCP_KEEPINTVL_DEFAULT=15
+CONFIG_LWIP_TCP_KEEPCNT_DEFAULT=3
+
