@@ -1967,7 +1967,6 @@ static const char index_html[] PROGMEM = R"rawliteral(
 
       console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
 
-      // ✅ Wichtig: Verwende setTimeout statt setInterval!
       clearTimeout(AppState.reconnectInterval);
       AppState.reconnectInterval = setTimeout(() => {
           connectWebSocket();
