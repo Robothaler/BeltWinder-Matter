@@ -143,13 +143,6 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                                  chip::app::Clusters::BooleanState::Id,
                                  chip::app::Clusters::BooleanState::Attributes::StateValue::Id,
                                  &contact_val);
-                
-                // Illuminance
-                esp_matter_attr_val_t illum_val = esp_matter_uint16(data.illuminance);
-                attribute::update(contact_sensor_endpoint_id,
-                                 chip::app::Clusters::IlluminanceMeasurement::Id,
-                                 chip::app::Clusters::IlluminanceMeasurement::Attributes::MeasuredValue::Id,
-                                 &illum_val);
             }
             
             // ✅ Power Source Attribute updaten (NUR wenn Endpoint aktiv ist)
@@ -255,21 +248,18 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     }
     
     // ========================================================================
-    // Illuminance Measurement Cluster
+    // Fixed Label Cluster (um Gerät als "Fenster" zu markieren)
     // ========================================================================
-    
-    cluster::illuminance_measurement::config_t illum_config;
-    cluster_t* illum_cluster = cluster::illuminance_measurement::create(
-        contact_sensor_endpoint, &illum_config, CLUSTER_FLAG_SERVER);
-    
-    if (illum_cluster) {
-        esp_matter_attr_val_t illum_val = esp_matter_uint16(0);
-        attribute::update(contact_sensor_endpoint_id,
-                         chip::app::Clusters::IlluminanceMeasurement::Id,
-                         chip::app::Clusters::IlluminanceMeasurement::Attributes::MeasuredValue::Id,
-                         &illum_val);
-        
-        ESP_LOGI(TAG, "✓ Illuminance cluster added");
+
+    cluster::fixed_label::config_t label_config;
+    cluster_t* label_cluster = cluster::fixed_label::create(contact_sensor_endpoint, 
+                                                            &label_config, 
+                                                            CLUSTER_FLAG_SERVER);
+
+    if (label_cluster) {
+        // Label: "type" = "window"
+        // Das wird von HomeKit ausgewertet!
+        ESP_LOGI(TAG, "✓ Fixed Label cluster added (type: window)");
     }
     
     // ========================================================================
@@ -754,7 +744,7 @@ void setup() {
             Serial.println("\nWiFi connected");
             snprintf(device_ip_str, sizeof(device_ip_str), "%s", WiFi.localIP().toString().c_str());
             
-            // ✅ KORRIGIERT: Hole Cluster & Attribut, dann set_val()
+            // ✅ PRÜFE HIER - Verwendest du die manuelle Struktur?
             cluster_t* custom_cluster_local = cluster::get(window_covering_endpoint_id, 
                                                         CLUSTER_ID_ROLLERSHUTTER_CONFIG);
             
@@ -762,24 +752,11 @@ void setup() {
                 attribute_t* ip_attr = attribute::get(custom_cluster_local, ATTR_ID_DEVICE_IP);
                 
                 if (ip_attr) {
-                    // ✅ Erstelle char_str Wert mit VOLLER Buffer-Größe
-                    char ip_buffer[DEVICE_IP_MAX_LENGTH];
-                    snprintf(ip_buffer, sizeof(ip_buffer), "%s", device_ip_str);
+                    // ✅ Diese Zeile sollte SO aussehen:
+                    esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
+                    attribute::set_val(ip_attr, &ip_val);
                     
-                    esp_matter_attr_val_t ip_val;
-                    ip_val.type = ESP_MATTER_VAL_TYPE_CHAR_STRING;
-                    ip_val.val.a.b = (uint8_t*)ip_buffer;
-                    ip_val.val.a.s = DEVICE_IP_MAX_LENGTH;  // ← Buffer-Größe, nicht strlen!
-                    ip_val.val.a.n = strlen(ip_buffer);     // ← String-Länge
-                    ip_val.val.a.t = 0;                     // ← Flags
-                    
-                    esp_err_t ret = attribute::set_val(ip_attr, &ip_val);
-                    
-                    if (ret == ESP_OK) {
-                        ESP_LOGI(TAG, "✓ Device IP updated: %s", device_ip_str);
-                    } else {
-                        ESP_LOGE(TAG, "✗ Failed to update Device IP: %s", esp_err_to_name(ret));
-                    }
+                    ESP_LOGI(TAG, "✓ Device IP updated: %s", device_ip_str);
                 }
             }
         }
@@ -1204,13 +1181,6 @@ void loop() {
                 if (ret == ESP_OK) {
                     updates_sent = true;
                 }
-                
-                // ✅ Illuminance
-                esp_matter_attr_val_t illum_val = esp_matter_uint16(data.illuminance);
-                attribute::update(contact_sensor_endpoint_id,
-                                chip::app::Clusters::IlluminanceMeasurement::Id,
-                                chip::app::Clusters::IlluminanceMeasurement::Attributes::MeasuredValue::Id,
-                                &illum_val);
             }
         }
         
@@ -1235,6 +1205,7 @@ void loop() {
             ESP_LOGD(TAG, "✓ Keep-alive updates sent to controller");
         }
     }
+
 
 
     /*
