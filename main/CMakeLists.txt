@@ -4,6 +4,7 @@ set(app_sources
     "rollershutter_driver.cpp"
     "web_ui_handler.cpp"
     "shelly_ble_manager.cpp"
+    "device_naming.cpp"
 )
 
 idf_component_register(
@@ -21,16 +22,13 @@ idf_component_register(
         esp_netif
         lwip
         esp_http_server
+        app_update
 
         # Bluetooth (h2zero/NimBLE statt ESP-IDF's bt)
         bt
 
         # Crypto (für BTHome Decryption)
         mbedtls
-        
-    #PRIV_REQUIRES
-        # h2zero/NimBLE-Komponente
-        #esp-nimble-cpp
         
     WHOLE_ARCHIVE
         esp_netif

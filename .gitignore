@@ -1,5 +1,6 @@
 .pio/
 .vscode/
+.github/
 managed_components/
 main/zap/
 sdkconfig*
