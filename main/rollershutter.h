@@ -1,3 +1,8 @@
+// rollershutter.h
+
+#ifndef ROLLERSHUTTER_H
+#define ROLLERSHUTTER_H
+
 #pragma once
 
 #include <Arduino.h>
@@ -86,3 +91,5 @@ private:
 
     static void IRAM_ATTR onPulseInterrupt();
 };
+
+#endif // ROLLERSHUTTER_H

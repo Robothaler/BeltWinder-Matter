@@ -1,35 +1,39 @@
+// shelly_ble_manager.h
+
 #ifndef SHELLY_BLE_MANAGER_H
 #define SHELLY_BLE_MANAGER_H
+
+#pragma once
 
 #include <Arduino.h>
 #include <vector>
 #include <functional>
 #include <map>
+#include <memory>  // für unique_ptr
 #include <Preferences.h>
 
-// ✅ Simple BLE Scanner (C++20 kompatibel)
+// Simple BLE Scanner (C++20 kompatibel)
 #include "esp32_ble_simple.h"
 
-// ✅ NimBLE nur für GATT Connections (Pairing, Encryption)
+// NimBLE nur für GATT Connections (Pairing, Encryption)
 #include <NimBLEDevice.h>
 #include <NimBLEClient.h>
 
 // Task Stack Sizes
-#define BLE_AUTOSTART_TASK_STACK_SIZE  (2048)   // 32 KB
-#define BLE_RESTART_TASK_STACK_SIZE    (8192)   // 32 KB
+#define BLE_AUTOSTART_TASK_STACK_SIZE  (8192)   // 8KB (war 2KB)
+#define BLE_RESTART_TASK_STACK_SIZE    (8192)   // 8KB
 
 // BTHome Constants
 #define BTHOME_SERVICE_UUID "fcd2"
 #define BTHOME_UUID_UINT16  0xFCD2
 
 // GATT UUIDs
-#define GATT_UUID_FACTORY_RESET         "b0a7e40f-2b87-49db-801c-eb3686a24bdb"  // Write (factory reset trigger)
-#define GATT_UUID_PASSKEY               "0ffb7104-860c-49ae-8989-1f946d5f6c03"  // Write (set passkey)
-#define GATT_UUID_ENCRYPTION_KEY        "eb0fb41b-af4b-4724-a6f9-974f55aba81a"  // Read/Write (bindkey)
-#define GATT_UUID_BEACON_MODE           "cb9e957e-952d-4761-a7e1-4416494a5bfa"  // Read/Write (beacon on/off)
-#define GATT_UUID_ANGLE_THRESHOLD       "86e7cc43-19f4-4f38-b5ad-1ae586237e2a"  // Read/Write (rotation threshold)
-#define GATT_UUID_SAMPLE_BTHOME_DATA    "d52246df-98ac-4d21-be1b-70d5f66a5ddb"  // Read (sample BTHome packet)
-
+#define GATT_UUID_FACTORY_RESET         "b0a7e40f-2b87-49db-801c-eb3686a24bdb"
+#define GATT_UUID_PASSKEY               "0ffb7104-860c-49ae-8989-1f946d5f6c03"
+#define GATT_UUID_ENCRYPTION_KEY        "eb0fb41b-af4b-4724-a6f9-974f55aba81a"
+#define GATT_UUID_BEACON_MODE           "cb9e957e-952d-4761-a7e1-4416494a5bfa"
+#define GATT_UUID_ANGLE_THRESHOLD       "86e7cc43-19f4-4f38-b5ad-1ae586237e2a"
+#define GATT_UUID_SAMPLE_BTHOME_DATA    "d52246df-98ac-4d21-be1b-70d5f66a5ddb"
 
 // BTHome Object IDs
 #define BTHOME_OBJ_PACKET_ID    0x00
@@ -38,6 +42,100 @@
 #define BTHOME_OBJ_WINDOW       0x2D
 #define BTHOME_OBJ_BUTTON       0x3A
 #define BTHOME_OBJ_ROTATION     0x3F
+
+// ═══════════════════════════════════════════════════════════════════════
+// RAII-KLASSEN FÜR NIMBLE CLIENT MANAGEMENT
+// ═══════════════════════════════════════════════════════════════════════
+
+namespace ShellyBLE {
+
+/**
+ * @brief RAII-Wrapper für NimBLE Client
+ * 
+ * Garantiert automatisches Cleanup bei Scope-Exit, auch bei Exceptions.
+ */
+class NimBLEClientGuard {
+public:
+    explicit NimBLEClientGuard(NimBLEClient* client = nullptr) 
+        : client_(client), should_delete_(true) {}
+    
+    ~NimBLEClientGuard() {
+        if (client_ && should_delete_) {
+            ESP_LOGI("BLEGuard", "→ Auto-cleanup NimBLE Client");
+            if (client_->isConnected()) {
+                client_->disconnect();
+            }
+            NimBLEDevice::deleteClient(client_);
+        }
+    }
+    
+    // Non-copyable
+    NimBLEClientGuard(const NimBLEClientGuard&) = delete;
+    NimBLEClientGuard& operator=(const NimBLEClientGuard&) = delete;
+    
+    // Movable
+    NimBLEClientGuard(NimBLEClientGuard&& other) noexcept 
+        : client_(other.client_), should_delete_(other.should_delete_) {
+        other.client_ = nullptr;
+    }
+    
+    NimBLEClient* get() const { return client_; }
+    NimBLEClient* operator->() const { return client_; }
+    
+    // Release ownership (when storing client elsewhere)
+    NimBLEClient* release() {
+        should_delete_ = false;
+        return client_;
+    }
+    
+    void reset(NimBLEClient* new_client = nullptr) {
+        if (client_ && should_delete_) {
+            if (client_->isConnected()) {
+                client_->disconnect();
+            }
+            NimBLEDevice::deleteClient(client_);
+        }
+        client_ = new_client;
+        should_delete_ = true;
+    }
+    
+private:
+    NimBLEClient* client_;
+    bool should_delete_;
+};
+
+/**
+ * @brief RAII-Wrapper für Pairing Callbacks
+ */
+class PairingCallbacksGuard {
+public:
+    explicit PairingCallbacksGuard(NimBLEClientCallbacks* callbacks = nullptr)
+        : callbacks_(callbacks) {}
+    
+    ~PairingCallbacksGuard() {
+        if (callbacks_) {
+            ESP_LOGI("BLEGuard", "→ Auto-cleanup Pairing Callbacks");
+            delete callbacks_;
+        }
+    }
+    
+    // Non-copyable, non-movable
+    PairingCallbacksGuard(const PairingCallbacksGuard&) = delete;
+    PairingCallbacksGuard& operator=(const PairingCallbacksGuard&) = delete;
+    
+    NimBLEClientCallbacks* get() const { return callbacks_; }
+    
+    NimBLEClientCallbacks* release() {
+        auto* tmp = callbacks_;
+        callbacks_ = nullptr;
+        return tmp;
+    }
+    
+private:
+    NimBLEClientCallbacks* callbacks_;
+};
+
+} // namespace ShellyBLE
 
 // ═══════════════════════════════════════════════════════════════════════
 // Data Structures
@@ -72,7 +170,7 @@ struct ShellyBLESensorData {
     ShellyBLESensorData() : 
         packetId(0), battery(0), illuminance(0), windowOpen(false),
         rotation(0), rssi(0), hasButtonEvent(false),
-        buttonEvent(BUTTON_NONE), lastUpdate(0), dataValid(false) {}
+        buttonEvent(BUTTON_NONE), lastUpdate(0), dataValid(false), wasEncrypted(false) {}
 };
 
 struct ShellyBLEDevice {
@@ -91,10 +189,9 @@ struct PairedShellyDevice {
     String bindkey;
     uint8_t addressType;
     ShellyBLESensorData sensorData;
-
     bool isCurrentlyEncrypted;
     
-    PairedShellyDevice() : addressType(BLE_ADDR_RANDOM) {}
+    PairedShellyDevice() : addressType(BLE_ADDR_RANDOM), isCurrentlyEncrypted(false) {}
 };
 
 struct DeviceConfig {
@@ -129,16 +226,10 @@ public:
     void end();
     void loop();
     
-    // ═══════════════════════════════════════════════════════════════════════
-    // ✅ Simple BLE Scanner Interface
-    // ═══════════════════════════════════════════════════════════════════════
-    
+    // Simple BLE Scanner Interface
     bool on_device_found(const esp32_ble_simple::SimpleBLEDevice &device) override;
     
-    // ═══════════════════════════════════════════════════════════════════════
     // Public API
-    // ═══════════════════════════════════════════════════════════════════════
-    
     void startScan(uint16_t durationSeconds = 30, bool stopOnFirst = false);
     void stopScan(bool manualStop = false);
     void startContinuousScan();
@@ -185,18 +276,18 @@ public:
     void savePasskey(uint32_t passkey);
     uint32_t getPasskey();
     
-private:
-    // ═══════════════════════════════════════════════════════════════════════
-    // BLE Components
-    // ═══════════════════════════════════════════════════════════════════════
+    // Memory Monitoring
+    void logMemoryStats(const char* location);
     
+private:
+    // BLE Components
     esp32_ble_simple::SimpleBLEScanner* bleScanner;
     
     NimBLEClient* activeClient;
     uint32_t activeClientTimestamp;
     bool ble_manually_disabled;
     
-    // ✅ Pairing Callbacks (vollständige Klassen-Definition)
+    // Pairing Callbacks (vollständige Klassen-Definition)
     class PairingCallbacks : public NimBLEClientCallbacks {
     public:
         PairingCallbacks(ShellyBLEManager* mgr) : manager(mgr), 
@@ -235,13 +326,13 @@ private:
     
     // Helper Methods
     void updateDiscoveredDevice(
-    const String& address, 
-    const String& name, 
-    int8_t rssi,
-    bool isEncrypted,
-    uint64_t addressUint64,
-    uint8_t addressType
-);
+        const String& address, 
+        const String& name, 
+        int8_t rssi,
+        bool isEncrypted,
+        uint64_t addressUint64,
+        uint8_t addressType
+    );
     
     void cleanupOldDiscoveries();
     const char* stateToString(DeviceState state) const;

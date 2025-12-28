@@ -1,3 +1,8 @@
+// rollershutter_driver.h
+
+#ifndef ROLLERSHUTTER_DRIVER_H
+#define ROLLERSHUTTER_DRIVER_H
+
 #pragma once
 
 #include <esp_err.h>
@@ -107,3 +112,4 @@ void shutter_driver_set_window_open_logic(app_driver_handle_t handle, WindowOpen
  */
 RollerShutter::State shutter_driver_get_current_state(app_driver_handle_t handle);
 
+#endif // ROLLERSHUTTER_DRIVER_H

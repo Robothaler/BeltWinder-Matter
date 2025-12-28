@@ -56,7 +56,7 @@ bool ShellyBLEManager::begin() {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ LAZY MODE: NUR State laden, BLE NICHT starten!
+    // LAZY MODE: NUR State laden, BLE NICHT starten!
     // ════════════════════════════════════════════════════════════════════
     
     loadPairedDevice();
@@ -87,7 +87,7 @@ bool ShellyBLEManager::ensureBLEStarted() {
     ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
     ESP_LOGI(TAG, "");
     
-    // ✅ Matter hat NimBLE bereits gestartet!
+    // Matter hat NimBLE bereits gestartet!
     // Wir erstellen einfach den Scanner - er nutzt Matter's NimBLE!
     
     ESP_LOGI(TAG, "→ Creating scanner (using Matter's NimBLE)...");
@@ -227,7 +227,7 @@ void ShellyBLEManager::startScan(uint16_t durationSeconds, bool stopOnFirst) {
     }
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ CRITICAL: Ensure BLE is started (lazy init)
+    // CRITICAL: Ensure BLE is started (lazy init)
     // ════════════════════════════════════════════════════════════════════
     
     if (!bleScanner) {
@@ -251,14 +251,14 @@ void ShellyBLEManager::startScan(uint16_t durationSeconds, bool stopOnFirst) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     
-    // ✅ Stoppe immer zuerst einen laufenden Scan
+    // Stoppe immer zuerst einen laufenden Scan
     if (scanning) {
         ESP_LOGW(TAG, "⚠ Scan already in progress - stopping first");
         stopScan(false);
         vTaskDelay(pdMS_TO_TICKS(500));
     }
     
-    // ✅ Prüfe auch Scanner-Status direkt
+    // Prüfe auch Scanner-Status direkt
     if (bleScanner && bleScanner->is_scanning()) {
         ESP_LOGW(TAG, "⚠ Scanner is active despite scanning=false - forcing stop");
         bleScanner->stop_scan();
@@ -267,12 +267,12 @@ void ShellyBLEManager::startScan(uint16_t durationSeconds, bool stopOnFirst) {
     }
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ WHITELIST MANAGEMENT - KRITISCH FÜR DISCOVERY!
+    // WHITELIST MANAGEMENT - KRITISCH FÜR DISCOVERY!
     // ════════════════════════════════════════════════════════════════════
     
     if (!continuousScan) {
         // ═════════════════════════════════════════════════════════════════
-        // ✅ DISCOVERY SCAN: Whitelist MUSS gelöscht werden!
+        // DISCOVERY SCAN: Whitelist MUSS gelöscht werden!
         // ═════════════════════════════════════════════════════════════════
         
         ESP_LOGI(TAG, "");
@@ -305,7 +305,7 @@ void ShellyBLEManager::startScan(uint16_t durationSeconds, bool stopOnFirst) {
         
     } else {
         // ═════════════════════════════════════════════════════════════════
-        // ✅ CONTINUOUS SCAN: Whitelist sollte bereits gesetzt sein
+        // CONTINUOUS SCAN: Whitelist sollte bereits gesetzt sein
         // ═════════════════════════════════════════════════════════════════
         
         ESP_LOGI(TAG, "");
@@ -410,7 +410,7 @@ void ShellyBLEManager::stopScan(bool manualStop) {  // ← Parameter hinzugefüg
     
     stopOnFirstMatch = false;
     
-    // ✅ NUR bei manuellem Stop: NVS aktualisieren!
+    // NUR bei manuellem Stop: NVS aktualisieren!
     bool wasContinuous = continuousScan;
     
     if (wasContinuous && manualStop) {  // ← KRITISCHE ÄNDERUNG!
@@ -428,7 +428,7 @@ void ShellyBLEManager::stopScan(bool manualStop) {  // ← Parameter hinzugefüg
         ESP_LOGI(TAG, "✓ NVS updated: continuous_scan = false");
         ESP_LOGI(TAG, "  Continuous Scan will NOT auto-restart");
         
-    } else if (wasContinuous && !manualStop) {  // ← NEU!
+    } else if (wasContinuous && !manualStop) {
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "→ Automatic stop (before restart)");
         ESP_LOGI(TAG, "  NVS will NOT be changed");
@@ -448,7 +448,7 @@ void ShellyBLEManager::stopScan(bool manualStop) {  // ← Parameter hinzugefüg
         
         bleScanner->stop_scan();
         
-        // ✅ Warte bis Scanner wirklich gestoppt ist
+        // Warte bis Scanner wirklich gestoppt ist
         uint32_t wait_start = millis();
         uint32_t timeout = 2000;
         
@@ -502,22 +502,22 @@ void ShellyBLEManager::stopScan(bool manualStop) {  // ← Parameter hinzugefüg
     ESP_LOGI(TAG, "═══════════════════════════════════");
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ Auto-Restart Logic für Continuous Scan
+    // Auto-Restart Logic für Continuous Scan
     // ════════════════════════════════════════════════════════════════════
     
-    // ✅ WICHTIG: NUR auto-restart wenn:
+    // WICHTIG: NUR auto-restart wenn:
     // 1. Continuous Scan war VORHER aktiv (wasContinuous)
     // 2. Device ist noch gepairt
     // 3. Stop wurde NICHT manuell ausgelöst (!manualStop)
     
-    if (wasContinuous && isPaired() && !manualStop) {  // ← KRITISCHE ÄNDERUNG!
+    if (wasContinuous && isPaired() && !manualStop) {
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "ℹ️  Continuous Scan cycle completed");
         ESP_LOGI(TAG, "   → Auto-restarting in 2 seconds...");
         ESP_LOGI(TAG, "   (This keeps monitoring active continuously)");
         ESP_LOGI(TAG, "");
         
-        // ✅ Task für verzögerten Auto-Restart
+        // Task für verzögerten Auto-Restart
         struct RestartParams {
             ShellyBLEManager* manager;
         };
@@ -525,16 +525,24 @@ void ShellyBLEManager::stopScan(bool manualStop) {  // ← Parameter hinzugefüg
         RestartParams* params = new RestartParams{this};
         
         xTaskCreate([](void* param) {
-            RestartParams* p = (RestartParams*)param;
+            // RAII-Pattern
+            std::unique_ptr<RestartParams> p(
+                static_cast<RestartParams*>(param)
+            );
+            
+            ESP_LOGI(TAG, "⏰ BLE Restart Task started");
+            
+            // Watchdog entfernen (nicht zeitkritisch)
+            esp_task_wdt_delete(NULL);
             
             // Warte 2 Sekunden
             vTaskDelay(pdMS_TO_TICKS(2000));
             
-            // ✅ Doppel-Check: Ist Continuous Scan immer noch gewünscht?
+            // Doppel-Check: Ist Continuous Scan immer noch gewünscht?
             // (User könnte es in der Zwischenzeit manuell gestoppt haben)
             Preferences prefs;
             prefs.begin("ShellyBLE", true);  // Read-only
-            bool shouldContinue = prefs.getBool("continuous_scan", true);  // ← Default true!
+            bool shouldContinue = prefs.getBool("continuous_scan", true);
             prefs.end();
             
             if (shouldContinue && p->manager->isPaired()) {
@@ -543,7 +551,7 @@ void ShellyBLEManager::stopScan(bool manualStop) {  // ← Parameter hinzugefüg
                 ESP_LOGI(TAG, "   (Cycle continues - monitoring for events)");
                 ESP_LOGI(TAG, "");
                 
-                // ✅ Setze continuousScan Flag WIEDER auf true vor dem Start
+                // Setze continuousScan Flag WIEDER auf true vor dem Start
                 p->manager->continuousScan = true;
                 
                 // Starte neuen 30-Sekunden Zyklus
@@ -556,13 +564,23 @@ void ShellyBLEManager::stopScan(bool manualStop) {  // ← Parameter hinzugefüg
                 ESP_LOGI(TAG, "");
             }
             
-            delete p;
+            // High Water Mark Logging
+            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+            ESP_LOGI(TAG, "Task Stack High Water Mark: %u bytes", 
+                    highWater * sizeof(StackType_t));
+            
+            if (highWater < 512) {
+                ESP_LOGW(TAG, "⚠️ Stack critically low! Consider increasing size.");
+            }
+            
+            ESP_LOGI(TAG, "✓ BLE Restart Task completed");
+            
+            // unique_ptr wird automatisch freigegeben
             vTaskDelete(NULL);
             
-        }, "ble_restart", BLE_RESTART_TASK_STACK_SIZE, params, 1, NULL);
-        
+        }, "ble_restart", BLE_RESTART_TASK_STACK_SIZE, params, 1, NULL);  // 8KB Stack
     } else {
-        // ✅ Kein Auto-Restart
+        // Kein Auto-Restart
         ESP_LOGI(TAG, "");
         
         if (!isPaired()) {
@@ -596,7 +614,7 @@ void ShellyBLEManager::startContinuousScan() {
     }
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ Ensure BLE is started
+    // Ensure BLE is started
     // ════════════════════════════════════════════════════════════════════
     
     if (!bleScanner) {
@@ -629,7 +647,7 @@ void ShellyBLEManager::startContinuousScan() {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ WHITELIST: BEIDE ADDRESS TYPES HINZUFÜGEN!
+    // WHITELIST: BEIDE ADDRESS TYPES HINZUFÜGEN!
     // ════════════════════════════════════════════════════════════════════
     
     ESP_LOGI(TAG, "→ Configuring scan whitelist...");
@@ -638,14 +656,14 @@ void ShellyBLEManager::startContinuousScan() {
     
     std::vector<esp32_ble_simple::SimpleBLEScanner::WhitelistEntry> whitelist;
     
-    // ✅ Entry 1: Mit gespeichertem Address Type
+    // Entry 1: Mit gespeichertem Address Type
     esp32_ble_simple::SimpleBLEScanner::WhitelistEntry entry1(
         pairedDevice.address.c_str(),
         pairedDevice.addressType
     );
     whitelist.push_back(entry1);
     
-    // ✅ Entry 2: Mit alternativem Address Type
+    // Entry 2: Mit alternativem Address Type
     uint8_t altType = (pairedDevice.addressType == BLE_ADDR_PUBLIC) 
                       ? BLE_ADDR_RANDOM 
                       : BLE_ADDR_PUBLIC;
@@ -700,7 +718,7 @@ String ShellyBLEManager::getScanStatus() const {
 }
 
 // ═══════════════════════════════════════════════════════════════════════
-// ✅ KRITISCHE METHODE: on_device_found (ersetzt onAdvertisedDevice)
+// KRITISCHE METHODE: on_device_found (ersetzt onAdvertisedDevice)
 // ═══════════════════════════════════════════════════════════════════════
 
 bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &device) {
@@ -708,13 +726,13 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
     std::string address = device.get_address_str();
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ WICHTIG: return true = "Continue scanning"
+    // WICHTIG: return true = "Continue scanning"
     //             return false = "Stop scanning"
     // ════════════════════════════════════════════════════════════════════
     
     // Filter: Nur Shelly BLU Door/Window
     if (name.empty() || name.length() < 9) {
-        return true;  // ✅ GEÄNDERT: Continue scanning (nicht interessiert)
+        return true;  // GEÄNDERT: Continue scanning (nicht interessiert)
     }
     
     // UNTERSTÜTZT BEIDE FORMATE:
@@ -734,7 +752,7 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
     }
     
     if (!isShellyBLU) {
-        return true;  // ✅ GEÄNDERT: Continue scanning (kein Shelly)
+        return true;  // GEÄNDERT: Continue scanning (kein Shelly)
     }
     
     int8_t rssi = device.get_rssi();
@@ -807,8 +825,8 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
         addressType
     );
         
-        // ✅ Continue scanning (falls stopOnFirstMatch nicht aktiv)
-        // ✅ Stop nur wenn stopOnFirstMatch UND Shelly gefunden
+        // Continue scanning (falls stopOnFirstMatch nicht aktiv)
+        // Stop nur wenn stopOnFirstMatch UND Shelly gefunden
         if (stopOnFirstMatch) {
             ESP_LOGI(TAG, "✓ Shelly BLU found - stopping scan (stopOnFirstMatch)");
             return false;  // Stop scan
@@ -846,7 +864,7 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
         ESP_LOGI(TAG, "ℹ Device not paired - skipping data parse");
         ESP_LOGI(TAG, "═══════════════════════════════════");
         
-        // ✅ Stop scan if stopOnFirstMatch aktiv
+        // Stop scan if stopOnFirstMatch aktiv
         if (stopOnFirstMatch) {
             ESP_LOGI(TAG, "✓ Shelly BLU found - stopping scan (stopOnFirstMatch)");
             return false;  // Stop scan
@@ -862,7 +880,7 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
         ESP_LOGI(TAG, "  This:   %s", address.c_str());
         ESP_LOGI(TAG, "═══════════════════════════════════");
         
-        // ✅ Stop scan if stopOnFirstMatch aktiv
+        // Stop scan if stopOnFirstMatch aktiv
         if (stopOnFirstMatch) {
             ESP_LOGI(TAG, "✓ Shelly BLU found - stopping scan (stopOnFirstMatch)");
             return false;  // Stop scan
@@ -895,7 +913,7 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
     
     if (parseSuccess) {
         ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "✅ DATA SUCCESSFULLY PARSED & DECRYPTED!");
+        ESP_LOGI(TAG, "DATA SUCCESSFULLY PARSED & DECRYPTED!");
         ESP_LOGI(TAG, "│");
         ESP_LOGI(TAG, "│ Sensor Data:");
         ESP_LOGI(TAG, "│   Packet ID:    %d", sensorData.packetId);
@@ -923,7 +941,7 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
         ESP_LOGI(TAG, "");
         
         // ════════════════════════════════════════════════════════════════
-        // ✅ UPDATE PAIRED DEVICE DATA
+        // UPDATE PAIRED DEVICE DATA
         // ════════════════════════════════════════════════════════════════
         
         pairedDevice.sensorData = sensorData;
@@ -931,7 +949,7 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
         pairedDevice.sensorData.dataValid = true;
         
         // ════════════════════════════════════════════════════════════════
-        // ✅ TRIGGER CALLBACK → WebUI Update!
+        // TRIGGER CALLBACK → WebUI Update!
         // ════════════════════════════════════════════════════════════════
         
         if (sensorDataCallback) {
@@ -987,7 +1005,7 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ ENSURE BLE STARTED
+    // ENSURE BLE STARTED
     // ════════════════════════════════════════════════════════════════════
     
     if (!ensureBLEStarted()) {
@@ -996,7 +1014,7 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
     }
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ WAKE-UP SCAN (OHNE discoveredDevices.clear()!)
+    // WAKE-UP SCAN (OHNE discoveredDevices.clear()!)
     // ════════════════════════════════════════════════════════════════════
     
     ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
@@ -1007,7 +1025,7 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
     ESP_LOGI(TAG, "  (Ensuring device is ready for connection)");
     ESP_LOGI(TAG, "");
     
-    // ✅ WICHTIG: NICHT discoveredDevices.clear()!
+    // WICHTIG: NICHT discoveredDevices.clear()!
     // Die Liste enthält bereits das Device vom Discovery Scan
     
     if (bleScanner) {
@@ -1071,7 +1089,7 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
             
             updateDeviceState(STATE_CONNECTED_UNENCRYPTED);
             
-            // ✅ Continuous Scan erst NACH Connection starten
+            // Continuous Scan erst NACH Connection starten
             ESP_LOGI(TAG, "→ Starting Continuous Scan (after 2 second delay)...");
             vTaskDelay(pdMS_TO_TICKS(2000));
             startContinuousScan();
@@ -1131,7 +1149,7 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
         
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-        ESP_LOGI(TAG, "║  ✅ DIRECT ENCRYPTION COMPLETE!   ║");
+        ESP_LOGI(TAG, "║  DIRECT ENCRYPTION COMPLETE!   ║");
         ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
         ESP_LOGI(TAG, "");
         
@@ -1167,7 +1185,7 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
             pairedDevice.sensorData.lastUpdate = millis();
             pairedDevice.sensorData.dataValid = true;
             
-            // ✅ Trigger Callback für WebUI Update
+            // Trigger Callback für WebUI Update
             if (sensorDataCallback) {
                 ESP_LOGI(TAG, "→ Triggering sensor data callback for WebUI...");
                 sensorDataCallback(address, initialData);
@@ -1201,7 +1219,7 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
         
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-        ESP_LOGI(TAG, "║  ✅ ALL PHASES COMPLETE!          ║");
+        ESP_LOGI(TAG, "║  ALL PHASES COMPLETE!          ║");
         ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "Summary:");
@@ -1219,7 +1237,7 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
 
 
 // ============================================================================
-// ✅ NEUER 2-PHASEN-WORKFLOW
+// 2-PHASEN-WORKFLOW
 // ============================================================================
 
 // ────────────────────────────────────────────────────────────────────────────
@@ -1227,7 +1245,7 @@ bool ShellyBLEManager::smartConnectDevice(const String& address, uint32_t passke
 // ────────────────────────────────────────────────────────────────────────────
 
 // ════════════════════════════════════════════════════════════════════════
-// ✅ CONNECT DEVICE (Phase 1: Bonding)
+// CONNECT DEVICE (Phase 1: Bonding)
 // ════════════════════════════════════════════════════════════════════════
 
 bool ShellyBLEManager::connectDevice(const String& address) {
@@ -1238,7 +1256,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ Ensure BLE is started
+    // Ensure BLE is started
     // ════════════════════════════════════════════════════════════════════
     
     if (!bleScanner) {
@@ -1253,20 +1271,20 @@ bool ShellyBLEManager::connectDevice(const String& address) {
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     
-    // ✅ PRE-CHECK: NimBLE & Scanner Status
+    // PRE-CHECK: NimBLE & Scanner Status
     if (!NimBLEDevice::isInitialized()) {
         ESP_LOGE(TAG, "✗ NimBLE not initialized!");
         return false;
     }
     
-    // ✅ KRITISCH: STOPPE SCANNER VOR CONNECTION!
+    // KRITISCH: STOPPE SCANNER VOR CONNECTION!
     if (scanning || (bleScanner && bleScanner->is_scanning())) {
         ESP_LOGW(TAG, "⚠ Scanner is active - STOPPING before GATT connection");
         ESP_LOGW(TAG, "  (NimBLE stack can't scan and connect simultaneously)");
         
         stopScan();
         
-        // ✅ Warte bis Scanner wirklich gestoppt ist
+        // Warte bis Scanner wirklich gestoppt ist
         uint32_t wait_start = millis();
         while ((bleScanner && bleScanner->is_scanning()) && 
                (millis() - wait_start < 3000)) {
@@ -1282,12 +1300,12 @@ bool ShellyBLEManager::connectDevice(const String& address) {
         ESP_LOGI(TAG, "✓ Scanner stopped successfully");
         ESP_LOGI(TAG, "");
         
-        // ✅ Zusätzliche Pause für NimBLE Stack
+        // Zusätzliche Pause für NimBLE Stack
         ESP_LOGI(TAG, "→ Waiting 1 second for NimBLE stack to settle...");
         vTaskDelay(pdMS_TO_TICKS(1000));
     }
     
-    // ✅ Prüfe ob bereits eine aktive Connection existiert
+    // Prüfe ob bereits eine aktive Connection existiert
     if (activeClient && activeClient->isConnected()) {
         ESP_LOGW(TAG, "⚠ Already connected to a device");
         ESP_LOGI(TAG, "→ Disconnecting current device first...");
@@ -1414,7 +1432,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ EXPLICIT PAIRING ANFORDERN
+    // EXPLICIT PAIRING ANFORDERN
     // ════════════════════════════════════════════════════════════════════
     
     ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
@@ -1425,7 +1443,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     ESP_LOGI(TAG, "  This will be AUTO-CONFIRMED (Just Works)");
     ESP_LOGI(TAG, "");
     
-    // ✅ EXPLICIT Pairing anfordern!
+    // EXPLICIT Pairing anfordern!
     bool secureResult = activeClient->secureConnection();
     
     if (!secureResult) {
@@ -1707,7 +1725,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
     ESP_LOGI(TAG, "");
     
-    // ✅ BESSERES LOGGING: Zeige alle Services & Characteristics
+    // BESSERES LOGGING: Zeige alle Services & Characteristics
     ESP_LOGI(TAG, "→ Searching for Passkey characteristic...");
     ESP_LOGI(TAG, "  Target UUID: %s", GATT_UUID_PASSKEY);
     ESP_LOGI(TAG, "");
@@ -1717,7 +1735,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
         auto* pService = services[i];
         ESP_LOGI(TAG, "  [%d] Service: %s", i, pService->getUUID().toString().c_str());
         
-        // ✅ KORRIGIERT: getCharacteristics() gibt const vector& zurück
+        // KORRIGIERT: getCharacteristics() gibt const vector& zurück
         const std::vector<NimBLERemoteCharacteristic*>& charVec = pService->getCharacteristics(true);
         
         if (charVec.size() > 0) {
@@ -1756,7 +1774,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
         }
     }
     
-    // ✅✅✅ KRITISCHER NULL-CHECK! ✅✅✅
+    // ✅✅KRITISCHER NULL-CHECK! ✅✅✅
     if (!pPasskeyChar) {
         ESP_LOGE(TAG, "");
         ESP_LOGE(TAG, "╔═══════════════════════════════════╗");
@@ -1781,7 +1799,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
         return false;
     }
     
-    // ✅ CHECK: Ist Characteristic wirklich beschreibbar?
+    // CHECK: Ist Characteristic wirklich beschreibbar?
     if (!pPasskeyChar->canWrite() && !pPasskeyChar->canWriteNoResponse()) {
         ESP_LOGE(TAG, "");
         ESP_LOGE(TAG, "╔═══════════════════════════════════╗");
@@ -1803,7 +1821,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
         return false;
     }
     
-    // ✅ AB HIER IST pPasskeyChar GARANTIERT != NULL UND WRITABLE!
+    // AB HIER IST pPasskeyChar GARANTIERT != NULL UND WRITABLE!
     
     uint8_t passkeyBytes[4];
     passkeyBytes[0] = (passkey) & 0xFF;
@@ -1827,7 +1845,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     
     ESP_LOGI(TAG, "→ Attempting write with response...");
     
-    // ✅ JETZT ist canWrite() sicher (pPasskeyChar != NULL)
+    // JETZT ist canWrite() sicher (pPasskeyChar != NULL)
     if (pPasskeyChar->canWrite()) {
         writeSuccess = pPasskeyChar->writeValue(passkeyBytes, 4, true);
         
@@ -1934,7 +1952,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     ESP_LOGI(TAG, "   This will wait for the scan to complete");
     ESP_LOGI(TAG, "");
     
-    // ✅ BLOCKING SCAN: true statt false!
+    // BLOCKING SCAN: true statt false!
     bool scanSuccess = pScan->start(10, true);  // ← true = blocking!
     
     if (scanSuccess) {
@@ -2026,7 +2044,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
     
     bool connected = false;
-    int maxAttempts = 5;  // ✅ 5 Versuche!
+    int maxAttempts = 5;  // 5 Versuche!
     
     for (int attempt = 1; attempt <= maxAttempts && !connected; attempt++) {
         ESP_LOGI(TAG, "→ Connection attempt %d/%d...", attempt, maxAttempts);
@@ -2689,7 +2707,7 @@ bool ShellyBLEManager::readSampleBTHomeData(const String& address, ShellyBLESens
     if (parseSuccess) {
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-        ESP_LOGI(TAG, "║  ✅ READ SUCCESSFUL!              ║");
+        ESP_LOGI(TAG, "║  READ SUCCESSFUL!              ║");
         ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "Sensor Data:");
@@ -2750,7 +2768,7 @@ void ShellyBLEManager::updateDiscoveredDevice(
     int8_t rssi,
     bool isEncrypted,
     uint64_t addressUint64,
-    uint8_t addressType) {  // ← NEU!
+    uint8_t addressType) {
     
     bool found = false;
     for (auto& dev : discoveredDevices) {
@@ -2919,7 +2937,7 @@ bool ShellyBLEManager::unpairDevice() {
     ESP_LOGI(TAG, "✓ Device unpaired successfully");
     
     // ════════════════════════════════════════════════════════════════════
-    // ✅ OPTIONAL: BLE herunterfahren wenn kein Device mehr gepairt
+    // OPTIONAL: BLE herunterfahren wenn kein Device mehr gepairt
     // ════════════════════════════════════════════════════════════════════
     
     ESP_LOGI(TAG, "");
@@ -3541,4 +3559,38 @@ bool ShellyBLEManager::hasAnyPairedDevice() {
              hasPaired ? "FOUND" : "NO");
     
     return hasPaired;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Memory Monitoring Helper (ShellyBLEManager)
+// ════════════════════════════════════════════════════════════════════════
+
+void ShellyBLEManager::logMemoryStats(const char* location) {
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║  MEMORY STATS @ %-17s║", location);
+    ESP_LOGI(TAG, "╠═══════════════════════════════════╣");
+    
+    uint32_t free_heap = esp_get_free_heap_size();
+    uint32_t min_free_heap = esp_get_minimum_free_heap_size();
+    uint32_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+    
+    multi_heap_info_t info;
+    heap_caps_get_info(&info, MALLOC_CAP_8BIT);
+    
+    ESP_LOGI(TAG, "║ Free Heap:         %6u bytes    ║", free_heap);
+    ESP_LOGI(TAG, "║ Min Free (ever):   %6u bytes    ║", min_free_heap);
+    ESP_LOGI(TAG, "║ Largest Block:     %6u bytes    ║", largest_block);
+    ESP_LOGI(TAG, "║ Total Allocated:   %6u bytes    ║", info.total_allocated_bytes);
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    
+    if (free_heap < 20000) {
+        ESP_LOGW(TAG, "⚠️ WARNING: Free heap below 20KB!");
+    }
+    
+    if (largest_block < 10000) {
+        ESP_LOGW(TAG, "⚠️ WARNING: Largest free block below 10KB - fragmentation!");
+    }
+    
+    ESP_LOGI(TAG, "");
 }
