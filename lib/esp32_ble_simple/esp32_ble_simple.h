@@ -112,7 +112,7 @@ public:
     }
     
     // ═══════════════════════════════════════════════════════════════════
-    // ✅ NEUE SETTER-METHODEN für Merging
+    // SETTER-METHODEN für Merging
     // ═══════════════════════════════════════════════════════════════════
     
     void set_name(const std::string& name) {
@@ -232,7 +232,7 @@ public:
     // Whitelist Management
     bool set_scan_whitelist(const std::vector<WhitelistEntry>& entries);
     
-    // ✅ OPTIONAL: Helper für einfache Nutzung (nur MAC, Type = RANDOM)
+    // OPTIONAL: Helper für einfache Nutzung (nur MAC, Type = RANDOM)
     bool set_scan_whitelist_simple(const std::vector<std::string>& mac_addresses) {
         std::vector<WhitelistEntry> entries;
         for (const auto& mac : mac_addresses) {

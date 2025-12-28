@@ -46,7 +46,7 @@ SimpleBLEScanner::~SimpleBLEScanner() {
 bool SimpleBLEScanner::setup() {
     ESP_LOGI(TAG, "Setting up Simple BLE Scanner...");
     
-    // ✅ NO NimBLE INIT HERE!
+    // NO NimBLE INIT HERE!
     // Matter hat es bereits initialisiert!
     
     ESP_LOGI(TAG, "→ Verifying NimBLE Host...");
@@ -91,7 +91,7 @@ bool SimpleBLEScanner::start_scan(uint32_t duration_sec) {
     }
     
     // ══════════════════════════════════════════════════════════════════
-    // ✅ NEW: Check if NimBLE is ready (Matter might have initialized it)
+    // NEW: Check if NimBLE is ready (Matter might have initialized it)
     // ══════════════════════════════════════════════════════════════════
     
     ESP_LOGI(TAG, "→ Checking NimBLE Host status...");
@@ -282,7 +282,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
             std::string name = device.get_name();
             
             // ════════════════════════════════════════════════════════════
-            // ✅ SMART LOGGING: Nur interessante Devices detailliert loggen
+            // SMART LOGGING: Nur interessante Devices detailliert loggen
             // ════════════════════════════════════════════════════════════
             
             bool is_interesting = false;
@@ -311,7 +311,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
             // ════════════════════════════════════════════════════════════
             
             if (is_interesting) {
-                // ✅ FULL LOGGING für interessante Devices
+                // FULL LOGGING für interessante Devices
                 ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
                 ESP_LOGI(TAG, "║  BLE DEVICE (INTERESTING)         ║");
                 ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
@@ -323,7 +323,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
                 ESP_LOGI(TAG, "Service Datas: %d", device.get_service_datas().size());
                 ESP_LOGI(TAG, "");
             } else {
-                // ✅ MINIMAL LOGGING für Noise
+                // MINIMAL LOGGING für Noise
                 ESP_LOGV(TAG, "BLE: %s | %s | RSSI %d | Name: %s",
                          addr_str,
                          is_scan_rsp ? "SCAN_RSP" : "ADV",
@@ -332,7 +332,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
             }
             
             // ════════════════════════════════════════════════════════════
-            // ✅ HOME ASSISTANT STYLE: Callback NUR bei ADV mit Service Data!
+            // HOME ASSISTANT STYLE: Callback NUR bei ADV mit Service Data!
             // ════════════════════════════════════════════════════════════
             
             if (scan_active_) {
@@ -355,7 +355,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
                         ESP_LOGI(TAG, "→ Cached new device");
                     }
                     
-                    // ✅ CALLBACK NUR bei ADV mit Service Data!
+                    // CALLBACK NUR bei ADV mit Service Data!
                     if (is_adv && device.get_service_datas().size() > 0) {
                         if (is_interesting) {
                             ESP_LOGI(TAG, "→ ADV has Service Data - processing immediately");
@@ -379,7 +379,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
                     CachedDevice& cached = it->second;
                     
                     if (is_scan_rsp) {
-                        // ✅ SCAN_RSP: Nur Name mergen, KEIN Callback!
+                        // SCAN_RSP: Nur Name mergen, KEIN Callback!
                         
                         if (!name.empty() && cached.device.get_name().empty()) {
                             if (is_interesting) {
@@ -394,7 +394,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
                         // ❌ KEIN CALLBACK bei SCAN_RSP!
                         
                     } else if (is_adv && device.get_service_datas().size() > 0) {
-                        // ✅ ADV mit Service Data: SOFORT Callback!
+                        // ADV mit Service Data: SOFORT Callback!
                         
                         if (is_interesting) {
                             ESP_LOGI(TAG, "→ ADV with Service Data - processing immediately");
@@ -410,7 +410,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
                         cached.has_adv = true;
                         cached.last_seen = xTaskGetTickCount() * portTICK_PERIOD_MS;
                         
-                        // ✅ CALLBACK AUSLÖSEN!
+                        // CALLBACK AUSLÖSEN!
                         if (listener_) {
                             bool should_continue = listener_->on_device_found(device);
                             
@@ -421,7 +421,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
                         }
                         
                     } else {
-                        // ✅ ADV ohne Service Data: Nur Cache aktualisieren
+                        // ADV ohne Service Data: Nur Cache aktualisieren
                         
                         if (is_interesting) {
                             ESP_LOGV(TAG, "→ ADV without Service Data - updating cache only");
@@ -474,7 +474,7 @@ int SimpleBLEScanner::gap_event_handler(struct ble_gap_event *event) {
                 ESP_LOGW(TAG, "⚠ %d devices in cache (incomplete)", 
                          device_cache_.size());
                 
-                // ✅ OPTIONAL: Verarbeite auch incomplete devices
+                // OPTIONAL: Verarbeite auch incomplete devices
                 if (listener_) {
                     for (auto& pair : device_cache_) {
                         // Nur wenn Service Data vorhanden
@@ -528,7 +528,7 @@ void SimpleBLEScanner::merge_device_data(
     // 2. Service Data: DO NOT MERGE!
     // ════════════════════════════════════════════════════════════════════
     
-    // ✅ CRITICAL DESIGN DECISION:
+    // CRITICAL DESIGN DECISION:
     //    BTHome (and similar protocols) send the CURRENT state in EVERY advertisement.
     //    We should NOT cache/merge Service Data because:
     //    
@@ -545,7 +545,7 @@ void SimpleBLEScanner::merge_device_data(
         ESP_LOGV(TAG, "  → Service Data present in source (%d items)", source_sd.size());
         ESP_LOGV(TAG, "     Strategy: NOT merging (use current event data only)");
         
-        // ✅ NO MERGE - Service Data already in target from current event!
+        // NO MERGE - Service Data already in target from current event!
     }
     
     // ════════════════════════════════════════════════════════════════════
@@ -591,7 +591,7 @@ void SimpleBLEScanner::cleanup_device_cache()
 }
 
 // ════════════════════════════════════════════════════════════════════════
-// ✅ WHITELIST MANAGEMENT
+// WHITELIST MANAGEMENT
 // ════════════════════════════════════════════════════════════════════════
 
 bool SimpleBLEScanner::set_scan_whitelist(const std::vector<WhitelistEntry>& entries) {
@@ -642,7 +642,7 @@ bool SimpleBLEScanner::set_scan_whitelist(const std::vector<WhitelistEntry>& ent
                 break;
             }
             
-            // ✅ NimBLE erwartet Little-Endian (umgekehrte Reihenfolge)
+            // NimBLE erwartet Little-Endian (umgekehrte Reihenfolge)
             addr.val[5 - i] = (uint8_t)val;
         }
         
@@ -652,7 +652,7 @@ bool SimpleBLEScanner::set_scan_whitelist(const std::vector<WhitelistEntry>& ent
         }
         
         // ════════════════════════════════════════════════════════════════
-        // ✅ VERWENDE GESPEICHERTEN ADDRESS TYPE!
+        // VERWENDE GESPEICHERTEN ADDRESS TYPE!
         // ════════════════════════════════════════════════════════════════
         
         addr.type = entry.address_type;
@@ -699,7 +699,7 @@ bool SimpleBLEScanner::set_scan_whitelist(const std::vector<WhitelistEntry>& ent
         ESP_LOGE(TAG, "✗ Failed to set whitelist: %d", rc);
         ESP_LOGE(TAG, "  Error code: %d", rc);
         
-        // ✅ ERROR DETAIL LOGGING
+        // ERROR DETAIL LOGGING
         switch (rc) {
             case BLE_HS_EINVAL:
                 ESP_LOGE(TAG, "  Reason: Invalid parameters");
