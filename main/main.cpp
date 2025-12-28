@@ -1,4 +1,5 @@
 #include <Arduino.h>
+#include <ArduinoOTA.h> 
 #include <WiFi.h>
 #include <Matter.h>
 #include <Preferences.h>
@@ -12,12 +13,14 @@
 #include <esp_matter_cluster.h>
 #include <esp_matter_feature.h> 
 
+#include "config.h"
 #include "credentials.h"
 #include "rollershutter_driver.h"
 #include "rollershutter.h"
 #include "matter_cluster_defs.h"
 #include "web_ui_handler.h"
 #include "shelly_ble_manager.h"
+#include "device_naming.h"
 
 using namespace chip;
 using namespace esp_matter;
@@ -25,8 +28,6 @@ using namespace esp_matter::attribute;
 using namespace esp_matter::cluster;
 using namespace esp_matter::command;
 using namespace esp_matter::endpoint;
-
-#define APP_VERSION "1.3.0"
 
 static const char* TAG = "Main";
 
@@ -49,13 +50,15 @@ const uint16_t INSTALLED_CLOSED_LIMIT_LIFT_CM = 200;
 static app_driver_handle_t shutter_handle = nullptr;
 static WebUIHandler* webUI = nullptr;
 static ShellyBLEManager* bleManager = nullptr;
+DeviceNaming* deviceNaming = nullptr;
 static Preferences matterPref;
 
-static char device_ip_str[16] = "0.0.0.0";
+static char device_ip_str[DEVICE_IP_MAX_LENGTH] = "0.0.0.0";
+
 static bool hardware_initialized = false;
 static TaskHandle_t loop_task_handle = nullptr;
 
-static uint16_t window_covering_endpoint_id = 0;
+uint16_t window_covering_endpoint_id = 0;
 
 // Contact Sensor
 static endpoint_t* contact_sensor_endpoint = nullptr;
@@ -115,7 +118,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                               (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
         
         if (is_commissioned) {
-            // ✅ Contact Sensor Endpoint erstellen (NUR EINMAL!)
+            // Contact Sensor Endpoint erstellen (NUR EINMAL!)
             if (!contact_sensor_endpoint_active) {
                 ESP_LOGI(TAG, "→ Creating Contact Sensor endpoint...");
                 node_t* node = node::get();
@@ -124,7 +127,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                 }
             }
             
-            // ✅ Power Source Endpoint erstellen (NUR EINMAL!)
+            // Power Source Endpoint erstellen (NUR EINMAL!)
             if (!power_source_endpoint_active) {  // ← WICHTIGE PRÜFUNG!
                 ESP_LOGI(TAG, "→ Creating Power Source endpoint...");
                 node_t* node = node::get();
@@ -133,7 +136,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                 }
             }
             
-            // ✅ Attribute updaten (NUR wenn Endpoints aktiv sind)
+            // Attribute updaten (NUR wenn Endpoints aktiv sind)
             if (contact_sensor_endpoint_active && contact_sensor_endpoint_id != 0) {
                 ESP_LOGD(TAG, "→ Updating Contact Sensor attributes...");
                 
@@ -145,7 +148,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                                  &contact_val);
             }
             
-            // ✅ Power Source Attribute updaten (NUR wenn Endpoint aktiv ist)
+            // Power Source Attribute updaten (NUR wenn Endpoint aktiv ist)
             if (power_source_endpoint_active && power_source_endpoint_id != 0) {
                 ESP_LOGD(TAG, "→ Updating Power Source attributes...");
                 
@@ -339,10 +342,12 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                      ATTRIBUTE_FLAG_NONE,
                      esp_matter_uint8(0));
     
+    static char ps_description[16] = "Battery";
+
     attribute::create(ps_cluster,
                     chip::app::Clusters::PowerSource::Attributes::Description::Id,
                     ATTRIBUTE_FLAG_NONE,
-                    esp_matter_char_str("Battery", 16));
+                    esp_matter_char_str(ps_description, sizeof(ps_description)));
 
     ESP_LOGI(TAG, "✓ Description attribute configured");
     
@@ -409,7 +414,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     
     contact_sensor_endpoint_active = false;
     
-    // ✅ Status aus Preferences löschen
+    // Status aus Preferences löschen
     matterPref.begin("matter", false);
     matterPref.putBool("cs_active", false);
     matterPref.end();
@@ -645,6 +650,58 @@ void setup() {
     }
 
     // ========================================================================
+    // Scene Cluster (Minimal - Controller-Managed)
+    // ========================================================================
+
+    cluster_t* scene_cluster = cluster::create(ep, CLUSTER_ID_SCENES, 
+                                            CLUSTER_FLAG_SERVER);
+    if (scene_cluster) {
+        // Mandatory Attributes
+        
+        // Scene Count (wir unterstützen 6 vordefinierte Scenes)
+        attribute::create(scene_cluster, ATTR_ID_SCENE_COUNT, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_uint8(SCENE_MAPPING_COUNT));
+        
+        // Current Scene (initial 0 = keine Scene aktiv)
+        attribute::create(scene_cluster, ATTR_ID_CURRENT_SCENE, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_uint8(0));
+        
+        // Current Group (0 = keine Gruppe)
+        attribute::create(scene_cluster, ATTR_ID_CURRENT_GROUP, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_uint16(0));
+        
+        // Scene Valid (false initial)
+        attribute::create(scene_cluster, ATTR_ID_SCENE_VALID, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_bool(false));
+        
+        // Name Support (bit 7 = Scene Names supported)
+        attribute::create(scene_cluster, ATTR_ID_NAME_SUPPORT, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_bitmap8(0x80));
+        
+        // Commands
+        command::create(scene_cluster, CMD_ID_RECALL_SCENE, 
+                    COMMAND_FLAG_ACCEPTED, app_command_cb);
+        
+        command::create(scene_cluster, CMD_ID_GET_SCENE_MEMBERSHIP, 
+                    COMMAND_FLAG_ACCEPTED, app_command_cb);
+        
+        ESP_LOGI(TAG, "Scene Cluster created (minimal mode, %d scenes)", 
+                SCENE_MAPPING_COUNT);
+        ESP_LOGI(TAG, "Scene Mappings:");
+        for (int i = 0; i < SCENE_MAPPING_COUNT; i++) {
+            ESP_LOGI(TAG, "  Scene %d → %d%% (%s)", 
+                    SCENE_MAPPINGS[i].sceneId,
+                    SCENE_MAPPINGS[i].shutterPosition,
+                    SCENE_MAPPINGS[i].description);
+        }
+    }
+
+    // ========================================================================
     // Custom Cluster - Device IP
     // ========================================================================
 
@@ -657,11 +714,8 @@ void setup() {
                         ATTRIBUTE_FLAG_WRITABLE, esp_matter_bool(inverted));
         
         // String vorbereiten
-        snprintf(device_ip_str, sizeof(device_ip_str), "0.0.0.0");
-
         esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
-        
-        // ✅ Attribut mit char_str UND fixed size erstellen
+
         attribute_t* ip_attr = attribute::create(
             custom_cluster, 
             ATTR_ID_DEVICE_IP, 
@@ -707,7 +761,7 @@ void setup() {
     ESP_LOGI(TAG, "  Contact Sensor was active: %s", cs_was_active ? "YES" : "NO");
     ESP_LOGI(TAG, "  Power Source was active: %s", ps_was_active ? "YES" : "NO");
 
-    // ✅ Endpoints JETZT erstellen wenn User enabled (unabhängig von BLE Pairing!)
+    // Endpoints JETZT erstellen wenn User enabled (unabhängig von BLE Pairing!)
     if (contact_sensor_matter_enabled && (cs_was_active || ps_was_active)) {
         ESP_LOGI(TAG, "→ Creating Contact Sensor endpoints NOW (before Matter start)...");
         
@@ -718,10 +772,6 @@ void setup() {
             createPowerSourceEndpoint(node);
         }
     }
-
-    // Scenes Management Cluster
-    //cluster::scenes_management::config_t scenes_config;
-    //cluster::scenes_management::create(window_covering_endpoint_id, &scenes_config, CLUSTER_FLAG_SERVER);
 
     // ========================================================================
     // WiFi
@@ -742,9 +792,9 @@ void setup() {
         
         if (WiFi.status() == WL_CONNECTED) {
             Serial.println("\nWiFi connected");
+
             snprintf(device_ip_str, sizeof(device_ip_str), "%s", WiFi.localIP().toString().c_str());
-            
-            // ✅ PRÜFE HIER - Verwendest du die manuelle Struktur?
+    
             cluster_t* custom_cluster_local = cluster::get(window_covering_endpoint_id, 
                                                         CLUSTER_ID_ROLLERSHUTTER_CONFIG);
             
@@ -752,7 +802,6 @@ void setup() {
                 attribute_t* ip_attr = attribute::get(custom_cluster_local, ATTR_ID_DEVICE_IP);
                 
                 if (ip_attr) {
-                    // ✅ Diese Zeile sollte SO aussehen:
                     esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
                     attribute::set_val(ip_attr, &ip_val);
                     
@@ -762,6 +811,15 @@ void setup() {
         }
 
     #endif
+
+    // ========================================================================
+    // Device Naming System
+    // ========================================================================
+    
+    deviceNaming = new DeviceNaming();
+    deviceNaming->load();
+    
+    ESP_LOGI(TAG, "Device Naming initialized");
 
     // ========================================================================
     // Matter Stack
@@ -813,6 +871,91 @@ void setup() {
         hardware_initialized = true;
     }
 
+    // Warte kurz, damit Matter sich stabilisiert
+    vTaskDelay(pdMS_TO_TICKS(1000));
+
+    // Arduino OTA und deviceNaming NUR starten wenn commissioned
+    if (Matter.isDeviceCommissioned()) {
+
+    // ========================================================================
+    // Apply Device Name to Matter
+    // ========================================================================
+    
+        if (deviceNaming) {
+            // Warte kurz bis Matter Stack bereit ist
+            vTaskDelay(pdMS_TO_TICKS(1000));
+            
+            // Apply name to Matter endpoint
+            deviceNaming->apply();
+            
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+            ESP_LOGI(TAG, "║   DEVICE IDENTIFICATION           ║");
+            ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+            
+            DeviceNaming::DeviceName names = deviceNaming->getNames();
+            
+            ESP_LOGI(TAG, "Network Hostname: %s.local", names.hostname.c_str());
+            ESP_LOGI(TAG, "Matter Name: %s", names.matterName.c_str());
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Access Web-UI via:");
+            ESP_LOGI(TAG, "  http://%s.local", names.hostname.c_str());
+            ESP_LOGI(TAG, "  http://%s", device_ip_str);
+            ESP_LOGI(TAG, "");
+        }
+
+    // ========================================================================
+    // Arduino OTA initialisieren
+    // ========================================================================
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   INITIALIZING ARDUINO OTA        ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        
+        DeviceNaming::DeviceName names = deviceNaming->getNames();
+        ArduinoOTA.setHostname(names.hostname.c_str());
+        ArduinoOTA.setPassword(OTA_PASSWORD);
+        
+        ArduinoOTA.onStart([]() {
+            String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
+            Serial.println("Start updating " + type);
+            
+            // Stop alle Services
+            if (webUI) webUI->cleanup_idle_clients();
+            if (bleManager) bleManager->stopScan(true);
+        });
+        
+        ArduinoOTA.onEnd([]() {
+            Serial.println("\nEnd");
+        });
+        
+        ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
+            Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
+        });
+        
+        ArduinoOTA.onError([](ota_error_t error) {
+            Serial.printf("Error[%u]: ", error);
+            if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
+            else if (error == OTA_BEGIN_ERROR) Serial.println("Begin Failed");
+            else if (error == OTA_CONNECT_ERROR) Serial.println("Connect Failed");
+            else if (error == OTA_RECEIVE_ERROR) Serial.println("Receive Failed");
+            else if (error == OTA_END_ERROR) Serial.println("End Failed");
+        });
+        
+        ArduinoOTA.begin();
+        
+        ESP_LOGI(TAG, "✓ Arduino OTA enabled");
+        ESP_LOGI(TAG, "  Hostname: beltwinder.local");
+        ESP_LOGI(TAG, "  Port: 3232");
+        ESP_LOGI(TAG, "");
+    } else {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "ℹ Arduino OTA NOT started (device not commissioned)");
+        ESP_LOGI(TAG, "  OTA will be available after commissioning + reboot");
+        ESP_LOGI(TAG, "");
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // Shelly BLE Manager (LAZY INIT - BLE bleibt aus!)
     // ════════════════════════════════════════════════════════════════════
@@ -858,7 +1001,7 @@ void setup() {
         ESP_LOGI(TASK_TAG, "╚═══════════════════════════════════╝");
         ESP_LOGI(TASK_TAG, "");
         
-        // ✅ STRATEGY: Wait for Matter, then try manual init if needed
+        // STRATEGY: Wait for Matter, then try manual init if needed
         ESP_LOGI(TASK_TAG, "→ Waiting 8 seconds for Matter to settle...");
         ESP_LOGI(TASK_TAG, "");
         
@@ -911,13 +1054,13 @@ void setup() {
         
         if (has_shelly) {
             ESP_LOGI(TASK_TAG, "╔═══════════════════════════════════╗");
-            ESP_LOGI(TASK_TAG, "║  ✅ AUTO-START BLE                ║");
+            ESP_LOGI(TASK_TAG, "║  AUTO-START BLE                ║");
             ESP_LOGI(TASK_TAG, "╚═══════════════════════════════════╝");
             ESP_LOGI(TASK_TAG, "");
             ESP_LOGI(TASK_TAG, "Reason: Paired Shelly device found");
             ESP_LOGI(TASK_TAG, "");
             
-            // ✅ Start BLE (will do manual init if needed)
+            // Start BLE (will do manual init if needed)
             if (ble->ensureBLEStarted()) {
                 ESP_LOGI(TASK_TAG, "✓ BLE started successfully");
                 ESP_LOGI(TASK_TAG, "");
@@ -972,7 +1115,7 @@ void setup() {
     ESP_LOGI(TAG, "  Contact Sensor was active: %s", cs_was_active ? "YES" : "NO");
     ESP_LOGI(TAG, "  Power Source was active: %s", ps_was_active ? "YES" : "NO");
 
-    // ✅ NEUE LOGIK: Power Source sollte IMMER mit Contact Sensor erstellt werden
+    // Power Source sollte IMMER mit Contact Sensor erstellt werden
     if (contact_sensor_matter_enabled && cs_was_active) {
         ps_was_active = true;  // ← Force enable!
         ESP_LOGI(TAG, "  → Power Source will be created with Contact Sensor");
@@ -989,7 +1132,7 @@ void setup() {
             if (cs_was_active) {
                 createContactSensorEndpoint(node);
             }
-            // ✅ Power Source IMMER wenn Contact Sensor aktiv ist
+            // Power Source IMMER wenn Contact Sensor aktiv ist
             if (cs_was_active || ps_was_active) {
                 createPowerSourceEndpoint(node);
             }
@@ -1013,12 +1156,11 @@ void setup() {
     webUI->begin();
     ESP_LOGI(TAG, "Web UI started");
 
-    ESP_LOGI(TAG, "=== System Ready ===");
 }
 
-// ============================================================================
-// Loop
-// ============================================================================
+    // ============================================================================
+    // Loop
+    // ============================================================================
 
 void loop() {
     esp_task_wdt_reset();
@@ -1080,7 +1222,6 @@ void loop() {
             ESP_LOGI(TAG, "IP changed: %s → %s", device_ip_str, new_ip.c_str());
             snprintf(device_ip_str, sizeof(device_ip_str), "%s", new_ip.c_str());
             
-            // ✅ LÖSUNG: Verwende set_val() statt update()
             cluster_t* custom_cluster = cluster::get(window_covering_endpoint_id, 
                                                     CLUSTER_ID_ROLLERSHUTTER_CONFIG);
             
@@ -1129,7 +1270,13 @@ void loop() {
             webUI->cleanup_idle_clients();
         }
     }
+
+    // ====================================================================
+    // Arduino OTA Handler (WICHTIG!)
+    // ====================================================================
     
+    ArduinoOTA.handle();
+   
     // Memory-Status every 30 Seconds
     static uint32_t last_mem_check = 0;
     if (millis() - last_mem_check >= 300000) {  // ← 2 Minuten
@@ -1171,7 +1318,7 @@ void loop() {
         if (contact_sensor_endpoint_active && contact_sensor_endpoint_id != 0) {
             ShellyBLESensorData data;
             if (bleManager && bleManager->getSensorData(data) && data.dataValid) {
-                // ✅ Contact State
+                // Contact State
                 esp_matter_attr_val_t contact_val = esp_matter_bool(!data.windowOpen);
                 esp_err_t ret = attribute::update(contact_sensor_endpoint_id,
                                                 chip::app::Clusters::BooleanState::Id,
@@ -1188,7 +1335,7 @@ void loop() {
         if (power_source_endpoint_active && power_source_endpoint_id != 0) {
             ShellyBLESensorData data;
             if (bleManager && bleManager->getSensorData(data) && data.dataValid) {
-                // ✅ Battery Percentage
+                // Battery Percentage
                 esp_matter_attr_val_t battery_val = esp_matter_nullable_uint8(data.battery * 2);
                 esp_err_t ret = attribute::update(power_source_endpoint_id,
                                                 chip::app::Clusters::PowerSource::Id,
@@ -1322,6 +1469,114 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &path,
     ESP_LOGI(TAG, "│ Cluster:  0x%04X", path.mClusterId);
     ESP_LOGI(TAG, "│ Command:  0x%04X", path.mCommandId);
     ESP_LOGI(TAG, "│ Endpoint: %d", path.mEndpointId);
+    
+    // ========================================================================
+    // Scene Cluster Commands - KORREKTE Includes prüfen
+    // ========================================================================
+    
+    if (path.mClusterId == CLUSTER_ID_SCENES) {
+        ESP_LOGI(TAG, "│ → Scene Cluster Command");
+        
+        if (path.mCommandId == CMD_ID_RECALL_SCENE) {
+            ESP_LOGI(TAG, "│   Type: RecallScene");
+            
+            // ✅ FIX: Scene Commands benötigen spezielle Includes
+            // Falls chip::app::Clusters::Scenes nicht existiert,
+            // nutze manuelle Dekodierung:
+            
+            // Struktur: groupID (uint16_t) + sceneID (uint8_t)
+            uint16_t groupId = 0;
+            uint8_t sceneId = 0;
+            
+            // TLV Reader dekodieren (manuell)
+            chip::TLV::TLVType containerType;
+            if (reader.EnterContainer(containerType) == CHIP_NO_ERROR) {
+                
+                // Group ID lesen (Tag 0)
+                if (reader.Next() == CHIP_NO_ERROR) {
+                    reader.Get(groupId);
+                }
+                
+                // Scene ID lesen (Tag 1)
+                if (reader.Next() == CHIP_NO_ERROR) {
+                    reader.Get(sceneId);
+                }
+                
+                reader.ExitContainer(containerType);
+                
+                ESP_LOGI(TAG, "│   Group: %d", groupId);
+                ESP_LOGI(TAG, "│   Scene: %d", sceneId);
+                
+                // Finde Mapping
+                bool found = false;
+                for (int i = 0; i < SCENE_MAPPING_COUNT; i++) {
+                    if (SCENE_MAPPINGS[i].sceneId == sceneId) {
+                        uint8_t targetPos = SCENE_MAPPINGS[i].shutterPosition;
+                        
+                        ESP_LOGI(TAG, "│   → Moving to %d%% (%s)", 
+                                 targetPos, SCENE_MAPPINGS[i].description);
+                        ESP_LOGI(TAG, "└─────────────────────────────────");
+                        
+                        // Rolladen bewegen
+                        shutter_driver_go_to_lift_percent(shutter_handle, targetPos);
+                        
+                        // Update Current Scene Attribute
+                        esp_matter_attr_val_t scene_val = esp_matter_uint8(sceneId);
+                        attribute::update(window_covering_endpoint_id, 
+                                        CLUSTER_ID_SCENES,
+                                        ATTR_ID_CURRENT_SCENE, 
+                                        &scene_val);
+                        
+                        // Mark Scene Valid
+                        esp_matter_attr_val_t valid_val = esp_matter_bool(true);
+                        attribute::update(window_covering_endpoint_id,
+                                        CLUSTER_ID_SCENES,
+                                        ATTR_ID_SCENE_VALID,
+                                        &valid_val);
+                        
+                        found = true;
+                        break;
+                    }
+                }
+                
+                if (!found) {
+                    ESP_LOGW(TAG, "│   ⚠ Unknown Scene ID: %d", sceneId);
+                    ESP_LOGI(TAG, "└─────────────────────────────────");
+                }
+                
+            } else {
+                ESP_LOGE(TAG, "│   ✗ Failed to decode RecallScene payload");
+                ESP_LOGI(TAG, "└─────────────────────────────────");
+            }
+            
+            return ESP_OK;
+        }
+        
+        else if (path.mCommandId == CMD_ID_GET_SCENE_MEMBERSHIP) {
+            ESP_LOGI(TAG, "│   Type: GetSceneMembership");
+            
+            // Ähnlich wie RecallScene - manuelle Dekodierung
+            uint16_t groupId = 0;
+            
+            chip::TLV::TLVType containerType;
+            if (reader.EnterContainer(containerType) == CHIP_NO_ERROR) {
+                if (reader.Next() == CHIP_NO_ERROR) {
+                    reader.Get(groupId);
+                }
+                reader.ExitContainer(containerType);
+                
+                ESP_LOGI(TAG, "│   Group: %d", groupId);
+                ESP_LOGI(TAG, "│   → Returning %d available scenes", SCENE_MAPPING_COUNT);
+                ESP_LOGI(TAG, "└─────────────────────────────────");
+            }
+            
+            return ESP_OK;
+        }
+        
+        ESP_LOGW(TAG, "│   ⚠ Unknown Scene command: 0x%04X", path.mCommandId);
+        ESP_LOGI(TAG, "└─────────────────────────────────");
+        return ESP_ERR_NOT_SUPPORTED;
+    }
     
     // Custom Cluster - Calibration Command
     if (path.mClusterId == CLUSTER_ID_ROLLERSHUTTER_CONFIG && 

@@ -18,6 +18,11 @@
 #include <arpa/inet.h>
 
 #include "web_ui_handler.h"
+#include "device_naming.h"
+
+extern class DeviceNaming* deviceNaming;
+
+static const char* TAG = "WebUI";
 
 struct BLETaskParams {
     WebUIHandler* handler;
@@ -26,3854 +31,23 @@ struct BLETaskParams {
     uint32_t passkey;
 };
 
-static const char* TAG = "WebUI";
+// ============================================================================
+// GZIP Compressed HTML (Auto-Generated)
+// ============================================================================
 
-static const char index_html[] PROGMEM = R"rawliteral(
-<!DOCTYPE html>
-<html lang="de">
-<head>
-  <meta charset="UTF-8">
-  <meta name="viewport" content="width=device-width, initial-scale=1">
-  <title>BeltWinder Matter</title>
-  <style>
-    /* ============================================================================
-       Base Styles & CSS Variables
-       ============================================================================ */
-    
-    :root {
-      --primary-color: #2196F3;
-      --primary-light: #42A5F5;
-      --success-color: #4CAF50;
-      --warning-color: #FF9800;
-      --error-color: #f44336;
-      --bg-dark: #0a0a0a;
-      --bg-card: rgba(255, 255, 255, 0.03);
-      --border-color: rgba(255, 255, 255, 0.08);
-      --text-primary: #e8e8e8;
-      --text-secondary: #888;
-      --shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-      --transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    
-    * { 
-      margin: 0; 
-      padding: 0; 
-      box-sizing: border-box; 
-    }
-    
-    /* ============================================================================
-       Reduced Motion Support
-       ============================================================================ */
-    
-    @media (prefers-reduced-motion: reduce) {
-      *, *::before, *::after {
-        animation-duration: 0.01ms !important;
-        animation-iteration-count: 1 !important;
-        transition-duration: 0.01ms !important;
-      }
-    }
-    
-    /* ============================================================================
-       Body & Background
-       ============================================================================ */
-    
-    body {
-      font-family: -apple-system, BlinkMacSystemFont, 'Segoe UI', Roboto, 'Inter', sans-serif;
-      background: var(--bg-dark);
-      color: var(--text-primary);
-      line-height: 1.6;
-      overflow-x: hidden;
-      position: relative;
-      min-height: 100vh;
-    }
-    
-    /* Animated Background - Safari-kompatibel */
-    body::before {
-      content: '';
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: 
-        radial-gradient(circle at 20% 50%, rgba(33, 150, 243, 0.08) 0%, transparent 50%),
-        radial-gradient(circle at 80% 80%, rgba(76, 175, 80, 0.06) 0%, transparent 50%),
-        radial-gradient(circle at 40% 20%, rgba(156, 39, 176, 0.05) 0%, transparent 50%);
-      pointer-events: none;
-      z-index: 0;
-      animation: bgShift 20s ease infinite;
-      will-change: transform, opacity;
-      -webkit-backface-visibility: hidden; /* Safari Performance */
-    }
-    
-    @keyframes bgShift {
-      0%, 100% { opacity: 1; transform: scale(1) translateZ(0); }
-      50% { opacity: 0.8; transform: scale(1.1) translateZ(0); }
-    }
-    
-    /* ============================================================================
-       Error Banner (Global)
-       ============================================================================ */
-    
-    .error-banner {
-      position: fixed;
-      top: 20px;
-      left: 50%;
-      transform: translateX(-50%) translateY(-120%);
-      background: linear-gradient(135deg, #f44336, #d32f2f);
-      color: white;
-      padding: 16px 24px;
-      border-radius: 12px;
-      box-shadow: 0 8px 32px rgba(244, 67, 54, 0.4);
-      z-index: 9999;
-      max-width: 90%;
-      width: 500px;
-      display: flex;
-      align-items: center;
-      gap: 12px;
-      transition: transform 0.4s cubic-bezier(0.4, 0, 0.2, 1);
-      will-change: transform;
-    }
-    
-    .error-banner.show {
-      transform: translateX(-50%) translateY(0);
-    }
-    
-    .error-banner-icon {
-      font-size: 1.5em;
-      flex-shrink: 0;
-    }
-    
-    .error-banner-content {
-      flex: 1;
-    }
-    
-    .error-banner-title {
-      font-weight: 700;
-      margin-bottom: 4px;
-    }
-    
-    .error-banner-message {
-      font-size: 0.9em;
-      opacity: 0.9;
-    }
-    
-    .error-banner-close {
-      background: rgba(255, 255, 255, 0.2);
-      border: none;
-      color: white;
-      width: 28px;
-      height: 28px;
-      border-radius: 50%;
-      cursor: pointer;
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      font-size: 1.2em;
-      transition: background 0.3s;
-    }
-    
-    .error-banner-close:hover {
-      background: rgba(255, 255, 255, 0.3);
-    }
-    
-    .error-banner.success {
-      background: linear-gradient(135deg, #4CAF50, #66BB6A);
-      box-shadow: 0 8px 32px rgba(76, 175, 80, 0.4);
-    }
-    
-    .error-banner.warning {
-      background: linear-gradient(135deg, #FF9800, #FFA726);
-      box-shadow: 0 8px 32px rgba(255, 152, 0, 0.4);
-    }
-    
-    /* ============================================================================
-       Container & Layout
-       ============================================================================ */
-    
-    .container { 
-      max-width: 1000px; 
-      margin: 0 auto; 
-      padding: 20px;
-      position: relative;
-      z-index: 1;
-    }
-    
-    /* ============================================================================
-       Header (Glassmorphism)
-       ============================================================================ */
-    
-    .header {
-      text-align: center;
-      margin-bottom: 30px;
-      padding: 40px 30px;
-      background: var(--bg-card);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px); /* Safari */
-      border-radius: 24px;
-      border: 1px solid var(--border-color);
-      box-shadow: var(--shadow), inset 0 1px 0 rgba(255, 255, 255, 0.1);
-      position: relative;
-      overflow: hidden;
-    }
-    
-    .header::before {
-      content: '';
-      position: absolute;
-      top: -50%;
-      left: -50%;
-      width: 200%;
-      height: 200%;
-      background: linear-gradient(
-        45deg,
-        transparent,
-        rgba(33, 150, 243, 0.1),
-        transparent
-      );
-      animation: headerShine 3s ease-in-out infinite;
-      pointer-events: none;
-    }
-    
-    @keyframes headerShine {
-      0% { transform: translateX(-100%) translateY(-100%) rotate(45deg); }
-      100% { transform: translateX(100%) translateY(100%) rotate(45deg); }
-    }
-    
-    .header h1 { 
-      font-size: 2.5em;
-      font-weight: 700;
-      background: linear-gradient(135deg, #2196F3 0%, #21CBF3 50%, #4CAF50 100%);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      margin-bottom: 10px;
-      position: relative;
-      z-index: 1;
-    }
-    
-    .header .subtitle {
-      font-size: 0.95em;
-      color: var(--text-secondary);
-      position: relative;
-      z-index: 1;
-    }
-    
-    /* ============================================================================
-       Navigation
-       ============================================================================ */
-    
-    .nav {
-      display: flex;
-      justify-content: center;
-      background: var(--bg-card);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      padding: 8px;
-      border-radius: 16px;
-      margin-bottom: 30px;
-      overflow-x: auto;
-      gap: 8px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      scrollbar-width: none;
-      -ms-overflow-style: none;
-    }
-    
-    .nav::-webkit-scrollbar { display: none; }
-    
-    .nav button {
-      background: transparent;
-      border: none;
-      color: var(--text-secondary);
-      font-size: 0.9em;
-      padding: 12px 20px;
-      cursor: pointer;
-      transition: var(--transition);
-      white-space: nowrap;
-      border-radius: 12px;
-      font-weight: 500;
-      position: relative;
-    }
-    
-    /* Accessibility: Focus State */
-    .nav button:focus {
-      outline: 2px solid var(--primary-color);
-      outline-offset: 2px;
-    }
-    
-    .nav button::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      border-radius: 12px;
-      background: linear-gradient(135deg, var(--primary-color), #21CBF3);
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    
-    .nav button span {
-      position: relative;
-      z-index: 1;
-    }
-    
-    .nav button:hover:not(:disabled) {
-      color: var(--primary-color);
-      transform: translateY(-2px);
-    }
-    
-    .nav button.active {
-      color: white;
-      background: rgba(33, 150, 243, 0.2);
-    }
-    
-    .nav button.active::before {
-      opacity: 0.15;
-    }
-    
-    .nav button:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    
-    /* ============================================================================
-       Cards
-       ============================================================================ */
-    
-    .card {
-      background: var(--bg-card);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      border-radius: 20px;
-      padding: 30px;
-      margin-bottom: 25px;
-      border: 1px solid var(--border-color);
-      box-shadow: var(--shadow);
-      transition: transform 0.3s, box-shadow 0.3s;
-    }
-    
-    .card:hover {
-      transform: translateY(-4px);
-      box-shadow: 0 12px 48px rgba(0, 0, 0, 0.4);
-    }
-    
-    .card h2 { 
-      font-size: 1.4em;
-      margin-bottom: 20px;
-      background: linear-gradient(135deg, var(--primary-color), #21CBF3);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      font-weight: 600;
-    }
-    
-    /* ============================================================================
-       Status Grid
-       ============================================================================ */
-    
-    .status-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(140px, 1fr));
-      gap: 15px;
-      margin-bottom: 25px;
-    }
-    
-    .status-item {
-      background: rgba(255, 255, 255, 0.04);
-      padding: 20px 16px;
-      border-radius: 16px;
-      text-align: center;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      transition: var(--transition);
-      position: relative;
-      overflow: hidden;
-    }
-    
-    .status-item::before {
-      content: '';
-      position: absolute;
-      top: 0;
-      left: -100%;
-      width: 100%;
-      height: 100%;
-      background: linear-gradient(90deg, transparent, rgba(255,255,255,0.05), transparent);
-      transition: left 0.5s;
-    }
-    
-    .status-item:hover::before {
-      left: 100%;
-    }
-    
-    .status-item:hover {
-      background: rgba(255, 255, 255, 0.06);
-      transform: translateY(-2px);
-    }
-    
-    .status-label { 
-      font-size: 0.75em;
-      color: var(--text-secondary);
-      text-transform: uppercase;
-      letter-spacing: 1px;
-      font-weight: 600;
-    }
-    
-    .status-value { 
-      font-size: 1.6em;
-      font-weight: 700;
-      margin-top: 8px;
-      transition: var(--transition);
-    }
-    
-    .status-value.commissioned { 
-      color: var(--success-color);
-      text-shadow: 0 0 20px rgba(76, 175, 80, 0.5);
-    }
-    
-    .status-value.not-commissioned { 
-      color: var(--warning-color);
-      text-shadow: 0 0 20px rgba(255, 152, 0, 0.5);
-    }
-    
-    /* ============================================================================
-       Buttons
-       ============================================================================ */
-    
-    .btn-grid {
-      display: grid;
-      grid-template-columns: repeat(auto-fit, minmax(120px, 1fr));
-      gap: 15px;
-      margin-top: 25px;
-    }
-    
-    .btn {
-      background: linear-gradient(135deg, rgba(76, 175, 80, 0.2), rgba(56, 142, 60, 0.3));
-      color: white;
-      border: 1px solid rgba(76, 175, 80, 0.3);
-      padding: 18px 12px;
-      font-size: 1em;
-      border-radius: 14px;
-      cursor: pointer;
-      transition: var(--transition);
-      display: flex;
-      align-items: center;
-      justify-content: center;
-      gap: 8px;
-      font-weight: 600;
-      position: relative;
-      overflow: hidden;
-    }
-    
-    /* Accessibility: Focus State */
-    .btn:focus {
-      outline: 2px solid var(--primary-color);
-      outline-offset: 2px;
-    }
-    
-    .btn::before {
-      content: '';
-      position: absolute;
-      inset: 0;
-      background: linear-gradient(135deg, #4CAF50, #66BB6A);
-      opacity: 0;
-      transition: opacity 0.3s;
-    }
-    
-    .btn span {
-      position: relative;
-      z-index: 1;
-    }
-    
-    .btn:hover:not(:disabled) {
-      transform: translateY(-3px) scale(1.02);
-      box-shadow: 0 8px 24px rgba(76, 175, 80, 0.4);
-      border-color: #4CAF50;
-    }
-    
-    .btn:hover:not(:disabled)::before {
-      opacity: 0.3;
-    }
-    
-    .btn:active:not(:disabled) {
-      transform: translateY(-1px) scale(0.98);
-    }
-    
-    .btn:disabled {
-      background: rgba(255, 255, 255, 0.05);
-      border-color: rgba(255, 255, 255, 0.1);
-      cursor: not-allowed;
-      opacity: 0.4;
-      transform: none;
-    }
-    
-    .btn.stop, .btn.danger { 
-      background: linear-gradient(135deg, rgba(244, 67, 54, 0.2), rgba(211, 47, 47, 0.3));
-      border-color: rgba(244, 67, 54, 0.3);
-    }
-    
-    .btn.stop:hover:not(:disabled), .btn.danger:hover:not(:disabled) {
-      box-shadow: 0 8px 24px rgba(244, 67, 54, 0.4);
-      border-color: #f44336;
-    }
-    
-    .btn.stop::before, .btn.danger::before {
-      background: linear-gradient(135deg, #f44336, #e57373);
-    }
-    
-    .btn.secondary { 
-      background: linear-gradient(135deg, rgba(96, 125, 139, 0.2), rgba(69, 90, 100, 0.3));
-      border-color: rgba(96, 125, 139, 0.3);
-    }
-    
-    .btn.secondary:hover:not(:disabled) {
-      box-shadow: 0 8px 24px rgba(96, 125, 139, 0.4);
-      border-color: #607D8B;
-    }
-    
-    .btn.secondary::before {
-      background: linear-gradient(135deg, #607D8B, #78909C);
-    }
-    
-    .btn.primary { 
-      background: linear-gradient(135deg, rgba(33, 150, 243, 0.2), rgba(25, 118, 210, 0.3));
-      border-color: rgba(33, 150, 243, 0.3);
-    }
-    
-    .btn.primary:hover:not(:disabled) {
-      box-shadow: 0 8px 24px rgba(33, 150, 243, 0.4);
-      border-color: #2196F3;
-    }
-    
-    .btn.primary::before {
-      background: linear-gradient(135deg, #2196F3, #42A5F5);
-    }
-    
-    /* ============================================================================
-       Direction Selector
-       ============================================================================ */
-    
-    .direction-btn {
-      padding: 20px;
-      font-size: 1em;
-      text-align: center;
-      border-radius: 14px;
-      cursor: pointer;
-      transition: var(--transition);
-      border: 2px solid rgba(255, 255, 255, 0.1);
-      background: rgba(255, 255, 255, 0.03);
-    }
-    
-    .direction-btn:focus {
-      outline: 2px solid var(--primary-color);
-      outline-offset: 2px;
-    }
-    
-    .direction-btn.active { 
-      border-color: var(--success-color);
-      background: rgba(76, 175, 80, 0.15);
-      box-shadow: 0 0 30px rgba(76, 175, 80, 0.3);
-    }
-    
-    .direction-btn:hover:not(.active) { 
-      background: rgba(255, 255, 255, 0.06);
-      transform: translateY(-2px);
-    }
-    
-    /* ============================================================================
-       Info Table
-       ============================================================================ */
-    
-    .info-table {
-      width: 100%;
-      border-collapse: collapse;
-      font-size: 0.95em;
-    }
-    
-    .info-table tr { 
-      border-bottom: 1px solid rgba(255, 255, 255, 0.05);
-      transition: background 0.3s;
-    }
-    
-    .info-table tr:hover {
-      background: rgba(255, 255, 255, 0.02);
-    }
-    
-    .info-table td { padding: 14px 8px; }
-    .info-table td:first-child { 
-      font-weight: 600;
-      color: #aaa;
-      width: 45%;
-    }
-    .info-table td:last-child { 
-      text-align: right;
-      color: #e0e0e0;
-      font-family: 'Courier New', monospace;
-    }
-    
-    .hidden { display: none !important; }
-    
-    /* ============================================================================
-       Modal Design
-       ============================================================================ */
-    
-    .modal {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.85);
-      backdrop-filter: blur(10px);
-      -webkit-backdrop-filter: blur(10px);
-      align-items: center;
-      justify-content: center;
-      z-index: 1000;
-      padding: 20px;
-      overflow-y: auto;
-      animation: modalFadeIn 0.3s;
-    }
-    
-    @keyframes modalFadeIn {
-      from { opacity: 0; }
-      to { opacity: 1; }
-    }
-    
-    .modal:not(.hidden) { display: flex; }
-    
-    .modal-box {
-      background: rgba(20, 20, 20, 0.95);
-      backdrop-filter: blur(20px);
-      -webkit-backdrop-filter: blur(20px);
-      padding: 35px;
-      border-radius: 24px;
-      max-width: 500px;
-      width: 100%;
-      max-height: 90vh;
-      overflow-y: auto;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      box-shadow: 0 20px 60px rgba(0, 0, 0, 0.5);
-      animation: modalSlideUp 0.3s cubic-bezier(0.4, 0, 0.2, 1);
-    }
-    
-    @keyframes modalSlideUp {
-      from { 
-        opacity: 0;
-        transform: translateY(30px);
-      }
-      to {
-        opacity: 1;
-        transform: translateY(0);
-      }
-    }
-    
-    .modal-box h3 { 
-      margin-bottom: 25px;
-      background: linear-gradient(135deg, var(--primary-color), #21CBF3);
-      -webkit-background-clip: text;
-      -webkit-text-fill-color: transparent;
-      background-clip: text;
-      font-size: 1.6em;
-      font-weight: 600;
-    }
-    
-    .modal-buttons {
-      display: flex;
-      gap: 15px;
-      justify-content: center;
-      margin-top: 25px;
-      flex-wrap: wrap;
-    }
-    
-    .modal-btn {
-      padding: 14px 28px;
-      border: none;
-      border-radius: 12px;
-      cursor: pointer;
-      font-size: 1em;
-      font-weight: 600;
-      transition: var(--transition);
-    }
-    
-    .modal-btn:focus {
-      outline: 2px solid var(--primary-color);
-      outline-offset: 2px;
-    }
-    
-    .modal-btn-primary { 
-      background: linear-gradient(135deg, var(--primary-color), #1976D2);
-      color: white;
-    }
-    
-    .modal-btn-primary:hover:not(:disabled) { 
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(33, 150, 243, 0.4);
-    }
-    
-    .modal-btn-primary:disabled {
-      opacity: 0.4;
-      cursor: not-allowed;
-    }
-    
-    .modal-btn-secondary { 
-      background: rgba(255, 255, 255, 0.1);
-      color: white;
-      border: 1px solid rgba(255, 255, 255, 0.2);
-    }
-    
-    .modal-btn-secondary:hover { 
-      background: rgba(255, 255, 255, 0.15);
-    }
-    
-    .modal-btn-danger { 
-      background: linear-gradient(135deg, var(--error-color), #d32f2f);
-      color: white;
-    }
-    
-    .modal-btn-danger:hover { 
-      transform: translateY(-2px);
-      box-shadow: 0 6px 20px rgba(244, 67, 54, 0.4);
-    }
-    
-    /* ============================================================================
-       QR Code Styling
-       ============================================================================ */
-    
-    .qr-container {
-      text-align: center;
-      margin: 25px 0;
-      padding: 25px;
-      background: rgba(255, 255, 255, 0.05);
-      border-radius: 16px;
-      border: 1px solid rgba(255, 255, 255, 0.1);
-    }
-    
-    .qr-code {
-      max-width: 300px;
-      width: 100%;
-      height: auto;
-      margin: 0 auto;
-      display: block;
-      background: white;
-      padding: 15px;
-      border-radius: 16px;
-      box-shadow: 0 8px 32px rgba(0, 0, 0, 0.3);
-    }
-    
-    .pairing-code {
-      font-family: 'Courier New', monospace;
-      font-size: 1.4em;
-      color: var(--success-color);
-      margin: 20px 0;
-      padding: 18px;
-      background: rgba(76, 175, 80, 0.1);
-      border-radius: 12px;
-      letter-spacing: 3px;
-      border: 1px solid rgba(76, 175, 80, 0.3);
-    }
-    
-    /* ============================================================================
-       Alert Styles
-       ============================================================================ */
-    
-    .alert {
-      padding: 18px;
-      border-radius: 12px;
-      margin: 20px 0;
-      background: rgba(255, 255, 255, 0.05);
-      border-left: 4px solid var(--primary-color);
-      line-height: 1.6;
-    }
-    
-    .alert.warning { border-left-color: var(--warning-color); }
-    .alert.error { border-left-color: var(--error-color); }
-    .alert.success { border-left-color: var(--success-color); }
-    
-    .badge {
-      display: inline-block;
-      padding: 6px 12px;
-      border-radius: 8px;
-      font-size: 0.7em;
-      font-weight: 700;
-      margin-left: 10px;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    
-    .badge.commissioned { 
-      background: linear-gradient(135deg, var(--success-color), #66BB6A);
-      color: white;
-      box-shadow: 0 0 20px rgba(76, 175, 80, 0.4);
-    }
-    
-    .badge.not-commissioned { 
-      background: linear-gradient(135deg, var(--warning-color), #FFA726);
-      color: white;
-      box-shadow: 0 0 20px rgba(255, 152, 0, 0.4);
-    }
-    
-    /* ============================================================================
-       BLE Device List
-       ============================================================================ */
-    
-    .device-list {
-      list-style: none;
-      padding: 0;
-      max-height: 400px;
-      overflow-y: auto;
-    }
-    
-    .device-item {
-      background: rgba(255, 255, 255, 0.04);
-      padding: 18px;
-      border-radius: 14px;
-      margin-bottom: 12px;
-      display: flex;
-      justify-content: space-between;
-      align-items: center;
-      gap: 15px;
-      border: 1px solid rgba(255, 255, 255, 0.05);
-      transition: var(--transition);
-    }
-    
-    .device-item:hover {
-      background: rgba(255, 255, 255, 0.06);
-      transform: translateX(5px);
-    }
-    
-    .device-info {
-      flex: 1;
-      min-width: 0;
-    }
-    
-    .device-name {
-      font-weight: 700;
-      font-size: 1.1em;
-      margin-bottom: 6px;
-    }
-    
-    .device-details {
-      font-size: 0.85em;
-      color: var(--text-secondary);
-      margin-top: 6px;
-    }
-    
-    .device-actions {
-      display: flex;
-      gap: 10px;
-      flex-shrink: 0;
-    }
-    
-    .signal-strength {
-      display: inline-block;
-      padding: 3px 10px;
-      border-radius: 6px;
-      font-size: 0.75em;
-      font-weight: 700;
-    }
-    
-    .signal-excellent { background: var(--success-color); color: white; }
-    .signal-good { background: #8BC34A; color: white; }
-    .signal-fair { background: var(--warning-color); color: white; }
-    .signal-poor { background: var(--error-color); color: white; }
-    
-    /* ============================================================================
-       Input Groups
-       ============================================================================ */
-    
-    .input-group {
-      margin: 20px 0;
-    }
-    
-    .input-group label {
-      display: block;
-      margin-bottom: 10px;
-      color: #aaa;
-      font-size: 0.9em;
-      font-weight: 600;
-      text-transform: uppercase;
-      letter-spacing: 0.5px;
-    }
-    
-    .input-group input {
-      width: 100%;
-      padding: 14px;
-      background: rgba(255, 255, 255, 0.05);
-      border: 1px solid rgba(255, 255, 255, 0.1);
-      border-radius: 12px;
-      color: #e0e0e0;
-      font-size: 1em;
-      transition: var(--transition);
-    }
-    
-    .input-group input:focus {
-      outline: none;
-      border-color: var(--primary-color);
-      box-shadow: 0 0 0 3px rgba(33, 150, 243, 0.1);
-      background: rgba(255, 255, 255, 0.08);
-    }
-    
-    .input-group input:disabled {
-      opacity: 0.5;
-      cursor: not-allowed;
-    }
-    
-    /* ============================================================================
-       Spinner
-       ============================================================================ */
-    
-    .spinner {
-      display: inline-block;
-      width: 20px;
-      height: 20px;
-      border: 3px solid rgba(255, 255, 255, 0.2);
-      border-top-color: var(--primary-color);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    
-    @keyframes spin {
-      to { transform: rotate(360deg); }
-    }
-    
-    /* ============================================================================
-       Scrollbar Styling
-       ============================================================================ */
-    
-    ::-webkit-scrollbar {
-      width: 8px;
-      height: 8px;
-    }
-    
-    ::-webkit-scrollbar-track {
-      background: rgba(255, 255, 255, 0.02);
-    }
-    
-    ::-webkit-scrollbar-thumb {
-      background: rgba(255, 255, 255, 0.1);
-      border-radius: 4px;
-    }
-    
-    ::-webkit-scrollbar-thumb:hover {
-      background: rgba(255, 255, 255, 0.2);
-    }
-    
-    /* Firefox Scrollbar */
-    * {
-      scrollbar-width: thin;
-      scrollbar-color: rgba(255, 255, 255, 0.1) rgba(255, 255, 255, 0.02);
-    }
-    
-    /* ============================================================================
-       Responsive Design
-       ============================================================================ */
-    
-    @media (max-width: 768px) {
-      .header h1 { font-size: 2em; }
-      .status-grid { grid-template-columns: 1fr 1fr; }
-      .btn-grid { grid-template-columns: 1fr; }
-      .nav { justify-content: flex-start; }
-      .modal-box { padding: 25px; }
-      .device-item { flex-direction: column; align-items: flex-start; }
-      .device-actions { width: 100%; justify-content: stretch; }
-      .device-actions .btn { flex: 1; }
-    }
-    
-    @media (max-width: 480px) {
-      .container { padding: 15px; }
-      .header { padding: 30px 20px; }
-      .card { padding: 20px; }
-      .status-grid { grid-template-columns: 1fr; }
-    }
-    
-    /* ============================================================================
-       Loading State
-       ============================================================================ */
-    
-    .loading-overlay {
-      position: fixed;
-      top: 0;
-      left: 0;
-      width: 100%;
-      height: 100%;
-      background: rgba(0, 0, 0, 0.9);
-      display: flex;
-      flex-direction: column;
-      align-items: center;
-      justify-content: center;
-      z-index: 10000;
-      opacity: 0;
-      pointer-events: none;
-      transition: opacity 0.3s;
-    }
-    
-    .loading-overlay.show {
-      opacity: 1;
-      pointer-events: all;
-    }
-    
-    .loading-spinner {
-      width: 60px;
-      height: 60px;
-      border: 4px solid rgba(255, 255, 255, 0.1);
-      border-top-color: var(--primary-color);
-      border-radius: 50%;
-      animation: spin 1s linear infinite;
-    }
-    
-    .loading-text {
-      margin-top: 20px;
-      font-size: 1.1em;
-      color: var(--text-primary);
-    }
-  </style>
-</head>
-<body>
-  <!-- ============================================================================
-       Error Banner (Global)
-       ============================================================================ -->
-  
-  <div id="error-banner" class="error-banner">
-    <div class="error-banner-icon">⚠️</div>
-    <div class="error-banner-content">
-      <div class="error-banner-title" id="error-banner-title">Error</div>
-      <div class="error-banner-message" id="error-banner-message">Something went wrong</div>
-    </div>
-    <button class="error-banner-close" onclick="hideErrorBanner()" aria-label="Close error message">×</button>
-  </div>
-
-  <!-- ============================================================================
-       Loading Overlay
-       ============================================================================ -->
-  
-  <div id="loading-overlay" class="loading-overlay">
-    <div class="loading-spinner"></div>
-    <div class="loading-text" id="loading-text">Loading...</div>
-  </div>
-
-  <!-- ============================================================================
-       Main Container
-       ============================================================================ -->
-  
-  <div class="container">
-    <div class="header">
-      <h1>🎚️ BeltWinder Matter</h1>
-      <div class="subtitle">Smart Shutter Control System</div>
-    </div>
-
-    <!-- ============================================================================
-         Navigation
-         ============================================================================ -->
-    
-    <nav class="nav" role="navigation" aria-label="Main navigation">
-      <button onclick="show('overview')" class="active" id="nav-overview" aria-label="Overview tab">
-        <span>📊 Overview</span>
-      </button>
-      <button onclick="show('matter')" id="nav-matter" aria-label="Matter settings tab">
-        <span>🔗 Matter</span>
-      </button>
-      <button onclick="show('ble')" id="nav-ble" aria-label="BLE sensor tab">
-        <span>📡 BLE Sensor</span>
-      </button>
-      <button onclick="show('system')" id="nav-system" aria-label="System information tab">
-        <span>💻 System</span>
-      </button>
-      <button onclick="show('settings')" id="nav-settings" aria-label="Settings tab">
-        <span>⚙️ Settings</span>
-      </button>
-    </nav>
-
-    <!-- ============================================================================
-         Overview Tab
-         ============================================================================ -->
-    
-    <div id="overview" role="tabpanel" aria-labelledby="nav-overview">
-      <div class="card">
-        <h2>Status</h2>
-        <div class="status-grid">
-          <div class="status-item">
-            <div class="status-label">Position</div>
-            <div class="status-value" id="pos" aria-live="polite">0%</div>
-          </div>
-          <div class="status-item">
-            <div class="status-label">Calibrated</div>
-            <div class="status-value" id="calib" aria-live="polite">No</div>
-          </div>
-          <div class="status-item">
-            <div class="status-label">Direction</div>
-            <div class="status-value" id="inv" aria-live="polite">Normal</div>
-          </div>
-          <div class="status-item">
-            <div class="status-label">Matter Status</div>
-            <div class="status-value" id="matter-status" aria-live="polite">Checking...</div>
-          </div>
-        </div>
-        <div class="btn-grid">
-          <button class="btn" onclick="send('up')" aria-label="Move shutter up">
-            <span>⬆ UP</span>
-          </button>
-          <button class="btn" onclick="send('down')" aria-label="Move shutter down">
-            <span>⬇ DOWN</span>
-          </button>
-          <button class="btn stop" onclick="send('stop')" aria-label="Stop shutter movement">
-            <span>⏹ STOP</span>
-          </button>
-        </div>
-      </div>
-    </div>
-
-    <!-- ============================================================================
-         Matter Tab
-         ============================================================================ -->
-    
-    <div id="matter" class="hidden" role="tabpanel" aria-labelledby="nav-matter">
-      <div class="card">
-        <h2>Matter Pairing Information</h2>
-        <div id="matter-status-detail" aria-live="polite"></div>
-        <div id="matter-pairing-info"></div>
-      </div>
-    </div>
-
-    <!-- ============================================================================
-         BLE Sensor Tab
-         ============================================================================ -->
-    
-    <div id="ble" class="hidden" role="tabpanel" aria-labelledby="nav-ble">
-      <div class="card">
-        <h2>BLE Window Sensor</h2>
-        
-        <!-- Current Sensor Status -->
-        <div id="ble-sensor-status" class="hidden">
-          <h3 style="margin-top:0;color:#888">Current Sensor</h3>
-          
-          <!-- State Indicator (dynamically inserted) -->
-          
-          <div class="status-grid" style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); margin-bottom: 15px;">
-            <div class="status-item">
-              <div class="status-label">Contact</div>
-              <div class="status-value" id="ble-contact" aria-live="polite">Unknown</div>
-            </div>
-            <div class="status-item">
-              <div class="status-label">Battery</div>
-              <div class="status-value" id="ble-battery" aria-live="polite">--%</div>
-            </div>
-            <div class="status-item">
-              <div class="status-label">Signal</div>
-              <div class="status-value" id="ble-rssi" aria-live="polite">-- dBm</div>
-            </div>
-          </div>
-          
-          <div class="status-grid" style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); margin-bottom: 20px;">
-            <div class="status-item">
-              <div class="status-label">Brightness</div>
-              <div class="status-value" id="ble-lux" aria-live="polite">-- lux</div>
-            </div>
-            <div class="status-item">
-              <div class="status-label">Rotation</div>
-              <div class="status-value" id="ble-rotation" aria-live="polite">--°</div>
-            </div>
-            <div class="status-item">
-              <div class="status-label">Last Update</div>
-              <div class="status-value" id="ble-last-update" aria-live="polite">Never</div>
-            </div>
-          </div>
-
-          <div class="status-grid" style="grid-template-columns: repeat(auto-fit, minmax(120px, 1fr)); margin-bottom: 15px;">
-            <div class="status-item">
-              <div class="status-label">Packet ID</div>
-              <div class="status-value" id="ble-packet-id" aria-live="polite">--</div>
-            </div>
-            <div class="status-item" id="ble-button-container" style="display:none">
-              <div class="status-label">Button Event</div>
-              <div class="status-value" id="ble-button-event" aria-live="polite">None</div>
-            </div>
-          </div>
-
-          <div id="ble-continuous-scan-control" style="margin-top:25px">
-          <h3 style="margin:0 0 15px 0;color:#888;font-size:1.1em;font-weight:600">
-            📡 Continuous Scan Control
-          </h3>
-          
-          <div style="background:rgba(255,255,255,0.04);padding:18px;border-radius:14px;border:1px solid rgba(255,255,255,0.08)">
-            <div style="display:flex;align-items:center;justify-content:space-between;gap:15px;flex-wrap:wrap">
-              <div style="flex:1;min-width:200px">
-                <div style="font-weight:600;font-size:1.05em;margin-bottom:5px">
-                  Scan Status: <span id="continuous-scan-status" style="color:#888">Checking...</span>
-                </div>
-                <div style="font-size:0.85em;color:#666">
-                  Monitors device for door open/close events
-                </div>
-              </div>
-              
-              <div style="display:flex;gap:10px">
-                <button class="btn primary" id="start-continuous-scan-btn" 
-                        onclick="startContinuousScanManual()" 
-                        style="padding:12px 20px;display:none">
-                  <span>▶️ Start Scan</span>
-                </button>
-                
-                <button class="btn danger" id="stop-continuous-scan-btn" 
-                        onclick="stopContinuousScanManual()" 
-                        style="padding:12px 20px;display:none">
-                  <span>⏹️ Stop Scan</span>
-                </button>
-              </div>
-            </div>
-          </div>
-          
-          <div class="alert" style="margin-top:15px">
-            <strong>ℹ️ About Continuous Scan</strong>
-            <p style="margin-top:8px;line-height:1.6">
-              • Auto-starts after pairing and device reboot<br>
-              • Listens for door open/close events (event-driven)<br>
-              • No battery drain on sensor (passive listening)<br>
-              • Can be manually stopped/started anytime
-            </p>
-          </div>
-        </div>
-          
-          <div style="background:rgba(255,255,255,0.04);padding:18px;border-radius:14px;margin-bottom:15px;border:1px solid rgba(255,255,255,0.08)">
-            <div style="display:flex;justify-content:space-between;align-items:center;flex-wrap:wrap;gap:15px">
-              <div style="flex:1;min-width:200px">
-                <div style="font-weight:bold;font-size:1.1em" id="ble-device-name">Unknown Device</div>
-                <div style="color:#888;font-size:0.9em;margin-top:5px" id="ble-device-address">--:--:--:--:--:--</div>
-              </div>
-              <button class="btn danger" onclick="unpairBLE()" style="padding:12px 24px" aria-label="Unpair BLE device">
-                <span>🔓 Unpair</span>
-              </button>
-            </div>
-          </div>
-        </div>
-
-          <!-- Security Info Block -->
-          <div id="ble-security-info" style="background:rgba(76,175,80,0.1);padding:18px;border-radius:14px;margin-top:20px;border:1px solid rgba(76,175,80,0.3);display:none">
-            <h3 style="margin:0 0 15px 0;color:#4CAF50;font-size:1.1em;font-weight:600">🔐 Security Information</h3>
-            
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px">
-              <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:10px">
-                <div style="font-size:0.8em;color:#888;margin-bottom:5px">Passkey</div>
-                <div id="ble-passkey" style="font-family:'Courier New',monospace;font-size:1.2em;font-weight:bold;color:#4CAF50">------</div>
-              </div>
-              
-              <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:10px">
-                <div style="font-size:0.8em;color:#888;margin-bottom:5px">Encryption</div>
-                <div id="ble-encryption-status" style="font-size:1.1em;font-weight:bold">Checking...</div>
-              </div>
-            </div>
-            
-            <div style="background:rgba(255,255,255,0.05);padding:12px;border-radius:10px;margin-top:15px">
-              <div style="font-size:0.8em;color:#888;margin-bottom:5px">Bindkey (32 hex characters)</div>
-              <div id="ble-bindkey" style="font-family:'Courier New',monospace;font-size:0.9em;word-break:break-all;color:#e0e0e0">Not available</div>
-            </div>
-            
-            <div style="margin-top:15px;padding:12px;background:rgba(255,152,0,0.1);border-radius:10px;border:1px solid rgba(255,152,0,0.3)">
-              <div style="font-size:0.85em;color:#FF9800">
-                <strong>⚠️ Important:</strong> Save these credentials in a secure location! You'll need them for re-pairing after factory reset.
-              </div>
-            </div>
-          </div>
-
-        <!-- Matter Integration Toggle -->
-        <div id="ble-matter-toggle" class="hidden" style="margin-top:25px">
-          <div class="card">
-            <h3 style="margin-top:0;color:#888;font-size:1.1em">Matter Integration</h3>
-            
-            <div class="alert">
-              <strong>ℹ️ Contact Sensor for Matter</strong>
-              <p style="margin-top:10px;line-height:1.6">
-                When enabled, the BLE sensor's contact state, battery, and illuminance will be 
-                exposed as a Matter Contact Sensor endpoint. This allows control via 
-                Apple Home, Google Home, Alexa, etc.
-              </p>
-              <p style="margin-top:10px;color:#888">
-                <strong>Note:</strong> The sensor will still control the shutter logic 
-                regardless of this setting.
-              </p>
-            </div>
-            
-            <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-top:20px">
-              <div class="direction-btn" id="matter-toggle-off" onclick="setContactSensorMatter(false)" 
-                   tabindex="0" role="button" aria-pressed="false" aria-label="Disable Matter integration">
-                <div style="font-size:2em;margin-bottom:8px">❌</div>
-                <div style="font-weight:bold;font-size:1.1em">Matter OFF</div>
-                <div style="font-size:0.85em;color:#888;margin-top:5px">Only for shutter control</div>
-              </div>
-              <div class="direction-btn" id="matter-toggle-on" onclick="setContactSensorMatter(true)" 
-                   tabindex="0" role="button" aria-pressed="false" aria-label="Enable Matter integration">
-                <div style="font-size:2em;margin-bottom:8px">✅</div>
-                <div style="font-weight:bold;font-size:1.1em">Matter ON</div>
-                <div style="font-size:0.85em;color:#888;margin-top:5px">Expose to Matter ecosystem</div>
-              </div>
-            </div>
-            
-            <div id="matter-toggle-status" style="margin-top:20px;padding:15px;background:rgba(255,255,255,0.04);border-radius:12px;text-align:center">
-              <div style="font-size:0.9em;color:#888">Status</div>
-              <div id="matter-toggle-status-text" style="font-size:1.2em;font-weight:bold;margin-top:5px" aria-live="polite">
-                Loading...
-              </div>
-            </div>
-          </div>
-        </div>
-        
-        <!-- Scan Interface -->
-        <div id="ble-scan-interface">
-          <p style="color:#888;margin-bottom:20px;line-height:1.8">
-            Search for nearby Shelly BLU Door/Window sensors to integrate window state detection with your smart shutter.
-          </p>
-          
-          <button class="btn primary" id="ble-scan-btn" onclick="startBLEScan()" style="width:100%;margin-bottom:25px" aria-label="Start BLE scan">
-            <span>🔍 Start Scan</span>
-          </button>
-          
-          <h3 style="margin-top:30px;color:#888;font-size:1.1em;font-weight:600">Discovered Devices</h3>
-          <ul class="device-list" id="ble-discovered-devices" role="list">
-            <li style="text-align:center;color:#666;padding:40px 20px">
-              <div style="font-size:3em;margin-bottom:10px;opacity:0.3">📡</div>
-              <div>No scan performed yet</div>
-            </li>
-          </ul>
-        </div>
-      </div>
-    </div>
-
-    <!-- ============================================================================
-         System Tab
-         ============================================================================ -->
-    
-    <div id="system" class="hidden" role="tabpanel" aria-labelledby="nav-system">
-      <div class="card">
-        <h2>System Information</h2>
-        <table class="info-table" id="sysinfo" role="table">
-          <tbody></tbody>
-        </table>
-      </div>
-    </div>
-
-    <!-- ============================================================================
-         Settings Tab
-         ============================================================================ -->
-    
-    <div id="settings" class="hidden" role="tabpanel" aria-labelledby="nav-settings">
-      <div class="card">
-        <h2>Calibration</h2>
-        <p style="color:#888;margin-bottom:20px;line-height:1.8">
-          Calibrate the shutter to learn its full travel range. The system will automatically move the shutter up and down to determine minimum and maximum positions.
-        </p>
-        <button class="btn primary" onclick="send('calibrate')" style="width:100%" aria-label="Start calibration">
-          <span>🎯 START CALIBRATION</span>
-        </button>
-      </div>
-
-      <div class="card">
-        <h2>Direction Control</h2>
-        <p style="color:#888;margin-bottom:20px;line-height:1.8">
-          Change motor direction if UP/DOWN controls are reversed. This swaps the polarity without rewiring.
-        </p>
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px">
-          <div class="direction-btn" id="dir-normal" onclick="setDirection(false)" 
-               tabindex="0" role="button" aria-pressed="false" aria-label="Set direction to normal">
-            <div style="font-size:2em;margin-bottom:8px">✅</div>
-            <div style="font-weight:bold;font-size:1.1em">Normal</div>
-            <div style="font-size:0.85em;color:#888;margin-top:5px">Standard direction</div>
-          </div>
-          <div class="direction-btn" id="dir-inverted" onclick="setDirection(true)" 
-               tabindex="0" role="button" aria-pressed="false" aria-label="Set direction to inverted">
-            <div style="font-size:2em;margin-bottom:8px">🔄</div>
-            <div style="font-weight:bold;font-size:1.1em">Inverted</div>
-            <div style="font-size:0.85em;color:#888;margin-top:5px">Reversed direction</div>
-          </div>
-        </div>
-      </div>
-
-      <div class="card">
-        <h2>Factory Reset</h2>
-        <p style="color:#888;margin-bottom:20px;line-height:1.8">
-          ⚠️ This will remove the device from Matter network and erase all settings including calibration data. This action cannot be undone.
-        </p>
-        <button class="btn danger" onclick="showConfirm()" style="width:100%" aria-label="Factory reset device">
-          <span>🗑️ FACTORY RESET</span>
-        </button>
-      </div>
-    </div>
-    
-  </div>
-
-  <!-- ============================================================================
-       Factory Reset Confirmation Modal
-       ============================================================================ -->
-  
-  <div id="confirm-reset" class="modal hidden" role="dialog" aria-labelledby="reset-modal-title" aria-modal="true">
-    <div class="modal-box">
-      <h3 id="reset-modal-title">⚠️ Confirm Factory Reset</h3>
-      <p style="margin:20px 0;font-size:1.05em;line-height:1.6">
-        This will permanently delete all device data and settings:
-      </p>
-      <ul style="margin:15px 0 15px 25px;color:#888;line-height:1.8">
-        <li>Remove device from Matter network</li>
-        <li>Erase all calibration data</li>
-        <li>Reset direction settings to defaults</li>
-        <li>Clear BLE sensor pairing</li>
-      </ul>
-      <div class="alert error" style="margin:20px 0">
-        <strong>⚠️ Warning:</strong> This action cannot be undone! You will need to re-pair the device with your Matter controller.
-      </div>
-      <div class="modal-buttons">
-        <button class="modal-btn modal-btn-secondary" onclick="hideConfirm()" aria-label="Cancel factory reset">Cancel</button>
-        <button class="modal-btn modal-btn-danger" onclick="confirmReset()" aria-label="Confirm factory reset">Reset Device</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================================
-       Matter QR Code Modal
-       ============================================================================ -->
-  
-  <div id="matter-qr-modal" class="modal hidden" role="dialog" aria-labelledby="qr-modal-title" aria-modal="true">
-    <div class="modal-box">
-      <h3 id="qr-modal-title">🔗 Matter Pairing</h3>
-      <div class="alert success">
-        <strong>✓ Device is ready!</strong>
-        <p style="margin-top:8px">Scan the QR code below with your Matter-compatible controller (Apple Home, Google Home, Alexa, etc.)</p>
-      </div>
-      
-      <div class="qr-container">
-        <img class="qr-code" id="matter-qr-img" src="" alt="Matter pairing QR code">
-        <div style="margin-top:15px;color:#888;font-size:0.9em">Scan with your Matter controller app</div>
-        <a id="qr-web-link" href="" target="_blank" rel="noopener noreferrer"
-          style="display:inline-block;margin-top:15px;color:#2196F3;text-decoration:none;font-weight:600;transition:all .3s"
-          aria-label="Open QR code in CHIP Tool QR Generator">
-          🌐 Open in CHIP Tool QR Generator
-        </a>
-      </div>
-      
-      <div style="margin-top:25px">
-        <div style="color:#888;margin-bottom:12px;font-weight:600;font-size:0.9em;text-transform:uppercase;letter-spacing:1px">Manual Pairing Code:</div>
-        <div class="pairing-code" id="matter-pairing-code" aria-label="Manual pairing code">Loading...</div>
-        <div style="color:#666;font-size:0.85em;text-align:center;margin-top:10px">
-          Enter this code if your controller doesn't support QR scanning
-        </div>
-      </div>
-      
-      <div class="modal-buttons">
-        <button class="modal-btn modal-btn-secondary" onclick="closeMatterQR()" aria-label="Close pairing information">Close</button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================================
-     BLE ENCRYPTED DEVICE PAIRING MODAL (Already Encrypted + Bindkey Known)
-     ============================================================================ -->
-
-  <div id="ble-encrypted-known-modal" class="modal hidden" role="dialog" aria-labelledby="enc-known-modal-title" aria-modal="true">
-    <div class="modal-box">
-      <h3 id="enc-known-modal-title">🔐 Pair Already-Encrypted Device</h3>
-      
-      <div class="alert success">
-        <strong>✓ Device is Already Encrypted</strong>
-        <p style="margin-top:10px">
-          This device was previously encrypted (e.g., with the Shelly App).
-          To connect, you need BOTH the passkey AND the bindkey from the original pairing.
-        </p>
-      </div>
-      
-      <div class="input-group">
-        <label for="enc-known-device-name">Device Name</label>
-        <input type="text" id="enc-known-device-name" readonly aria-readonly="true">
-        </div>
-            <div class="input-group">
-        <label for="enc-known-device-address">MAC Address</label>
-        <input type="text" id="enc-known-device-address" readonly aria-readonly="true">
-      </div>
-      
-      <div class="input-group">
-        <label for="enc-known-passkey">Passkey (6 digits, Required)</label>
-        <input type="number" 
-              id="enc-known-passkey" 
-              placeholder="123456" 
-              min="0"
-              max="999999"
-              oninput="validateEncryptedKnownForm()"
-              aria-required="true"
-              aria-describedby="enc-known-passkey-help">
-        <div id="enc-known-passkey-help" style="font-size:0.85em;color:#888;margin-top:5px">
-          Enter the 6-digit passkey that was set during initial pairing
-        </div>
-      </div>
-      
-      <div class="input-group">
-        <label for="enc-known-bindkey">Bindkey (32 hex characters, Required)</label>
-        <input type="text" 
-              id="enc-known-bindkey" 
-              placeholder="a1b2c3d4e5f6..." 
-              maxlength="32"
-              oninput="validateEncryptedKnownForm()"
-              aria-required="true"
-              aria-describedby="enc-known-bindkey-help"
-              style="font-family:'Courier New',monospace">
-        <div id="enc-known-bindkey-help" style="font-size:0.85em;color:#888;margin-top:5px">
-          Enter the 32-character bindkey (0-9, a-f)
-        </div>
-      </div>
-      
-      <div class="alert warning">
-        <strong>📝 Where to find these values?</strong>
-        <ul style="margin:10px 0 0 20px;line-height:1.6">
-          <li>Passkey: Set by you during initial pairing (default: 123456)</li>
-          <li>Bindkey: Shown in Shelly App after encryption, or saved from previous ESP32 pairing</li>
-        </ul>
-      </div>
-      
-      <div class="alert">
-        <strong>🔒 Secure Bonding Process</strong>
-        <p style="margin-top:10px">
-          The ESP32 will:
-        </p>
-        <ol style="margin:8px 0 0 20px;line-height:1.6">
-          <li>Establish secure bonded connection</li>
-          <li>Store passkey and bindkey in NVS</li>
-          <li>Decrypt broadcasts automatically</li>
-          <li>Start continuous scan for sensor data</li>
-        </ol>
-        <p style="margin-top:10px;color:#888">
-          <strong>Note:</strong> NO button press needed - device is already encrypted
-        </p>
-      </div>
-      
-      <div class="modal-buttons">
-        <button class="modal-btn modal-btn-secondary" onclick="closeEncryptedKnownModal()">Cancel</button>
-        <button class="modal-btn modal-btn-primary" id="enc-known-confirm-btn" 
-                onclick="confirmEncryptedKnownPair()" disabled>
-          Pair Device
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================================
-     BLE SMART CONNECT MODAL (Bonding + Optional Encryption)
-     ============================================================================ -->
-
-  <div id="ble-connect-modal" class="modal hidden" role="dialog" aria-labelledby="connect-modal-title" aria-modal="true">
-    <div class="modal-box">
-      <h3 id="connect-modal-title">🔗 Connect Device</h3>
-      
-      <div class="input-group">
-        <label for="connect-device-name">Device Name</label>
-        <input type="text" id="connect-device-name" readonly aria-readonly="true">
-      </div>
-      
-      <div class="input-group">
-        <label for="connect-device-address">MAC Address</label>
-        <input type="text" id="connect-device-address" readonly aria-readonly="true">
-      </div>
-
-      <!-- ✅ NEU: Encryption Mode Selection -->
-      <div style="margin: 25px 0;">
-        <label style="display:block;margin-bottom:15px;font-weight:600;color:#888;text-transform:uppercase;font-size:0.9em;letter-spacing:1px">
-          Connection Mode
-        </label>
-        
-        <div style="display:grid;grid-template-columns:1fr 1fr;gap:15px;margin-bottom:20px">
-          <div class="direction-btn active" id="connect-mode-unencrypted" 
-              onclick="selectConnectMode('unencrypted')" 
-              tabindex="0" role="button" aria-pressed="true">
-            <div style="font-size:2em;margin-bottom:8px">🔓</div>
-            <div style="font-weight:bold">Unencrypted</div>
-            <div style="font-size:0.85em;color:#888;margin-top:5px">Connect only<br>(Enable encryption later)</div>
-          </div>
-          
-          <div class="direction-btn" id="connect-mode-encrypted" 
-              onclick="selectConnectMode('encrypted')" 
-              tabindex="0" role="button" aria-pressed="false">
-            <div style="font-size:2em;margin-bottom:8px">🔐</div>
-            <div style="font-weight:bold">Encrypted</div>
-            <div style="font-size:0.85em;color:#888;margin-top:5px">Set passkey now<br>(All-in-one)</div>
-          </div>
-        </div>
-      </div>
-
-      <!-- Passkey Eingabe (nur bei Encrypted Mode) -->
-      <div id="connect-passkey-section" style="display:none">
-        <div class="alert warning">
-          <strong>🔐 Direct Encryption</strong>
-          <p style="margin-top:10px">
-            Device will be bonded AND encrypted in one step.
-            Choose a 6-digit passkey to secure your device.
-          </p>
-        </div>
-        
-        <div class="input-group">
-          <label for="connect-passkey">Passkey (6 digits, 0-999999)</label>
-          <input type="number" 
-                id="connect-passkey" 
-                placeholder="123456" 
-                min="0" 
-                max="999999"
-                oninput="validateConnectPasskey()"
-                aria-required="true">
-        </div>
-        
-        <div class="input-group">
-          <label for="connect-passkey-confirm">Confirm Passkey</label>
-          <input type="number" 
-                id="connect-passkey-confirm" 
-                placeholder="123456" 
-                min="0" 
-                max="999999"
-                oninput="validateConnectPasskey()"
-                aria-required="true">
-        </div>
-      </div>
-
-      <!-- Button Press Instructions (nur bei Unencrypted) -->
-      <div id="connect-button-instructions">
-        <div class="alert error">
-          <strong>⚠️ CRITICAL: Button Press Required!</strong>
-          <p style="margin-top:10px;line-height:1.8">
-            The Shelly device has <strong>very specific timing requirements</strong>:
-          </p>
-        </div>
-        
-        <div class="alert warning">
-          <strong>📋 Step-by-Step Instructions</strong>
-          <ol style="margin:10px 0 0 20px;line-height:2">
-            <li><strong>BEFORE clicking "Connect":</strong>
-              <ul style="margin-left:20px;margin-top:5px">
-                <li>Press and HOLD the button on the Shelly device</li>
-              </ul>
-            </li>
-            <li><strong>Keep holding for</strong>
-              <ul style="margin-left:20px;margin-top:5px">
-                <li>at least 10 seconds</li>
-              </ul>
-            </li>
-            <li><strong>Release the device button:</strong>
-              <ul style="margin-left:20px;margin-top:5px">
-                <li>Click the "Connect" button below</li>
-              </ul>
-            </li>
-            <li><strong>Wait until the bonding process completes</strong></li>
-          </ol>
-        </div>
-      </div>
-
-      <!-- Encrypted Mode Info -->
-      <div id="connect-encrypted-info" style="display:none">
-        <div class="alert success">
-          <strong>⚡ Smart Connection</strong>
-          <p style="margin-top:10px">
-            With encrypted mode, the device will be:<br>
-            ✓ Bonded (trusted connection)<br>
-            ✓ Encrypted (secure with passkey)<br>
-            ✓ Ready to use immediately<br>
-            <br>
-            <strong>Requires button press (10+ seconds)!</strong>
-          </p>
-        </div>
-      </div>
-
-      <div class="modal-buttons" style="margin-top:25px">
-        <button class="modal-btn modal-btn-secondary" onclick="closeConnectModal()">Cancel</button>
-        <button class="modal-btn modal-btn-primary" id="connect-confirm-btn" onclick="confirmSmartConnect()">
-          Connect Device
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================================
-       BLE Encrypted Pair Modal (Direct Pairing with Passkey)
-       ============================================================================ -->
-  
-  <div id="ble-encrypted-pair-modal" class="modal hidden" role="dialog" aria-labelledby="enc-pair-modal-title" aria-modal="true">
-    <div class="modal-box">
-      <h3 id="enc-pair-modal-title">🔐 Pair Encrypted Device</h3>
-      
-      <div class="input-group">
-        <label for="enc-pair-device-name">Device Name</label>
-        <input type="text" id="enc-pair-device-name" readonly aria-readonly="true">
-      </div>
-      
-      <div class="input-group">
-        <label for="enc-pair-device-address">MAC Address</label>
-        <input type="text" id="enc-pair-device-address" readonly aria-readonly="true">
-      </div>
-      
-      <div class="alert warning">
-        <strong>🔒 Encrypted Device</strong>
-        <p style="margin-top:10px">
-          This device is already encrypted and requires the 6-digit passkey
-          that was set during initial pairing.
-        </p>
-      </div>
-      
-      <div class="input-group">
-        <label for="enc-pair-passkey">Passkey (Required - 6 digits)</label>
-        <input type="number" 
-               id="enc-pair-passkey" 
-               placeholder="Enter passkey" 
-               min="0"
-               max="999999"
-               oninput="validateEncryptedPairForm()"
-               aria-required="true"
-               aria-describedby="enc-pair-help">
-        <div id="enc-pair-help" style="font-size:0.85em;color:#888;margin-top:5px">
-          Enter the 6-digit passkey (0-999999)
-        </div>
-      </div>
-      
-      <div class="modal-buttons">
-        <button class="modal-btn modal-btn-secondary" onclick="closeEncryptedPairModal()" aria-label="Cancel pairing">Cancel</button>
-        <button class="modal-btn modal-btn-primary" id="enc-pair-confirm-btn" 
-                onclick="confirmEncryptedPair()" disabled aria-label="Confirm pairing">
-          Pair Device
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================================
-       Enable Encryption Modal (Phase 2)
-       ============================================================================ -->
-  
-  <div id="enable-encryption-modal" class="modal hidden" role="dialog" aria-labelledby="enc-modal-title" aria-modal="true">
-    <div class="modal-box">
-      <h3 id="enc-modal-title">🔐 Enable Encryption</h3>
-      
-      <div class="alert warning">
-        <strong>⚠️ Important</strong>
-        <p style="margin-top:10px">
-          This will permanently enable encryption on the device. 
-          You will need to remember this passkey for all future connections!
-        </p>
-      </div>
-      
-      <div class="input-group">
-        <label for="enc-device-name">Device</label>
-        <input type="text" id="enc-device-name" readonly aria-readonly="true">
-      </div>
-      
-      <div class="input-group">
-        <label for="enc-device-address">MAC Address</label>
-        <input type="text" id="enc-device-address" readonly aria-readonly="true">
-      </div>
-      
-      <div class="input-group">
-        <label for="enc-passkey">Choose Passkey (6 digits, 0-999999)</label>
-        <input type="number" 
-               id="enc-passkey" 
-               placeholder="123456" 
-               min="0" 
-               max="999999"
-               oninput="validateEnableEncryption()"
-               aria-required="true"
-               aria-describedby="enc-passkey-help">
-        <div id="enc-passkey-help" style="font-size:0.85em;color:#888;margin-top:5px">
-          Choose a 6-digit passkey to secure your device
-        </div>
-      </div>
-      
-      <div class="input-group">
-        <label for="enc-passkey-confirm">Confirm Passkey</label>
-        <input type="number" 
-               id="enc-passkey-confirm" 
-               placeholder="123456" 
-               min="0" 
-               max="999999"
-               oninput="validateEnableEncryption()"
-               aria-required="true"
-               aria-describedby="enc-confirm-help">
-        <div id="enc-confirm-help" style="font-size:0.85em;color:#888;margin-top:5px">
-          Re-enter the same passkey to confirm
-        </div>
-      </div>
-      
-      <div class="alert">
-        <strong>💾 Save this passkey!</strong>
-        <p style="margin-top:8px">
-          Write down your passkey in a safe place. You'll need it for future connections and after device resets.
-        </p>
-      </div>
-      
-      <div class="modal-buttons">
-        <button class="modal-btn modal-btn-secondary" onclick="closeEnableEncryptionModal()" aria-label="Cancel encryption">Cancel</button>
-        <button class="modal-btn modal-btn-primary" id="enc-confirm-btn" onclick="confirmEnableEncryption()" disabled aria-label="Enable encryption">
-          Enable Encryption
-        </button>
-      </div>
-    </div>
-  </div>
-
-  <!-- ============================================================================
-       JavaScript
-       ============================================================================ -->
-  
-  <script>
-    'use strict';
-    
-    // ============================================================================
-    // State Management
-    // ============================================================================
-    
-    const AppState = {
-      ws: null,
-      reconnectInterval: null,
-      statusInterval: null,
-      matterCommissioned: false,
-      discoveredDevices: [],
-      currentBLEPairDevice: null,
-      currentConnectDevice: null,
-      currentEncryptedDevice: null,
-      currentUnencryptedDevice: null,
-      currentEncryptedKnownDevice: null,
-      contactSensorMatterEnabled: false,
-      contactSensorEndpointActive: false
-    };
-
-    // ============================================================================
-    // Error Banner Functions
-    // ============================================================================
-    
-    function showErrorBanner(title, message, type = 'error') {
-      const banner = document.getElementById('error-banner');
-      const titleEl = document.getElementById('error-banner-title');
-      const messageEl = document.getElementById('error-banner-message');
-      
-      titleEl.textContent = title;
-      messageEl.textContent = message;
-      
-      // Reset classes
-      banner.className = 'error-banner';
-      
-      // Add type class
-      if (type === 'success') {
-        banner.classList.add('success');
-      } else if (type === 'warning') {
-        banner.classList.add('warning');
-      }
-      
-      // Show banner
-      setTimeout(() => {
-        banner.classList.add('show');
-      }, 100);
-      
-      // Auto-hide after 5 seconds
-      setTimeout(() => {
-        hideErrorBanner();
-      }, 5000);
-    }
-    
-    function hideErrorBanner() {
-      const banner = document.getElementById('error-banner');
-      banner.classList.remove('show');
-    }
-    
-    // ============================================================================
-    // Loading Overlay Functions
-    // ============================================================================
-    
-    function showLoading(text = 'Loading...') {
-      const overlay = document.getElementById('loading-overlay');
-      const textEl = document.getElementById('loading-text');
-      textEl.textContent = text;
-      overlay.classList.add('show');
-    }
-    
-    function hideLoading() {
-      const overlay = document.getElementById('loading-overlay');
-      overlay.classList.remove('show');
-    }
-    
-    // ============================================================================
-    // WebSocket Connection
-    // ============================================================================
-    
-    const MAX_RECONNECT_DELAY = 30000;  // 30 Sekunden
-
-    function connectWebSocket() {
-        // ✅ Verhindere mehrfache gleichzeitige Connects
-        if (AppState.ws && AppState.ws.readyState === WebSocket.CONNECTING) {
-            console.log('⏳ WebSocket connection already in progress...');
-            return;
-        }
-        
-        // ✅ Schließe alte Connection falls noch offen
-        if (AppState.ws && AppState.ws.readyState !== WebSocket.CLOSED) {
-            console.log('🔌 Closing old WebSocket connection...');
-            AppState.ws.close();
-        }
-        
-        console.log('🔌 Connecting WebSocket (Attempt ' + (reconnectAttempts + 1) + ')...');
-        
-        try {
-            AppState.ws = new WebSocket('ws://' + location.host + '/ws');
-        } catch (error) {
-            console.error('✗ Failed to create WebSocket:', error);
-            scheduleReconnect();
-            return;
-        }
-
-        AppState.ws.onopen = () => {
-            console.log('✓ WebSocket connected');
-            reconnectAttempts = 0;  // ✅ Reset counter
-            clearInterval(AppState.reconnectInterval);
-            hideErrorBanner();
-            
-            setTimeout(() => {
-                if (AppState.ws.readyState === WebSocket.OPEN) {
-                    AppState.ws.send('status');
-                    AppState.ws.send('matter_status');
-                }
-            }, 100);
-            
-            AppState.statusInterval = setInterval(() => {
-                if (AppState.ws.readyState === WebSocket.OPEN) {
-                    AppState.ws.send('status');
-                }
-            }, 2000);
-        };
-
-        AppState.ws.onclose = (event) => {
-            console.log('✗ WebSocket disconnected:', event.code, event.reason);
-            clearInterval(AppState.statusInterval);
-            
-            showErrorBanner('Connection Lost', 'Attempting to reconnect...', 'warning');
-            
-            scheduleReconnect();
-        };
-
-        AppState.ws.onerror = (e) => {
-            console.error('✗ WebSocket error:', e);
-            // onerror wird immer von onclose gefolgt, daher hier nichts tun
-        };
-
-        AppState.ws.onmessage = handleWebSocketMessage;
-      }
-
-    // ✅ Exponential Backoff Reconnect
-    function scheduleReconnect() {
-        if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-            console.error('❌ Max reconnection attempts reached');
-            showErrorBanner(
-                'Connection Failed', 
-                'Unable to connect. Please refresh the page.', 
-                'error'
-            );
-      return;
-      }
-      // ✅ Exponential Backoff: 1s, 2s, 4s, 8s, 16s, 30s (max)
-      const delay = Math.min(
-          BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts),
-          MAX_RECONNECT_DELAY
-      );
-
-      reconnectAttempts++;
-
-      console.log(`🔄 Reconnecting in ${delay}ms (attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS})`);
-
-      clearTimeout(AppState.reconnectInterval);
-      AppState.reconnectInterval = setTimeout(() => {
-          connectWebSocket();
-      }, delay);
-    }
-    
-    // ============================================================================
-    // WebSocket Message Handler
-    // ============================================================================
-    
-    function handleWebSocketMessage(e) {
-      console.log('📨 WebSocket message received:', e.data);
-      
-      let data;
-      try {
-        data = JSON.parse(e.data);
-      } catch (err) {
-        console.error('✗ Failed to parse JSON:', err);
-        return;
-      }
-
-      if (!data || !data.type) {
-        console.error('✗ Invalid message format - missing type:', data);
-        return;
-      }
-      
-      // Handle error messages
-      if (data.type === 'error') {
-        showErrorBanner('Error', data.message, 'error');
-        hideLoading();
-        return;
-      }
-      
-      // Handle info messages
-      if (data.type === 'info') {
-        if (data.message && data.message.includes('<strong>')) {
-          // HTML message - show as banner
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = data.message;
-          const title = tempDiv.querySelector('strong')?.textContent || 'Info';
-          const text = tempDiv.textContent.replace(title, '').trim();
-          showErrorBanner(title, text, 'success');
-        }
-      }
-      
-      // Handle success messages
-      if (data.type === 'success') {
-        if (data.message) {
-          const tempDiv = document.createElement('div');
-          tempDiv.innerHTML = data.message;
-          const title = tempDiv.querySelector('strong')?.textContent || 'Success';
-          const text = tempDiv.textContent.replace(title, '').trim();
-          showErrorBanner(title, text, 'success');
-        }
-        hideLoading();
-      }
-      
-      // Route to specific handlers
-      switch (data.type) {
-        case 'status':
-          handleStatusUpdate(data);
-          break;
-        case 'matter_status':
-          handleMatterStatus(data);
-          break;
-        case 'info':
-          handleSystemInfo(data);
-          break;
-        case 'ble_discovered':
-          handleBLEDiscovered(data);
-          break;
-        case 'ble_status':
-          handleBLEStatus(data);
-          break;
-        case 'ble_scan_complete':
-          handleBLEScanComplete();
-          break;
-        case 'ble_state_changed':
-          handleBLEStateChanged(data);
-          break;
-        case 'ble_sensor_update':
-          handleBLESensorUpdate(data);
-          break;
-        case 'contact_sensor_status':
-          handleContactSensorStatus(data);
-          break;
-        case 'modal_close':
-            handleModalClose(data);
-            break;
-        case 'sensor_data_result':
-            handleSensorDataResult(data);
-            break;
-        default:
-          console.warn('⚠ Unknown message type:', data.type);
-      }
-    }
-    
-    // ============================================================================
-    // Message Handlers
-    // ============================================================================
-    
-    function handleStatusUpdate(data) {
-      document.getElementById('pos').innerText = data.pos + '%';
-      document.getElementById('calib').innerText = data.cal ? 'Yes' : 'No';
-      document.getElementById('inv').innerText = data.inv ? 'Inverted' : 'Normal';
-      updateDirectionButtons(data.inv);
-    }
-    
-    function handleMatterStatus(data) {
-      AppState.matterCommissioned = data.commissioned;
-      
-      const statusEl = document.getElementById('matter-status');
-      if (data.commissioned) {
-        statusEl.innerHTML = 'Paired <span class="badge commissioned">✓</span>';
-        statusEl.className = 'status-value commissioned';
-      } else {
-        statusEl.innerHTML = 'Not Paired <span class="badge not-commissioned">!</span>';
-        statusEl.className = 'status-value not-commissioned';
-      }
-      
-      updateMatterInfo(data);
-    }
-
-    function handleModalClose(data) {
-        console.log('📋 Modal close requested:', data.modal_id);
-        
-        const modal = document.getElementById(data.modal_id);
-        if (modal) {
-            modal.classList.add('hidden');
-            modal.setAttribute('aria-hidden', 'true');
-            console.log('✓ Modal closed:', data.modal_id);
-        } else {
-            console.warn('⚠ Modal not found:', data.modal_id);
-        }
-    }
-    
-    function handleSystemInfo(data) {
-      if (data.chip) {
-        renderSystemInfo(data);
-      }
-    }
-    
-    function handleBLEDiscovered(data) {
-      AppState.discoveredDevices = data.devices || [];
-      renderBLEDiscoveredDevices(data.devices || []);
-    }
-    
-    function handleBLEStatus(data) {
-      renderBLESensorStatus(data);
-    }
-    
-    function handleBLEScanComplete() {
-      const btn = document.getElementById('ble-scan-btn');
-      btn.disabled = false;
-      btn.innerHTML = '<span>🔍 Start Scan</span>';
-      hideLoading();
-    }
-    
-    function handleBLEStateChanged(data) {
-      console.log('📡 BLE State Changed:', data.state);
-      
-      // Update UI based on state
-      const statusDiv = document.querySelector('.state-indicator');
-      if (statusDiv) {
-        statusDiv.remove();
-      }
-      
-      // Show appropriate message based on state
-      if (data.state === 'connected_unencrypted') {
-        showErrorBanner('Device Connected', 
-          'Device is bonded but not encrypted. Enable encryption to secure the connection.', 
-          'warning');
-      } else if (data.state === 'connected_encrypted') {
-        showErrorBanner('Encryption Enabled', 
-          'Device is now securely encrypted!', 
-          'success');
-      }
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // Handle GATT Sensor Data Result
-    // ════════════════════════════════════════════════════════════════════════
-
-    function handleSensorDataResult(data) {
-      console.log('📊 GATT Sensor Data Result:', data);
-      
-      hideLoading();
-      
-      if (!data.success) {
-        showErrorBanner('Read Failed', data.error || 'Could not read sensor data', 'error');
-        return;
-      }
-      
-      // Success - Update UI
-      console.log('✓ Sensor data received:');
-      console.log('  Packet ID:', data.packet_id);
-      console.log('  Battery:', data.battery + '%');
-      console.log('  Window:', data.window_open ? 'OPEN' : 'CLOSED');
-      console.log('  Illuminance:', data.illuminance, 'lux');
-      console.log('  Rotation:', data.rotation + '°');
-      
-      // Update Battery
-      if (document.getElementById('ble-battery')) {
-        document.getElementById('ble-battery').innerText = data.battery + '%';
-      }
-      
-      // Update Contact State
-      if (document.getElementById('ble-contact')) {
-        const contactEl = document.getElementById('ble-contact');
-        contactEl.innerText = data.window_open ? '🔓 OPEN' : '🔒 CLOSED';
-        contactEl.className = 'status-value ' + (data.window_open ? 'not-commissioned' : 'commissioned');
-      }
-      
-      // Update RSSI
-      if (document.getElementById('ble-rssi')) {
-        document.getElementById('ble-rssi').innerText = data.rssi + ' dBm';
-      }
-      
-      // Update Illuminance
-      if (document.getElementById('ble-lux')) {
-        document.getElementById('ble-lux').innerText = data.illuminance + ' lux';
-      }
-      
-      // Update Rotation
-      if (document.getElementById('ble-rotation')) {
-        document.getElementById('ble-rotation').innerText = data.rotation + '°';
-      }
-      
-      // Update Packet ID
-      if (document.getElementById('ble-packet-id')) {
-        document.getElementById('ble-packet-id').innerText = data.packet_id;
-      }
-      
-      // Update Last Update Time
-      if (document.getElementById('ble-last-update')) {
-        document.getElementById('ble-last-update').innerText = 'Just now';
-      }
-      
-      // Show success message
-      showErrorBanner(
-        'Data Retrieved', 
-        `Battery: ${data.battery}% | Window: ${data.window_open ? 'OPEN' : 'CLOSED'} | Light: ${data.illuminance} lux`, 
-        'success'
-      );
-    }
-
-    // ════════════════════════════════════════════════════════════════════════
-    // Continuous Scan Manual Control
-    // ════════════════════════════════════════════════════════════════════════
-
-    function startContinuousScanManual() {
-      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
-        return;
-      }
-      
-      console.log('📡 Starting Continuous Scan manually...');
-      
-      AppState.ws.send('ble_start_continuous_scan');
-      
-      showLoading('Starting Continuous Scan...');
-      
-      setTimeout(() => {
-        hideLoading();
-        updateContinuousScanUI(true);
-      }, 2000);
-    }
-
-    function stopContinuousScanManual() {
-      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
-        return;
-      }
-      
-      console.log('⏹️ Stopping Continuous Scan manually...');
-      
-      AppState.ws.send('ble_stop_scan');
-      
-      showLoading('Stopping Continuous Scan...');
-      
-      setTimeout(() => {
-        hideLoading();
-        updateContinuousScanUI(false);
-      }, 2000);
-    }
-
-    function updateContinuousScanUI(isActive) {
-      const statusEl = document.getElementById('continuous-scan-status');
-      const startBtn = document.getElementById('start-continuous-scan-btn');
-      const stopBtn = document.getElementById('stop-continuous-scan-btn');
-      
-      if (!statusEl || !startBtn || !stopBtn) {
-        console.warn('⚠ Continuous Scan UI elements not found');
-        return;
-      }
-      
-      if (isActive) {
-        statusEl.textContent = 'Active 🟢';
-        statusEl.style.color = '#4CAF50';
-        startBtn.style.display = 'none';
-        stopBtn.style.display = 'block';
-      } else {
-        statusEl.textContent = 'Inactive 🔴';
-        statusEl.style.color = '#f44336';
-        startBtn.style.display = 'block';
-        stopBtn.style.display = 'none';
-      }
-    }
-    
-    function handleBLESensorUpdate(data) {
-      console.log('📊 BLE Sensor Update:', data);
-      
-      // Update all sensor values
-      if (document.getElementById('ble-contact')) {
-        document.getElementById('ble-contact').innerText = data.window_open ? '🔓 OPEN' : '🔒 CLOSED';
-        document.getElementById('ble-contact').className = 'status-value ' + 
-          (data.window_open ? 'not-commissioned' : 'commissioned');
-      }
-      
-      if (document.getElementById('ble-battery')) {
-        document.getElementById('ble-battery').innerText = data.battery + '%';
-      }
-      
-      if (document.getElementById('ble-rssi')) {
-        document.getElementById('ble-rssi').innerText = data.rssi + ' dBm';
-      }
-      
-      if (document.getElementById('ble-lux')) {
-        document.getElementById('ble-lux').innerText = data.illuminance + ' lux';
-      }
-      
-      if (document.getElementById('ble-rotation')) {
-        document.getElementById('ble-rotation').innerText = data.rotation + '°';
-      }
-      
-      if (document.getElementById('ble-packet-id')) {
-        document.getElementById('ble-packet-id').innerText = data.packet_id;
-      }
-      
-      // Last update time
-      if (document.getElementById('ble-last-update')) {
-        const now = Date.now();
-        const secondsAgo = Math.floor((now - data.last_update) / 1000);
-        let timeStr;
-        if (secondsAgo < 60) timeStr = secondsAgo + 's ago';
-        else if (secondsAgo < 3600) timeStr = Math.floor(secondsAgo / 60) + 'm ago';
-        else timeStr = Math.floor(secondsAgo / 3600) + 'h ago';
-        
-        document.getElementById('ble-last-update').innerText = timeStr;
-      }
-      
-      // Button events
-      if (data.has_button_event) {
-        const eventMap = {
-          1: '👆 Single Press',
-          128: '⏸️ Hold',
-          254: '⏸️ Hold'
-        };
-        
-        const eventName = eventMap[data.button_event] || '❓ Unknown';
-        document.getElementById('ble-button-event').innerText = eventName;
-        document.getElementById('ble-button-container').style.display = 'block';
-        
-        // Highlight effect
-        const btnContainer = document.getElementById('ble-button-container');
-        btnContainer.style.background = 'rgba(33, 150, 243, 0.2)';
-        btnContainer.style.borderColor = '#2196F3';
-        
-        setTimeout(() => {
-          btnContainer.style.background = '';
-          btnContainer.style.borderColor = '';
-        }, 3000);
-      }
-    }
-    
-    function handleContactSensorStatus(data) {
-      AppState.contactSensorMatterEnabled = data.enabled;
-      AppState.contactSensorEndpointActive = data.active;
-      updateContactSensorToggle(data.enabled, data.active);
-    }
-    
-    // ============================================================================
-    // Tab Navigation
-    // ============================================================================
-    
-    function show(id) {
-      // Hide all tabs
-      document.querySelectorAll('#overview, #matter, #ble, #system, #settings').forEach(e => {
-        e.classList.add('hidden');
-        e.setAttribute('aria-hidden', 'true');
-      });
-      
-      // Show selected tab
-      const selectedTab = document.getElementById(id);
-      selectedTab.classList.remove('hidden');
-      selectedTab.setAttribute('aria-hidden', 'false');
-      
-      // Update nav buttons
-      document.querySelectorAll('.nav button').forEach(b => {
-        b.classList.remove('active');
-        b.setAttribute('aria-selected', 'false');
-      });
-      
-      const navBtn = document.getElementById('nav-' + id);
-      navBtn.classList.add('active');
-      navBtn.setAttribute('aria-selected', 'true');
-      
-      // Load tab-specific data
-      if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-        switch(id) {
-          case 'system':
-            AppState.ws.send('info');
-            break;
-          case 'matter':
-            AppState.ws.send('matter_status');
-            break;
-          case 'ble':
-            AppState.ws.send('ble_status');
-            AppState.ws.send('contact_sensor_status');
-            break;
-        }
-      }
-    }
-    
-    // ============================================================================
-    // Keyboard Navigation for Direction Buttons
-    // ============================================================================
-    
-    document.addEventListener('DOMContentLoaded', () => {
-      // Direction buttons keyboard support
-      document.querySelectorAll('.direction-btn').forEach(btn => {
-        btn.addEventListener('keydown', (e) => {
-          if (e.key === 'Enter' || e.key === ' ') {
-            e.preventDefault();
-            btn.click();
-          }
-        });
-      });
-    });
-    
-    // ============================================================================
-    // Shutter Control Functions
-    // ============================================================================
-    
-    function send(cmd) {
-      if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-        AppState.ws.send(cmd);
-        
-        // Visual feedback
-        if (cmd === 'calibrate') {
-          showLoading('Starting calibration...');
-        }
-      } else {
-        showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
-      }
-    }
-    
-    function setDirection(inverted) {
-      if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-        AppState.ws.send(inverted ? 'invert_on' : 'invert_off');
-        updateDirectionButtons(inverted);
-      }
-    }
-    
-    function updateDirectionButtons(inverted) {
-      const normalBtn = document.getElementById('dir-normal');
-      const invertedBtn = document.getElementById('dir-inverted');
-      
-      if (inverted) {
-        normalBtn.classList.remove('active');
-        normalBtn.setAttribute('aria-pressed', 'false');
-        invertedBtn.classList.add('active');
-        invertedBtn.setAttribute('aria-pressed', 'true');
-      } else {
-        invertedBtn.classList.remove('active');
-        invertedBtn.setAttribute('aria-pressed', 'false');
-        normalBtn.classList.add('active');
-        normalBtn.setAttribute('aria-pressed', 'true');
-      }
-    }
-    
-    // ============================================================================
-    // Factory Reset
-    // ============================================================================
-    
-    function showConfirm() {
-      document.getElementById('confirm-reset').classList.remove('hidden');
-      document.getElementById('confirm-reset').setAttribute('aria-hidden', 'false');
-      // Focus first button for accessibility
-      setTimeout(() => {
-        document.querySelector('#confirm-reset .modal-btn-secondary').focus();
-      }, 100);
-    }
-    
-    function hideConfirm() {
-      document.getElementById('confirm-reset').classList.add('hidden');
-      document.getElementById('confirm-reset').setAttribute('aria-hidden', 'true');
-    }
-    
-    function confirmReset() {
-      if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-        showLoading('Resetting device...');
-        AppState.ws.send('reset');
-        hideConfirm();
-        
-        // Device will restart, show message
-        setTimeout(() => {
-          hideLoading();
-          showErrorBanner('Device Reset', 'Device is restarting. Please wait...', 'warning');
-        }, 2000);
-      }
-    }
-    
-    // ============================================================================
-    // Matter Functions
-    // ============================================================================
-    
-    function showMatterQR(qrUrl, qrImageUrl, pairingCode) {
-      document.getElementById('matter-qr-img').src = qrImageUrl;
-      document.getElementById('matter-pairing-code').innerText = pairingCode;
-      
-      const linkEl = document.getElementById('qr-web-link');
-      if (linkEl && qrUrl) {
-        linkEl.href = qrUrl;
-        linkEl.style.display = 'inline-block';
-      } else if (linkEl) {
-        linkEl.style.display = 'none';
-      }
-      
-      document.getElementById('matter-qr-modal').classList.remove('hidden');
-      document.getElementById('matter-qr-modal').setAttribute('aria-hidden', 'false');
-    }
-    
-    function closeMatterQR() {
-      document.getElementById('matter-qr-modal').classList.add('hidden');
-      document.getElementById('matter-qr-modal').setAttribute('aria-hidden', 'true');
-    }
-    
-    function updateMatterInfo(data) {
-      if (!data) return;
-      
-      let statusHtml = '<div class="alert ' + (data.commissioned ? 'success' : 'warning') + '">';
-      
-      if (data.commissioned) {
-        statusHtml += '<strong>✓ Device is paired with Matter</strong>';
-        statusHtml += '<p style="margin-top:10px;color:#ccc">Your shutter is connected and can be controlled by your Matter ecosystem.</p>';
-        statusHtml += '<p style="margin-top:8px;color:#888">Active Fabrics: ' + (data.fabrics || 0) + '</p>';
-      } else {
-        statusHtml += '<strong>! Device not yet paired</strong>';
-        statusHtml += '<p style="margin-top:10px;color:#ccc">Scan the QR code below or use the manual pairing code to add this device to your Matter controller.</p>';
-      }
-      statusHtml += '</div>';
-      
-      document.getElementById('matter-status-detail').innerHTML = statusHtml;
-      
-      let pairingHtml = '';
-      
-      if (!data.commissioned) {
-        if (data.qr_image && data.qr_image.length > 0) {
-          pairingHtml = '<div style="margin-top:20px">';
-          pairingHtml += '<button class="btn primary" onclick="showMatterQR(\'' + 
-                        (data.qr_url || '').replace(/'/g, "\\'") + '\',\'' + 
-                        data.qr_image.replace(/'/g, "\\'") + '\',\'' + 
-                        (data.pairing_code || '').replace(/'/g, "\\'") + 
-                        '\')" style="width:100%" aria-label="Show Matter pairing QR code"><span>📱 Show QR Code & Pairing Info</span></button>';
-          pairingHtml += '</div>';
-        } else {
-          pairingHtml = '<div class="alert warning" style="margin-top:20px">';
-          pairingHtml += '<strong>⚠️ QR Code not available</strong><br>';
-          pairingHtml += '<p style="margin-top:10px;color:#ccc">Pairing Code: ' + (data.pairing_code || 'N/A') + '</p>';
-          pairingHtml += '<p style="margin-top:5px;color:#888">Please check the serial console for pairing information.</p>';
-          pairingHtml += '</div>';
-        }
-      } else {
-        pairingHtml = '<div class="alert success" style="margin-top:20px">';
-        pairingHtml += '<strong>✓ Device is successfully paired</strong><br>';
-        pairingHtml += '<p style="margin-top:10px;color:#ccc">To remove this device, use Factory Reset in Settings.</p>';
-        pairingHtml += '</div>';
-      }
-      
-      document.getElementById('matter-pairing-info').innerHTML = pairingHtml;
-    }
-    
-    // ============================================================================
-    // System Info
-    // ============================================================================
-    
-    function renderSystemInfo(data) {
-      let html = '';
-      html += '<tr><td>Chip ID:</td><td>' + (data.chip || 'N/A') + '</td></tr>';
-      html += '<tr><td>Uptime:</td><td>' + (data.uptime || 0) + 's</td></tr>';
-      html += '<tr><td>Free Heap:</td><td>' + ((data.heap || 0) / 1024).toFixed(1) + ' KB</td></tr>';
-      html += '<tr><td>Min Free Heap:</td><td>' + ((data.minheap || 0) / 1024).toFixed(1) + ' KB</td></tr>';
-      html += '<tr><td>Flash Size:</td><td>' + ((data.flash || 0) / 1024 / 1024).toFixed(1) + ' MB</td></tr>';
-      html += '<tr><td>Firmware Version:</td><td>' + (data.ver || 'N/A') + '</td></tr>';
-      html += '<tr><td>Reset Reason:</td><td>' + (data.reset || 'Unknown') + '</td></tr>';
-      document.getElementById('sysinfo').innerHTML = html;
-    }
-    
-    // ============================================================================
-    // BLE Scan Functions
-    // ============================================================================
-    
-    function startBLEScan() {
-      if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-        AppState.ws.send('ble_scan');
-        
-        const btn = document.getElementById('ble-scan-btn');
-        btn.disabled = true;
-        btn.innerHTML = '<span class="spinner"></span> <span>Scanning...</span>';
-        
-        showLoading('Scanning for BLE devices...');
-        
-        // Safety timeout
-        setTimeout(() => {
-          btn.disabled = false;
-          btn.innerHTML = '<span>🔍 Start Scan</span>';
-          hideLoading();
-        }, 15000);
-      }
-    }
-    
-    function renderBLEDiscoveredDevices(devices) {
-      let html = '';
-      
-      if (!devices || devices.length === 0) {
-        html = '<li style="text-align:center;color:#666;padding:40px 20px">';
-        html += '<div style="font-size:3em;margin-bottom:10px;opacity:0.3">🔍</div>';
-        html += '<div>No devices found. Click "Start Scan" to search.</div>';
-        html += '</li>';
-      } else {
-        devices.forEach((dev) => {
-          let signalClass = 'signal-poor';
-          if (dev.rssi >= -60) signalClass = 'signal-excellent';
-          else if (dev.rssi >= -70) signalClass = 'signal-good';
-          else if (dev.rssi >= -80) signalClass = 'signal-fair';
-          
-          const devJson = JSON.stringify(dev).replace(/"/g, '&quot;');
-          
-          html += `<li class="device-item">
-            <div class="device-info">
-              <div class="device-name">${escapeHtml(dev.name)}`;
-          
-          // ✅ Encryption Badge
-          if (dev.encrypted) {
-            html += `<span class="badge" style="background:rgba(76,175,80,0.2);color:#4CAF50;border:1px solid rgba(76,175,80,0.3)">🔒 Encrypted</span>`;
-          } else {
-            html += `<span class="badge" style="background:rgba(255,152,0,0.2);color:#FF9800;border:1px solid rgba(255,152,0,0.3)">🔓 Unencrypted</span>`;
-          }
-          
-          html += `</div>
-              <div class="device-details">
-                MAC: ${escapeHtml(dev.address)} | 
-                <span class="${signalClass}">${dev.rssi} dBm</span>
-              </div>
-            </div>
-            <div class="device-actions">`;
-          
-          // ✅ 3 VERSCHIEDENE BUTTONS je nach Status
-          
-          if (dev.encrypted) {
-            // ──────────────────────────────────────────────────────────────────
-            // ENCRYPTED DEVICE → Button für "Pair with Credentials"
-            // ──────────────────────────────────────────────────────────────────
-            html += `<button class="btn primary" onclick='openEncryptedKnownModal(${devJson})' 
-                      style="padding:10px 20px" 
-                      aria-label="Pair encrypted device ${escapeHtml(dev.name)}">
-                      <span>🔐 Pair (Have Keys)</span>
-                    </button>`;
-          } else {
-            // ──────────────────────────────────────────────────────────────────
-            // UNENCRYPTED DEVICE → Button für Smart Connect
-            // ──────────────────────────────────────────────────────────────────
-            html += `<button class="btn secondary" onclick='openConnectModal(${devJson})' 
-                      style="padding:10px 20px" 
-                      aria-label="Connect to device ${escapeHtml(dev.name)}">
-                      <span>🔗 Connect</span>
-                    </button>`;
-          }
-          
-          html += `</div>
-          </li>`;
-        });
-      }
-      
-      document.getElementById('ble-discovered-devices').innerHTML = html;
-    }
-
-    
-    // ============================================================================
-    // Smart Connect Functions
-    // ============================================================================
-
-    let connectMode = 'unencrypted';  // Default mode
-
-    function selectConnectMode(mode) {
-      connectMode = mode;
-      
-      const unencBtn = document.getElementById('connect-mode-unencrypted');
-      const encBtn = document.getElementById('connect-mode-encrypted');
-      const passkeySection = document.getElementById('connect-passkey-section');
-      const buttonInstructions = document.getElementById('connect-button-instructions');
-      const encryptedInfo = document.getElementById('connect-encrypted-info');
-      
-      if (mode === 'unencrypted') {
-        // Unencrypted Mode UI
-        unencBtn.classList.add('active');
-        unencBtn.setAttribute('aria-pressed', 'true');
-        encBtn.classList.remove('active');
-        encBtn.setAttribute('aria-pressed', 'false');
-        
-        passkeySection.style.display = 'none';
-        buttonInstructions.style.display = 'block';
-        encryptedInfo.style.display = 'none';
-        
-        // Reset passkey inputs
-        document.getElementById('connect-passkey').value = '';
-        document.getElementById('connect-passkey-confirm').value = '';
-        
-        // Enable button (no passkey validation needed)
-        document.getElementById('connect-confirm-btn').disabled = false;
-        
-      } else {
-        // Encrypted Mode UI
-        encBtn.classList.add('active');
-        encBtn.setAttribute('aria-pressed', 'true');
-        unencBtn.classList.remove('active');
-        unencBtn.setAttribute('aria-pressed', 'false');
-        
-        passkeySection.style.display = 'block';
-        buttonInstructions.style.display = 'block';  // Noch immer Button-Press nötig!
-        encryptedInfo.style.display = 'block';
-        
-        // Disable button until passkey is valid
-        document.getElementById('connect-confirm-btn').disabled = true;
-        
-        // Focus first passkey input
-        setTimeout(() => {
-          document.getElementById('connect-passkey').focus();
-        }, 100);
-      }
-    }
-
-    function validateConnectPasskey() {
-      const passkey = document.getElementById('connect-passkey').value;
-      const confirm = document.getElementById('connect-passkey-confirm').value;
-      const btn = document.getElementById('connect-confirm-btn');
-      
-      // Enable button only if both fields are 6 digits and match
-      const isValid = (passkey.length === 6 && confirm.length === 6 && passkey === confirm);
-      btn.disabled = !isValid;
-      
-      // Visual feedback
-      const confirmInput = document.getElementById('connect-passkey-confirm');
-      if (confirm.length === 6) {
-        if (passkey === confirm) {
-          confirmInput.style.borderColor = 'var(--success-color)';
-        } else {
-          confirmInput.style.borderColor = 'var(--error-color)';
-        }
-      } else {
-        confirmInput.style.borderColor = '';
-      }
-    }
-
-    function openConnectModal(deviceJson) {
-      const device = typeof deviceJson === 'string' ? JSON.parse(deviceJson) : deviceJson;
-      AppState.currentConnectDevice = device;
-      
-      document.getElementById('connect-device-name').value = device.name || 'Unknown';
-      document.getElementById('connect-device-address').value = device.address || 'Unknown';
-      
-      // Reset to unencrypted mode
-      selectConnectMode('unencrypted');
-      
-      document.getElementById('ble-connect-modal').classList.remove('hidden');
-      document.getElementById('ble-connect-modal').setAttribute('aria-hidden', 'false');
-    }
-
-    function closeConnectModal() {
-      document.getElementById('ble-connect-modal').classList.add('hidden');
-      document.getElementById('ble-connect-modal').setAttribute('aria-hidden', 'true');
-      AppState.currentConnectDevice = null;
-      
-      // Reset form
-      connectMode = 'unencrypted';
-      document.getElementById('connect-passkey').value = '';
-      document.getElementById('connect-passkey-confirm').value = '';
-      
-      const btn = document.getElementById('connect-confirm-btn');
-      btn.disabled = false;
-      btn.innerHTML = 'Connect Device';
-    }
-
-    function confirmSmartConnect() {
-      if (!AppState.currentConnectDevice) return;
-      
-      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
-        return;
-      }
-      
-      const address = AppState.currentConnectDevice.address;
-      let passkey = 0;
-      
-      // ========================================================================
-      // Passkey Validation (nur bei Encrypted Mode)
-      // ========================================================================
-      
-      if (connectMode === 'encrypted') {
-        const passkeyInput = document.getElementById('connect-passkey').value;
-        const confirmInput = document.getElementById('connect-passkey-confirm').value;
-        
-        if (passkeyInput.length !== 6 || passkeyInput !== confirmInput) {
-          showErrorBanner('Invalid Passkey', 'Passkeys must be 6 digits and match!', 'error');
-          return;
-        }
-        
-        passkey = parseInt(passkeyInput);
-      }
-      
-      console.log('🔗 Smart Connect:', connectMode);
-      console.log('  Address:', address);
-      console.log('  Passkey:', passkey > 0 ? passkey : 'NONE');
-      
-      // ========================================================================
-      // Send Command to ESP32
-      // ========================================================================
-      
-      AppState.ws.send(JSON.stringify({
-        cmd: 'ble_smart_connect',
-        address: address,
-        passkey: passkey
-      }));
-      
-      // ========================================================================
-      // UI Feedback
-      // ========================================================================
-      
-      const btn = document.getElementById('connect-confirm-btn');
-      btn.disabled = true;
-      
-      if (connectMode === 'unencrypted') {
-        btn.innerHTML = '<span class="spinner"></span> <span>Bonding...</span>';
-        showLoading('Bonding device (unencrypted)...');
-      } else {
-        btn.innerHTML = '<span class="spinner"></span> <span>Bonding + Encrypting...</span>';
-        showLoading('Bonding + Enabling encryption...');
-      }
-      
-      // Auto-close modal after timeout
-      setTimeout(() => {
-        closeConnectModal();
-        hideLoading();
-      }, 30000);
-    }
-
-    // ============================================================================
-    // BLE Connect Modal (Phase 1: Bonding)
-    // ============================================================================
-    
-    function openConnectModal(deviceJson) {
-      const device = typeof deviceJson === 'string' ? JSON.parse(deviceJson) : deviceJson;
-      AppState.currentConnectDevice = device;
-      
-      document.getElementById('connect-device-name').value = device.name || 'Unknown';
-      document.getElementById('connect-device-address').value = device.address || 'Unknown';
-      
-      document.getElementById('ble-connect-modal').classList.remove('hidden');
-      document.getElementById('ble-connect-modal').setAttribute('aria-hidden', 'false');
-    }
-    
-    function closeConnectModal() {
-      document.getElementById('ble-connect-modal').classList.add('hidden');
-      document.getElementById('ble-connect-modal').setAttribute('aria-hidden', 'true');
-      AppState.currentConnectDevice = null;
-      
-      // Reset button state
-      const btn = document.getElementById('connect-confirm-btn');
-      btn.disabled = false;
-      btn.innerHTML = 'Connect Device';
-    }
-    
-    function confirmConnect() {
-      if (!AppState.currentConnectDevice) return;
-      
-      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
-        return;
-      }
-      
-      console.log('🔗 Connecting to device:', AppState.currentConnectDevice.address);
-      
-      AppState.ws.send(JSON.stringify({
-        cmd: 'ble_connect',
-        address: AppState.currentConnectDevice.address
-      }));
-      
-      // Button state
-      const btn = document.getElementById('connect-confirm-btn');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> <span>Connecting...</span>';
-      
-      showLoading('Bonding with device...');
-      
-      // Auto-close after timeout
-      setTimeout(() => {
-        closeConnectModal();
-        hideLoading();
-      }, 20000);
-    }
-
-    // ============================================================================
-    // Already-Encrypted Device Pairing Functions
-    // ============================================================================
-
-    function openEncryptedKnownModal(deviceJson) {
-      const device = typeof deviceJson === 'string' ? JSON.parse(deviceJson) : deviceJson;
-      AppState.currentEncryptedKnownDevice = device;
-      
-      document.getElementById('enc-known-device-name').value = device.name || 'Unknown';
-      document.getElementById('enc-known-device-address').value = device.address || 'Unknown';
-      document.getElementById('enc-known-passkey').value = '';
-      document.getElementById('enc-known-bindkey').value = '';
-      
-      document.getElementById('ble-encrypted-known-modal').classList.remove('hidden');
-      document.getElementById('ble-encrypted-known-modal').setAttribute('aria-hidden', 'false');
-      
-      // Focus passkey input
-      setTimeout(() => {
-        document.getElementById('enc-known-passkey').focus();
-      }, 100);
-    }
-
-    function closeEncryptedKnownModal() {
-      document.getElementById('ble-encrypted-known-modal').classList.add('hidden');
-      document.getElementById('ble-encrypted-known-modal').setAttribute('aria-hidden', 'true');
-      AppState.currentEncryptedKnownDevice = null;
-      
-      // Reset form
-      document.getElementById('enc-known-passkey').value = '';
-      document.getElementById('enc-known-bindkey').value = '';
-      const btn = document.getElementById('enc-known-confirm-btn');
-      btn.disabled = true;
-      btn.innerHTML = 'Pair Device';
-    }
-
-    function validateEncryptedKnownForm() {
-      const passkey = document.getElementById('enc-known-passkey').value.trim();
-      const bindkey = document.getElementById('enc-known-bindkey').value.trim().toLowerCase();
-      const btn = document.getElementById('enc-known-confirm-btn');
-      
-      // Validate passkey (6 digits)
-      const passkeyValid = (passkey.length === 6 && !isNaN(passkey));
-      
-      // Validate bindkey (32 hex characters)
-      const bindkeyValid = (bindkey.length === 32 && /^[0-9a-f]{32}$/.test(bindkey));
-      
-      // Visual feedback for bindkey
-      const bindkeyInput = document.getElementById('enc-known-bindkey');
-      if (bindkey.length > 0) {
-        if (bindkeyValid) {
-          bindkeyInput.style.borderColor = 'var(--success-color)';
-        } else {
-          bindkeyInput.style.borderColor = 'var(--error-color)';
-        }
-      } else {
-        bindkeyInput.style.borderColor = '';
-      }
-      
-      // Enable button only if both valid
-      btn.disabled = !(passkeyValid && bindkeyValid);
-    }
-
-    function confirmEncryptedKnownPair() {
-      if (!AppState.currentEncryptedKnownDevice) return;
-      
-      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
-        return;
-      }
-      
-      const passkeyInput = document.getElementById('enc-known-passkey').value.trim();
-      const bindkeyInput = document.getElementById('enc-known-bindkey').value.trim().toLowerCase();
-      
-      // Validate again
-      if (passkeyInput.length !== 6 || bindkeyInput.length !== 32 || !/^[0-9a-f]{32}$/.test(bindkeyInput)) {
-        showErrorBanner('Invalid Input', 'Please check passkey and bindkey format', 'error');
-        return;
-      }
-      
-      const passkey = parseInt(passkeyInput);
-      
-      console.log('🔐 Pairing already-encrypted device');
-      console.log('  Address:', AppState.currentEncryptedKnownDevice.address);
-      console.log('  Passkey:', passkey);
-      console.log('  Bindkey:', bindkeyInput);
-      
-      // Send command
-      AppState.ws.send(JSON.stringify({
-        cmd: 'ble_pair_encrypted_known',
-        address: AppState.currentEncryptedKnownDevice.address,
-        passkey: passkey,
-        bindkey: bindkeyInput
-      }));
-      
-      // Button state
-      const btn = document.getElementById('enc-known-confirm-btn');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> <span>Pairing...</span>';
-      
-      showLoading('Pairing with encrypted device...');
-      
-      // Auto-close after timeout
-      setTimeout(() => {
-        closeEncryptedKnownModal();
-        hideLoading();
-      }, 30000);
-    }
-    
-    // ============================================================================
-    // BLE Encrypted Pair Modal (Direct Pairing)
-    // ============================================================================
-    
-    function openEncryptedPairModal(deviceJson) {
-      const device = typeof deviceJson === 'string' ? JSON.parse(deviceJson) : deviceJson;
-      AppState.currentEncryptedDevice = device;
-      
-      document.getElementById('enc-pair-device-name').value = device.name || 'Unknown';
-      document.getElementById('enc-pair-device-address').value = device.address || 'Unknown';
-      document.getElementById('enc-pair-passkey').value = '';
-      
-      document.getElementById('ble-encrypted-pair-modal').classList.remove('hidden');
-      document.getElementById('ble-encrypted-pair-modal').setAttribute('aria-hidden', 'false');
-      
-      // Focus passkey input
-      setTimeout(() => {
-        document.getElementById('enc-pair-passkey').focus();
-      }, 100);
-    }
-    
-    function closeEncryptedPairModal() {
-      document.getElementById('ble-encrypted-pair-modal').classList.add('hidden');
-      document.getElementById('ble-encrypted-pair-modal').setAttribute('aria-hidden', 'true');
-      AppState.currentEncryptedDevice = null;
-      
-      // Reset form
-      document.getElementById('enc-pair-passkey').value = '';
-      const btn = document.getElementById('enc-pair-confirm-btn');
-      btn.disabled = true;
-      btn.innerHTML = 'Pair Device';
-    }
-    
-    function validateEncryptedPairForm() {
-      const passkey = document.getElementById('enc-pair-passkey').value.trim();
-      const btn = document.getElementById('enc-pair-confirm-btn');
-      
-      btn.disabled = (passkey.length !== 6);
-    }
-    
-    function confirmEncryptedPair() {
-      if (!AppState.currentEncryptedDevice) return;
-      
-      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
-        return;
-      }
-      
-      const passkeyInput = document.getElementById('enc-pair-passkey');
-      const passkey = passkeyInput.value.trim();
-      
-      if (passkey.length !== 6) {
-        showErrorBanner('Invalid Passkey', 'Passkey must be exactly 6 digits', 'error');
-        return;
-      }
-      
-      console.log('🔐 Pairing encrypted device with passkey');
-      
-      AppState.ws.send(JSON.stringify({
-        cmd: 'ble_pair_encrypted',
-        address: AppState.currentEncryptedDevice.address,
-        passkey: parseInt(passkey)
-      }));
-      
-      // Button state
-      const btn = document.getElementById('enc-pair-confirm-btn');
-      btn.disabled = true;
-      btn.innerHTML = '<span class="spinner"></span> <span>Pairing...</span>';
-      
-      showLoading('Pairing with encrypted device...');
-      
-      // Auto-close after timeout
-      setTimeout(() => {
-        closeEncryptedPairModal();
-        hideLoading();
-      }, 30000);
-    }
-    
-    // ============================================================================
-    // Enable Encryption Modal (Phase 2)
-    // ============================================================================
-    
-    function showEnableEncryptionModal() {
-      // Find unencrypted device from discovered list
-      const unencrypted = AppState.discoveredDevices.find(d => !d.encrypted);
-      if (!unencrypted) {
-        showErrorBanner('No Device', 'No unencrypted device found', 'error');
-        return;
-      }
-      
-      AppState.currentUnencryptedDevice = unencrypted;
-      
-      document.getElementById('enc-device-name').value = unencrypted.name;
-      document.getElementById('enc-device-address').value = unencrypted.address;
-      document.getElementById('enc-passkey').value = '';
-      document.getElementById('enc-passkey-confirm').value = '';
-      
-      document.getElementById('enable-encryption-modal').classList.remove('hidden');
-      document.getElementById('enable-encryption-modal').setAttribute('aria-hidden', 'false');
-      
-      // Focus first input
-      setTimeout(() => {
-        document.getElementById('enc-passkey').focus();
-      }, 100);
-    }
-    
-    function closeEnableEncryptionModal() {
-      document.getElementById('enable-encryption-modal').classList.add('hidden');
-      document.getElementById('enable-encryption-modal').setAttribute('aria-hidden', 'true');
-      AppState.currentUnencryptedDevice = null;
-      
-      // Reset form
-      document.getElementById('enc-passkey').value = '';
-      document.getElementById('enc-passkey-confirm').value = '';
-      const btn = document.getElementById('enc-confirm-btn');
-      btn.disabled = true;
-      btn.innerHTML = 'Enable Encryption';
-    }
-    
-    function validateEnableEncryption() {
-      const passkey = document.getElementById('enc-passkey').value;
-      const confirm = document.getElementById('enc-passkey-confirm').value;
-      const btn = document.getElementById('enc-confirm-btn');
-      
-      // Enable button only if:
-      // 1. Both fields have exactly 6 digits
-      // 2. Both values match
-      const isValid = (passkey.length === 6 && confirm.length === 6 && passkey === confirm);
-      btn.disabled = !isValid;
-      
-      // Visual feedback for matching
-      const confirmInput = document.getElementById('enc-passkey-confirm');
-      if (confirm.length === 6) {
-        if (passkey === confirm) {
-          confirmInput.style.borderColor = 'var(--success-color)';
-        } else {
-          confirmInput.style.borderColor = 'var(--error-color)';
-        }
-      } else {
-        confirmInput.style.borderColor = '';
-      }
-    }
-    
-    function confirmEnableEncryption() {
-      if (!AppState.currentUnencryptedDevice) return;
-      
-      const passkey = document.getElementById('enc-passkey').value;
-      const confirm = document.getElementById('enc-passkey-confirm').value;
-      
-      if (passkey.length !== 6 || passkey !== confirm) {
-        showErrorBanner('Invalid Input', 'Passkeys must be 6 digits and match!', 'error');
-        return;
-      }
-      
-      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
-        return;
-      }
-      
-      console.log('🔐 Enabling encryption with passkey...');
-      
-      AppState.ws.send(JSON.stringify({
-        cmd: 'ble_enable_encryption',
-        address: AppState.currentUnencryptedDevice.address,
-        passkey: parseInt(passkey)
-      }));
-      
-      closeEnableEncryptionModal();
-      showLoading('Enabling encryption...');
-      
-      // Refresh after 3 seconds
-      setTimeout(() => {
-        if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-          AppState.ws.send('ble_status');
-        }
-        hideLoading();
-      }, 3000);
-    }
-    
-    // ============================================================================
-    // BLE Sensor Status Rendering
-    // ============================================================================
-    
-    function renderBLESensorStatus(data) {
-      if (data.paired) {
-        document.getElementById('ble-sensor-status').classList.remove('hidden');
-        document.getElementById('ble-scan-interface').classList.add('hidden');
-        document.getElementById('ble-matter-toggle').classList.remove('hidden');
-        
-        document.getElementById('ble-device-name').innerText = data.name || 'Unknown';
-        document.getElementById('ble-device-address').innerText = data.address || 'Unknown';
-        
-        // Security Info anzeigen
-        const securityBlock = document.getElementById('ble-security-info');
-        if (securityBlock) {
-            securityBlock.style.display = 'block';
-            
-            // Passkey
-            const passkeyEl = document.getElementById('ble-passkey');
-            if (data.passkey && data.passkey !== 'Not set') {
-                passkeyEl.innerText = data.passkey;
-                passkeyEl.style.color = '#4CAF50';
-            } else {
-                passkeyEl.innerText = 'Not set';
-                passkeyEl.style.color = '#888';
-            }
-            
-            // Encryption Status
-            const encStatusEl = document.getElementById('ble-encryption-status');
-            if (data.state === 'connected_encrypted') {
-                encStatusEl.innerHTML = '🔒 Enabled';
-                encStatusEl.style.color = '#4CAF50';
-            } else if (data.state === 'connected_unencrypted') {
-                encStatusEl.innerHTML = '🔓 Disabled';
-                encStatusEl.style.color = '#FF9800';
-            } else {
-                encStatusEl.innerHTML = 'Unknown';
-                encStatusEl.style.color = '#888';
-            }
-            
-            // Bindkey
-            const bindkeyEl = document.getElementById('ble-bindkey');
-            if (data.bindkey && data.bindkey.length === 32) {
-                bindkeyEl.innerText = data.bindkey;
-                bindkeyEl.style.color = '#4CAF50';
-            } else {
-                bindkeyEl.innerText = 'Not available (device not encrypted)';
-                bindkeyEl.style.color = '#888';
-            }
-        }
-        
-        // State indicator
-        let stateIndicator = '';
-        
-        if (data.state === 'connected_unencrypted') {
-          stateIndicator = '<div class="alert warning state-indicator" style="margin-bottom:15px">' +
-                          '<strong>🔓 Connected (Unencrypted)</strong>' +
-                          '<p style="margin-top:8px">This device is connected but not encrypted. ' +
-                          'Click "Enable Encryption" below to secure the connection.</p>' +
-                          '<button class="btn primary" onclick="showEnableEncryptionModal()" ' +
-                          'style="margin-top:12px;width:100%" aria-label="Enable encryption on connected device">' +
-                          '<span>🔐 Enable Encryption</span>' +
-                          '</button>' +
-                          '</div>';
-        } else if (data.state === 'connected_encrypted') {
-          stateIndicator = '<div class="alert success state-indicator" style="margin-bottom:15px">' +
-                          '<strong>✓ Connected & Encrypted</strong>' +
-                          '<p style="margin-top:8px">This device is securely connected with encryption enabled.</p>' +
-                          '</div>';
-        }
-        
-        // Remove old state indicator
-        const statusContainer = document.getElementById('ble-sensor-status');
-        const existingIndicator = statusContainer.querySelector('.state-indicator');
-        if (existingIndicator) {
-          existingIndicator.remove();
-        }
-        
-        // Insert new state indicator at the beginning
-        if (stateIndicator) {
-          const h3 = statusContainer.querySelector('h3');
-          if (h3) {
-            h3.insertAdjacentHTML('afterend', stateIndicator);
-          }
-        }
-        
-        const contactEl = document.getElementById('ble-contact');
-        
-        // Check if we have valid sensor data
-        if (data.sensor_data && data.sensor_data.valid) {
-          // Contact State
-          contactEl.innerText = data.sensor_data.window_open ? '🔓 OPEN' : '🔒 CLOSED';
-          contactEl.className = 'status-value ' + (data.sensor_data.window_open ? 'not-commissioned' : 'commissioned');
-          
-          // Battery
-          document.getElementById('ble-battery').innerText = data.sensor_data.battery + '%';
-          
-          // RSSI
-          document.getElementById('ble-rssi').innerText = data.sensor_data.rssi + ' dBm';
-          
-          // Illuminance
-          document.getElementById('ble-lux').innerText = data.sensor_data.illuminance + ' lux';
-          
-          // Rotation
-          document.getElementById('ble-rotation').innerText = data.sensor_data.rotation + '°';
-          
-          // Last Update
-          const now = Date.now();
-          const secondsAgo = Math.floor((now - data.sensor_data.last_update) / 1000);
-          let timeStr;
-          if (secondsAgo < 60) timeStr = secondsAgo + 's ago';
-          else if (secondsAgo < 3600) timeStr = Math.floor(secondsAgo / 60) + 'm ago';
-          else timeStr = Math.floor(secondsAgo / 3600) + 'h ago';
-          
-          document.getElementById('ble-last-update').innerText = timeStr;
-
-          // Update Continuous Scan Control UI
-          const scanControlDiv = document.getElementById('ble-continuous-scan-control');
-          if (scanControlDiv) {
-            scanControlDiv.style.display = 'block';
-              
-            // Status vom Backend (falls verfügbar)
-            const isScanning = data.continuous_scan_active || false;
-            updateContinuousScanUI(isScanning);
-          }
-          
-          // Packet ID
-          if (typeof data.sensor_data.packet_id !== 'undefined') {
-            document.getElementById('ble-packet-id').innerText = data.sensor_data.packet_id;
-          } else {
-            document.getElementById('ble-packet-id').innerText = '--';
-          }
-          
-          // Button Events
-          if (data.sensor_data.has_button_event) {
-            const eventMap = {
-              0: { name: 'None', emoji: '' },
-              1: { name: 'Single Press', emoji: '👆' },
-              128: { name: 'Hold', emoji: '⏸️' },
-              254: { name: 'Hold', emoji: '⏸️' }
-            };
-            
-            const eventInfo = eventMap[data.sensor_data.button_event] || { name: 'Unknown', emoji: '❓' };
-            
-            document.getElementById('ble-button-event').innerText = eventInfo.emoji + ' ' + eventInfo.name;
-            document.getElementById('ble-button-container').style.display = 'block';
-            
-            // Highlight effect
-            const btnContainer = document.getElementById('ble-button-container');
-            btnContainer.style.background = 'rgba(33, 150, 243, 0.2)';
-            btnContainer.style.borderColor = '#2196F3';
-            
-            setTimeout(() => {
-              btnContainer.style.background = '';
-              btnContainer.style.borderColor = '';
-            }, 3000);
-            
-          } else {
-            document.getElementById('ble-button-container').style.display = 'none';
-          }
-          
-        } else {
-          // No valid sensor data yet
-          contactEl.innerText = 'No Data';
-          contactEl.className = 'status-value';
-          document.getElementById('ble-battery').innerText = '--%';
-          document.getElementById('ble-rssi').innerText = '-- dBm';
-          document.getElementById('ble-lux').innerText = '-- lux';
-          document.getElementById('ble-rotation').innerText = '--°';
-          document.getElementById('ble-last-update').innerText = 'Waiting...';
-          document.getElementById('ble-packet-id').innerText = '--';
-          document.getElementById('ble-button-container').style.display = 'none';
-        }
-      } else {
-        // Not paired
-        document.getElementById('ble-sensor-status').classList.add('hidden');
-        document.getElementById('ble-scan-interface').classList.remove('hidden');
-        document.getElementById('ble-matter-toggle').classList.add('hidden');
-        const securityBlock = document.getElementById('ble-security-info');
-        if (securityBlock) {
-            securityBlock.style.display = 'none';
-        }
-        const scanControlDiv = document.getElementById('ble-continuous-scan-control');
-        if (scanControlDiv) {
-          scanControlDiv.style.display = 'none';
-        }
-      }
-      
-      // Refresh contact sensor status
-      if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-        AppState.ws.send('contact_sensor_status');
-      }
-    }
-    
-    // ============================================================================
-    // BLE Unpair
-    // ============================================================================
-    
-    function unpairBLE() {
-      if (!confirm('Remove this sensor? The shutter will no longer react to window open/close events.')) {
-        return;
-      }
-      
-      if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-        showLoading('Unpairing device...');
-        
-        AppState.ws.send(JSON.stringify({cmd: 'ble_unpair'}));
-        
-        setTimeout(() => {
-          AppState.ws.send('ble_status');
-          hideLoading();
-          showErrorBanner('Device Unpaired', 'BLE sensor has been removed', 'success');
-        }, 1000);
-      }
-    }
-    
-    // ============================================================================
-    // Contact Sensor Matter Toggle
-    // ============================================================================
-    
-    function updateContactSensorToggle(enabled, active) {
-      AppState.contactSensorMatterEnabled = enabled;
-      AppState.contactSensorEndpointActive = active;
-      
-      const offBtn = document.getElementById('matter-toggle-off');
-      const onBtn = document.getElementById('matter-toggle-on');
-      
-      if (enabled) {
-        offBtn.classList.remove('active');
-        offBtn.setAttribute('aria-pressed', 'false');
-        onBtn.classList.add('active');
-        onBtn.setAttribute('aria-pressed', 'true');
-      } else {
-        onBtn.classList.remove('active');
-        onBtn.setAttribute('aria-pressed', 'false');
-        offBtn.classList.add('active');
-        offBtn.setAttribute('aria-pressed', 'true');
-      }
-      
-      // Status Text
-      let statusText = '';
-      let statusColor = '';
-      
-      if (enabled && active) {
-        statusText = '✓ Active in Matter';
-        statusColor = 'var(--success-color)';
-      } else if (enabled && !active) {
-        statusText = '⏳ Waiting for sensor data...';
-        statusColor = 'var(--warning-color)';
-      } else {
-        statusText = '❌ Disabled';
-        statusColor = 'var(--text-secondary)';
-      }
-      
-      const statusEl = document.getElementById('matter-toggle-status-text');
-      if (statusEl) {
-        statusEl.innerText = statusText;
-        statusEl.style.color = statusColor;
-      }
-    }
-    
-    function setContactSensorMatter(enable) {
-      if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-        const cmd = enable ? 'contact_sensor_enable' : 'contact_sensor_disable';
-        AppState.ws.send(cmd);
-        
-        // Optimistic UI update
-        updateContactSensorToggle(enable, AppState.contactSensorEndpointActive);
-        
-        // Status refresh after 1 second
-        setTimeout(() => {
-          if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-            AppState.ws.send('contact_sensor_status');
-          }
-        }, 1000);
-        
-        const message = enable 
-          ? 'Contact sensor enabled for Matter' 
-          : 'Contact sensor disabled';
-        showErrorBanner('Matter Integration', message, 'success');
-      }
-    }
-    
-    // ============================================================================
-    // Utility Functions
-    // ============================================================================
-    
-    function escapeHtml(unsafe) {
-      if (!unsafe) return '';
-      return unsafe
-        .toString()
-        .replace(/&/g, "&amp;")
-        .replace(/</g, "&lt;")
-        .replace(/>/g, "&gt;")
-        .replace(/"/g, "&quot;")
-        .replace(/'/g, "&#039;");
-    }
-    
-    // ============================================================================
-    // Keyboard Accessibility
-    // ============================================================================
-    
-    // ESC key to close modals
-    document.addEventListener('keydown', (e) => {
-      if (e.key === 'Escape') {
-        // Close any open modal
-        const modals = document.querySelectorAll('.modal:not(.hidden)');
-        modals.forEach(modal => {
-          modal.classList.add('hidden');
-          modal.setAttribute('aria-hidden', 'true');
-        });
-        
-        // Close error banner
-        hideErrorBanner();
-      }
-    });
-    
-    // Trap focus in modals
-    document.querySelectorAll('.modal').forEach(modal => {
-      modal.addEventListener('keydown', (e) => {
-        if (e.key === 'Tab') {
-          const focusableElements = modal.querySelectorAll(
-            'button:not(:disabled), input:not(:disabled), [tabindex]:not([tabindex="-1"])'
-          );
-          
-          const firstElement = focusableElements[0];
-          const lastElement = focusableElements[focusableElements.length - 1];
-          
-          if (e.shiftKey && document.activeElement === firstElement) {
-            e.preventDefault();
-            lastElement.focus();
-          } else if (!e.shiftKey && document.activeElement === lastElement) {
-            e.preventDefault();
-            firstElement.focus();
-          }
-        }
-      });
-    });
-    
-    // ============================================================================
-    // Initialize
-    // ============================================================================
-    
-    // Start WebSocket connection when page loads
-    document.addEventListener('DOMContentLoaded', () => {
-      console.log('🚀 BeltWinder Matter - Initializing...');
-      connectWebSocket();
-      
-      // Show overview tab by default
-      show('overview');
-      
-      console.log('✓ Application initialized');
-    });
-    
-    // ============================================================================
-    // Safari-specific fixes
-    // ============================================================================
-    
-    // Detect Safari
-    const isSafari = /^((?!chrome|android).)*safari/i.test(navigator.userAgent);
-    
-    if (isSafari) {
-      console.log('🍎 Safari detected - applying compatibility fixes');
-      
-      // Safari has issues with backdrop-filter on some elements
-      // Force hardware acceleration
-      document.querySelectorAll('.card, .modal-box, .header').forEach(el => {
-        el.style.transform = 'translateZ(0)';
-      });
-    }
-    
-    // ============================================================================
-    // Network Status Monitoring
-    // ============================================================================
-    
-    window.addEventListener('online', () => {
-      console.log('📶 Network online');
-      showErrorBanner('Network Restored', 'Connection is back online', 'success');
-      
-      // Reconnect WebSocket if needed
-      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        connectWebSocket();
-      }
-    });
-    
-    window.addEventListener('offline', () => {
-      console.log('📵 Network offline');
-      showErrorBanner('Network Lost', 'No internet connection', 'error');
-    });
-    
-    // ============================================================================
-    // Performance Monitoring
-    // ============================================================================
-    
-    if ('performance' in window && 'memory' in performance) {
-      setInterval(() => {
-        const memory = performance.memory;
-        const usedMB = (memory.usedJSHeapSize / 1048576).toFixed(1);
-        const totalMB = (memory.jsHeapSizeLimit / 1048576).toFixed(1);
-        
-        console.log(`💾 Memory: ${usedMB}MB / ${totalMB}MB`);
-        
-        // Warn if memory usage is high
-        if (memory.usedJSHeapSize / memory.jsHeapSizeLimit > 0.9) {
-          console.warn('⚠️ High memory usage detected');
-        }
-      }, 60000); // Check every minute
-    }
-    
-    // ============================================================================
-    // Visibility Change Handling
-    // ============================================================================
-    
-    document.addEventListener('visibilitychange', () => {
-      if (document.hidden) {
-        console.log('👁️ Page hidden - reducing updates');
-        // Optionally reduce update frequency when page is not visible
-      } else {
-        console.log('👁️ Page visible - resuming normal updates');
-        // Refresh status immediately when page becomes visible
-        if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-          AppState.ws.send('status');
-          AppState.ws.send('matter_status');
-          
-          const currentTab = document.querySelector('.nav button.active').id.replace('nav-', '');
-          if (currentTab === 'ble') {
-            AppState.ws.send('ble_status');
-          }
-        }
-      }
-    });
-    
-    // ============================================================================
-    // Touch Event Optimization for Mobile
-    // ============================================================================
-    
-    // Add touch-friendly feedback
-    if ('ontouchstart' in window) {
-      console.log('📱 Touch device detected');
-      
-      document.querySelectorAll('.btn, .direction-btn, .nav button').forEach(el => {
-        el.addEventListener('touchstart', function() {
-          this.style.transform = 'scale(0.95)';
-        }, { passive: true });
-        
-        el.addEventListener('touchend', function() {
-          setTimeout(() => {
-            this.style.transform = '';
-          }, 100);
-        }, { passive: true });
-      });
-    }
-    
-    // ============================================================================
-    // Auto-reconnect Logic Enhancement
-    // ============================================================================
-    
-    let reconnectAttempts = 0;
-    const MAX_RECONNECT_ATTEMPTS = 10;
-    const BASE_RECONNECT_DELAY = 1000;
-    
-    function enhancedReconnect() {
-      if (reconnectAttempts >= MAX_RECONNECT_ATTEMPTS) {
-        console.error('❌ Max reconnection attempts reached');
-        showErrorBanner(
-          'Connection Failed', 
-          'Unable to connect to device. Please check your network and refresh the page.', 
-          'error'
-        );
-        clearInterval(AppState.reconnectInterval);
-        return;
-      }
-      
-      reconnectAttempts++;
-      const delay = Math.min(BASE_RECONNECT_DELAY * Math.pow(2, reconnectAttempts - 1), 30000);
-      
-      console.log(`🔄 Reconnection attempt ${reconnectAttempts}/${MAX_RECONNECT_ATTEMPTS} in ${delay}ms`);
-      
-      setTimeout(() => {
-        connectWebSocket();
-      }, delay);
-    }
-    
-    // Reset reconnect counter on successful connection
-    const originalOnOpen = AppState.ws ? AppState.ws.onopen : null;
-    if (AppState.ws) {
-      AppState.ws.addEventListener('open', () => {
-        reconnectAttempts = 0;
-        console.log('✓ Reconnection counter reset');
-      });
-    }
-    
-    // ============================================================================
-    // Console Commands for Debugging
-    // ============================================================================
-    
-    window.BeltWinder = {
-      // Get current state
-      getState: () => {
-        console.log('Current AppState:', AppState);
-        return AppState;
-      },
-      
-      // Send raw command
-      send: (cmd) => {
-        if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-          AppState.ws.send(cmd);
-          console.log('✓ Sent:', cmd);
-        } else {
-          console.error('✗ WebSocket not connected');
-        }
-      },
-      
-      // Force reconnect
-      reconnect: () => {
-        console.log('🔄 Forcing reconnection...');
-        if (AppState.ws) {
-          AppState.ws.close();
-        }
-        reconnectAttempts = 0;
-        connectWebSocket();
-      },
-      
-      // Show test notification
-      testNotification: (type = 'success') => {
-        showErrorBanner('Test Notification', 'This is a test message', type);
-      },
-      
-      // Get discovered BLE devices
-      getDiscoveredDevices: () => {
-        console.log('Discovered BLE devices:', AppState.discoveredDevices);
-        return AppState.discoveredDevices;
-      },
-      
-      // Debug mode toggle
-      debugMode: false,
-      toggleDebug: () => {
-        window.BeltWinder.debugMode = !window.BeltWinder.debugMode;
-        console.log('Debug mode:', window.BeltWinder.debugMode ? 'ON' : 'OFF');
-        
-        if (window.BeltWinder.debugMode) {
-          // Enable verbose WebSocket logging
-          const originalOnMessage = AppState.ws.onmessage;
-          AppState.ws.onmessage = (e) => {
-            console.log('📨 [DEBUG] Raw message:', e.data);
-            originalOnMessage(e);
-          };
-        }
-      }
-    };
-    
-    console.log('💡 Debug commands available via window.BeltWinder');
-    console.log('   - BeltWinder.getState()');
-    console.log('   - BeltWinder.send(cmd)');
-    console.log('   - BeltWinder.reconnect()');
-    console.log('   - BeltWinder.testNotification(type)');
-    console.log('   - BeltWinder.getDiscoveredDevices()');
-    console.log('   - BeltWinder.toggleDebug()');
-    
-    // ============================================================================
-    // Service Worker Registration (Optional - for PWA support)
-    // ============================================================================
-    
-    if ('serviceWorker' in navigator) {
-      // Uncomment to enable PWA features
-      /*
-      navigator.serviceWorker.register('/sw.js')
-        .then(registration => {
-          console.log('✓ Service Worker registered:', registration);
-        })
-        .catch(error => {
-          console.log('✗ Service Worker registration failed:', error);
-        });
-      */
-    }
-    
-    // ============================================================================
-    // Analytics/Error Tracking Stub
-    // ============================================================================
-    
-    window.addEventListener('error', (event) => {
-      console.error('💥 Global error:', event.error);
-      
-      // You can send this to an analytics service
-      // Example: sendToAnalytics('error', event.error);
-    });
-    
-    window.addEventListener('unhandledrejection', (event) => {
-      console.error('💥 Unhandled promise rejection:', event.reason);
-      
-      // You can send this to an analytics service
-      // Example: sendToAnalytics('unhandledRejection', event.reason);
-    });
-    
-    // ============================================================================
-    // Cleanup on Page Unload
-    // ============================================================================
-    
-    window.addEventListener('beforeunload', () => {
-      console.log('👋 Page unloading - cleaning up...');
-      
-      // Close WebSocket gracefully
-      if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
-        AppState.ws.close();
-      }
-      
-      // Clear intervals
-      clearInterval(AppState.statusInterval);
-      clearInterval(AppState.reconnectInterval);
-    });
-    
-    // ============================================================================
-    // Animation Performance Optimization
-    // ============================================================================
-    
-    // Pause animations when not visible
-    let animationFrameId = null;
-    
-    function optimizeAnimations() {
-      if (document.hidden) {
-        // Pause CSS animations
-        document.body.style.animationPlayState = 'paused';
-      } else {
-        // Resume CSS animations
-        document.body.style.animationPlayState = 'running';
-      }
-    }
-    
-    document.addEventListener('visibilitychange', optimizeAnimations);
-    
-    // ============================================================================
-    // Battery Status API (if available)
-    // ============================================================================
-    
-    if ('getBattery' in navigator) {
-      navigator.getBattery().then(battery => {
-        console.log('🔋 Device battery:', (battery.level * 100) + '%');
-        
-        // Reduce update frequency if battery is low
-        if (battery.level < 0.15) {
-          console.log('⚡ Low battery detected - reducing update frequency');
-          // Optionally adjust status interval
-        }
-        
-        battery.addEventListener('levelchange', () => {
-          console.log('🔋 Battery level changed:', (battery.level * 100) + '%');
-        });
-      });
-    }
-    
-    // ============================================================================
-    // Responsive Image Loading
-    // ============================================================================
-    
-    // Lazy load QR code image only when modal is opened
-    const originalShowMatterQR = showMatterQR;
-    showMatterQR = function(qrUrl, qrImageUrl, pairingCode) {
-      const img = document.getElementById('matter-qr-img');
-      
-      // Only load image if not already loaded
-      if (!img.src || img.src !== qrImageUrl) {
-        img.src = qrImageUrl;
-      }
-      
-      originalShowMatterQR(qrUrl, qrImageUrl, pairingCode);
-    };
-    
-    // ============================================================================
-    // Internationalization Stub
-    // ============================================================================
-    
-    // Detect browser language
-    const userLanguage = navigator.language || navigator.userLanguage;
-    console.log('🌍 Browser language:', userLanguage);
-    
-    // You can implement multi-language support here
-    // Example: loadTranslations(userLanguage);
-    
-    // ============================================================================
-    // Theme Support (Optional)
-    // ============================================================================
-    
-    // Detect system theme preference
-    if (window.matchMedia) {
-      const darkModeQuery = window.matchMedia('(prefers-color-scheme: dark)');
-      
-      console.log('🎨 System theme:', darkModeQuery.matches ? 'dark' : 'light');
-      
-      // Listen for theme changes
-      darkModeQuery.addEventListener('change', (e) => {
-        console.log('🎨 Theme changed to:', e.matches ? 'dark' : 'light');
-        // You can adjust UI based on theme preference
-      });
-    }
-    
-    // ============================================================================
-    // End of Script
-    // ============================================================================
-    
-    console.log('✅ BeltWinder Matter UI - Fully Loaded');
-    console.log('📍 Version: 1.3.0');
-    console.log('🔧 Debug mode: Type BeltWinder.toggleDebug() in console');
-    
-  </script>
-</body>
-</html>
-)rawliteral";
+#ifdef USE_GZIP_UI
+    #include "index_html_gz.h"
+    #define SERVE_COMPRESSED_HTML 1
+#else
+    #warning "Building without GZIP compression - UI will be large!"
+    
+    // Fallback: Lade HTML aus separater Datei zur Compile-Time
+    // (wird normalerweise nicht verwendet)
+    static const char index_html[] PROGMEM = 
+        "<!DOCTYPE html><html><body>"
+        "<h1>UI not available - please enable USE_GZIP_UI</h1>"
+        "</body></html>";
+#endif
 
 // ============================================================================
 // Static Close Callback
@@ -3888,7 +62,7 @@ static void ws_close_callback(httpd_handle_t hd, int sockfd) {
 // ============================================================================
 
 WebUIHandler::WebUIHandler(app_driver_handle_t h, ShellyBLEManager* ble) 
-    : handle(h), bleManager(ble), server(nullptr) {
+        : handle(h), bleManager(ble), server(nullptr) {
     client_mutex = xSemaphoreCreateMutex();
     if (!client_mutex) {
         ESP_LOGE(TAG, "Failed to create client mutex");
@@ -3943,12 +117,17 @@ void WebUIHandler::begin() {
         ESP_LOGI(TAG, "  Max open sockets: %d", cfg.max_open_sockets);
         ESP_LOGI(TAG, "  LRU purge: %s", cfg.lru_purge_enable ? "enabled" : "disabled");
         
-        // ✅ BLE Callbacks registrieren
+        #ifdef SERVE_COMPRESSED_HTML
+            ESP_LOGI(TAG, "  Web-UI: GZIP compressed (%d bytes)", index_html_gz_len);
+        #else
+            ESP_LOGI(TAG, "  Web-UI: Uncompressed (fallback mode)");
+        #endif
+        
+        // BLE Callbacks registrieren
         if (bleManager) {
             ESP_LOGI(TAG, "═══════════════════════════════════");
             ESP_LOGI(TAG, "REGISTERING BLE CALLBACKS");
             
-            // State Change ist OK hier, das betrifft nur UI
             bleManager->setStateChangeCallback([this](auto oldState, auto newState) {
                 broadcastBLEStateChange(oldState, newState);
             });
@@ -3960,82 +139,59 @@ void WebUIHandler::begin() {
     }
 }
 
-void WebUIHandler::register_client(int fd) {
-    if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        if (active_clients.size() >= MAX_CLIENTS) {
-            ESP_LOGW(TAG, "✗ WebSocket limit reached (%d/%d) - rejecting fd=%d", 
-                     active_clients.size(), MAX_CLIENTS, fd);
-            xSemaphoreGive(client_mutex);
-            
-            close(fd);
-            return;
-        }
-        
-        ClientInfo client;
-        client.fd = fd;
-        client.last_activity = millis();
-        
-        active_clients.push_back(client);
-        ESP_LOGI(TAG, "═══════════════════════════════════");
-        ESP_LOGI(TAG, "Client connected: fd=%d (total: %d)", fd, active_clients.size());
-        ESP_LOGI(TAG, "═══════════════════════════════════");
-        xSemaphoreGive(client_mutex);
-    }
-}
-
-void WebUIHandler::unregister_client(int fd) {
-    if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        ESP_LOGI(TAG, "Closing socket fd=%d...", fd);
-        
-        active_clients.erase(
-            std::remove_if(active_clients.begin(), active_clients.end(),
-                          [fd](const ClientInfo& c) { return c.fd == fd; }),
-            active_clients.end()
-        );
-        
-        ESP_LOGI(TAG, "═══════════════════════════════════");
-        ESP_LOGI(TAG, "Client disconnected: fd=%d (remaining: %d)", fd, active_clients.size());
-        ESP_LOGI(TAG, "═══════════════════════════════════");
-        xSemaphoreGive(client_mutex);
-    }
-}
-
-void WebUIHandler::broadcast_to_all_clients(const char* message) {
-    if (!server || !message) return;
-    
-    if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        size_t msg_len = strlen(message);
-        
-        httpd_ws_frame_t ws_pkt;
-        memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
-        ws_pkt.type = HTTPD_WS_TYPE_TEXT;
-        ws_pkt.payload = (uint8_t*)message;
-        ws_pkt.len = msg_len;
-        
-        // Kopie der Client-Liste, um Deadlocks zu vermeiden, falls unregister aufgerufen wird
-        std::vector<int> target_fds;
-        for (const auto& client : active_clients) {
-            target_fds.push_back(client.fd);
-        }
-        xSemaphoreGive(client_mutex);
-        
-        for (int fd : target_fds) {
-            // Sende direkt - ESP IDF kopiert den Buffer in den TCP Stack
-            esp_err_t ret = httpd_ws_send_frame_async(server, fd, &ws_pkt);
-            
-            if (ret != ESP_OK) {
-                ESP_LOGW(TAG, "Failed to send to fd=%d: %s", fd, esp_err_to_name(ret));
-                // Optional: Hier könnte man Clients zum Löschen markieren
-            }
-        }
-    }
-}
+// ============================================================================
+// HTTP Root Handler - Serves Web-UI
+// ============================================================================
 
 esp_err_t WebUIHandler::root_handler(httpd_req_t *req) {
-    httpd_resp_set_type(req, "text/html");
-    httpd_resp_send(req, index_html, HTTPD_RESP_USE_STRLEN);
-    return ESP_OK;
+    ESP_LOGI(TAG, "Serving Web-UI to client: %s", 
+             req->user_ctx ? "authenticated" : "anonymous");
+    
+    #ifdef SERVE_COMPRESSED_HTML
+        // ====================================================================
+        // Serve GZIP Compressed HTML
+        // ====================================================================
+        
+        httpd_resp_set_type(req, "text/html");
+        httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
+        
+        // Cache für 1 Stunde (spart Bandwidth)
+        httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=3600");
+        
+        // ETag für Cache-Validation (optional)
+        char etag[32];
+        snprintf(etag, sizeof(etag), "\"%08x\"", index_html_gz_len);
+        httpd_resp_set_hdr(req, "ETag", etag);
+        
+        esp_err_t ret = httpd_resp_send(req, 
+                                       (const char*)index_html_gz, 
+                                       index_html_gz_len);
+        
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✓ Served compressed UI (%d bytes)", index_html_gz_len);
+        } else {
+            ESP_LOGE(TAG, "✗ Failed to serve UI: %s", esp_err_to_name(ret));
+        }
+        
+        return ret;
+        
+    #else
+        // ====================================================================
+        // Fallback: Uncompressed HTML
+        // ====================================================================
+        
+        httpd_resp_set_type(req, "text/html");
+        httpd_resp_send(req, index_html, HTTPD_RESP_USE_STRLEN);
+        
+        ESP_LOGW(TAG, "⚠ Served uncompressed UI (USE_GZIP_UI not defined)");
+        
+        return ESP_OK;
+    #endif
 }
+
+// ============================================================================
+// WebSocket Handler
+// ============================================================================
 
 esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     if (req->method == HTTP_GET) {
@@ -4044,10 +200,9 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-        ESP_LOGI(TAG, "║  WEBSOCKET CONNECTION INCOMING    ║");
+        ESP_LOGI(TAG, "║  WEBSOCKET CONNECTION ESTABLISHED ║");
         ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
         ESP_LOGI(TAG, "Socket FD: %d", fd);
-        ESP_LOGI(TAG, "User-Agent: %s", req->user_ctx ? "present" : "NULL");
         
         // IP-Adresse extrahieren
         struct sockaddr_in6 addr;
@@ -4063,6 +218,9 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         self->register_client(fd);
         return ESP_OK;
     }
+
+    WebUIHandler* self = (WebUIHandler*)req->user_ctx;
+    int fd = httpd_req_to_sockfd(req);
 
     // Frame empfangen
     httpd_ws_frame_t ws_pkt;
@@ -4126,37 +284,6 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     ESP_LOGI(TAG, "Command: %s", cmd);
     ESP_LOGI(TAG, "Length: %d", strlen(cmd));
 
-    // Prüfe ob es JSON ist
-    if (cmd[0] == '{') {
-        ESP_LOGI(TAG, "→ JSON Command detected");
-        
-        // Parse cmd type
-        String json = String(cmd);
-        int cmdStart = json.indexOf("\"cmd\":\"") + 7;
-        int cmdEnd = json.indexOf("\"", cmdStart);
-        String cmdType = json.substring(cmdStart, cmdEnd);
-        
-        ESP_LOGI(TAG, "→ Command Type: %s", cmdType.c_str());
-    }
-
-    ESP_LOGI(TAG, "═══════════════════════════════════");
-    
-    WebUIHandler* self = (WebUIHandler*)req->user_ctx;
-    int fd = httpd_req_to_sockfd(req);
-    
-    ESP_LOGI(TAG, "WebSocket: Received command from fd=%d: '%s'", fd, cmd);
-
-    // Last activity aktualisieren
-    if (xSemaphoreTake(self->client_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
-        for (auto& client : self->active_clients) {
-            if (client.fd == fd) {
-                client.last_activity = millis();
-                break;
-            }
-        }
-        xSemaphoreGive(self->client_mutex);
-    }
-    
     // ========================================================================
     // Command Handling (ERWEITERT MIT DEBUG)
     // ========================================================================
@@ -4226,6 +353,118 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         
         // will never reach here (factory_reset() makes esp_restart())
     }
+    else if (strcmp(cmd, "get_device_name") == 0) {
+    ESP_LOGI(TAG, "WebSocket: Get device name requested");
+    
+    extern DeviceNaming* deviceNaming;
+    if (!deviceNaming) {
+        const char* error = "{\"type\":\"error\",\"message\":\"Device naming not initialized\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)error,
+            .len = strlen(error)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        free(buf);
+        return ESP_OK;
+    }
+    
+    DeviceNaming::DeviceName names = deviceNaming->getNames();
+    
+    char json_buf[512];
+    snprintf(json_buf, sizeof(json_buf),
+            "{\"type\":\"device_name\","
+            "\"room\":\"%s\","
+            "\"type\":\"%s\","
+            "\"position\":\"%s\","
+            "\"hostname\":\"%s\","
+            "\"matterName\":\"%s\"}",
+            names.room.c_str(),
+            names.type.c_str(),
+            names.position.c_str(),
+            names.hostname.c_str(),
+            names.matterName.c_str());
+    
+    httpd_ws_frame_t frame = {
+        .type = HTTPD_WS_TYPE_TEXT,
+        .payload = (uint8_t*)json_buf,
+        .len = strlen(json_buf)
+    };
+    httpd_ws_send_frame_async(req->handle, fd, &frame);
+}
+
+else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
+    ESP_LOGI(TAG, "WebSocket: Save device name requested");
+    
+    extern DeviceNaming* deviceNaming;
+    if (!deviceNaming) {
+        const char* error = "{\"type\":\"error\",\"message\":\"Device naming not initialized\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)error,
+            .len = strlen(error)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        free(buf);
+        return ESP_OK;
+    }
+    
+    // Parse JSON
+    String json = String(cmd);
+    
+    int roomStart = json.indexOf("\"room\":\"") + 8;
+    int roomEnd = json.indexOf("\"", roomStart);
+    String room = json.substring(roomStart, roomEnd);
+    
+    int typeStart = json.indexOf("\"type\":\"") + 8;
+    int typeEnd = json.indexOf("\"", typeStart);
+    String type = json.substring(typeStart, typeEnd);
+    
+    int posStart = json.indexOf("\"position\":\"") + 12;
+    int posEnd = json.indexOf("\"", posStart);
+    String position = json.substring(posStart, posEnd);
+    
+    ESP_LOGI(TAG, "  Room: %s", room.c_str());
+    ESP_LOGI(TAG, "  Type: %s", type.c_str());
+    ESP_LOGI(TAG, "  Position: %s", position.c_str());
+    
+    // Validate and save
+    if (!deviceNaming->save(room, type, position)) {
+        const char* error = "{\"type\":\"error\",\"message\":\"Invalid device name parameters\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)error,
+            .len = strlen(error)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        free(buf);
+        return ESP_OK;
+    }
+    
+    // Apply to system (mDNS + Matter)
+    deviceNaming->apply();
+    
+    // Get updated names
+    DeviceNaming::DeviceName names = deviceNaming->getNames();
+    
+    // Send confirmation
+    char success_msg[512];
+    snprintf(success_msg, sizeof(success_msg),
+            "{\"type\":\"device_name_saved\","
+            "\"hostname\":\"%s\","
+            "\"matterName\":\"%s\"}",
+            names.hostname.c_str(),
+            names.matterName.c_str());
+    
+    httpd_ws_frame_t frame = {
+        .type = HTTPD_WS_TYPE_TEXT,
+        .payload = (uint8_t*)success_msg,
+        .len = strlen(success_msg)
+    };
+    httpd_ws_send_frame_async(req->handle, fd, &frame);
+    
+    ESP_LOGI(TAG, "✓ Device name saved and applied");
+}
     else if (strcmp(cmd, "status") == 0) {
         char status_buf[128];
         snprintf(status_buf, sizeof(status_buf), 
@@ -4361,52 +600,72 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     // ============================================================================
 
     else if (strcmp(cmd, "ble_scan") == 0) {
-    ESP_LOGI(TAG, "═══════════════════════════════════");
-    ESP_LOGI(TAG, "WebSocket: BLE DISCOVERY SCAN");
-    ESP_LOGI(TAG, "═══════════════════════════════════");
-    
-    if (self->bleManager) {
-        // ════════════════════════════════════════════════════════════════
-        // ✅ Ensure BLE is started BEFORE scanning
-        // ════════════════════════════════════════════════════════════════
-        
-        if (!self->bleManager->isBLEStarted()) {
-            ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "→ BLE not started yet");
-            ESP_LOGI(TAG, "  Starting BLE for discovery scan...");
+        if (self->bleManager) {
+            ESP_LOGI(TAG, "═══════════════════════════════════");
+            ESP_LOGI(TAG, "WebSocket: BLE DISCOVERY SCAN");
+            ESP_LOGI(TAG, "═══════════════════════════════════");
             
-            if (!self->bleManager->ensureBLEStarted()) {
-                ESP_LOGE(TAG, "✗ Failed to start BLE");
+            // Ensure BLE is started BEFORE scanning
+            if (!self->bleManager->isBLEStarted()) {
+                ESP_LOGI(TAG, "");
+                ESP_LOGI(TAG, "→ BLE not started yet");
+                ESP_LOGI(TAG, "  Starting BLE for discovery scan...");
                 
-                const char* error = "{\"type\":\"error\",\"message\":\"Failed to start BLE\"}";
-                httpd_ws_frame_t frame = {
-                    .type = HTTPD_WS_TYPE_TEXT,
-                    .payload = (uint8_t*)error,
-                    .len = strlen(error)
-                };
-                httpd_ws_send_frame_async(req->handle, fd, &frame);
+                if (!self->bleManager->ensureBLEStarted()) {
+                    ESP_LOGE(TAG, "✗ Failed to start BLE");
+                    
+                    const char* error = "{\"type\":\"error\",\"message\":\"Failed to start BLE\"}";
+                    httpd_ws_frame_t frame = {
+                        .type = HTTPD_WS_TYPE_TEXT,
+                        .payload = (uint8_t*)error,
+                        .len = strlen(error)
+                    };
+                    httpd_ws_send_frame_async(req->handle, fd, &frame);
+                    
+                    free(buf);
+                    return ESP_OK;
+                }
                 
-                free(buf);
-                return ESP_OK;
+                ESP_LOGI(TAG, "✓ BLE started successfully");
+                ESP_LOGI(TAG, "");
+                
+                // Kurze Pause für BLE Stack
+                vTaskDelay(pdMS_TO_TICKS(1000));
             }
             
-            ESP_LOGI(TAG, "✓ BLE started successfully");
-            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Starting 10-second discovery scan...");
+            ESP_LOGI(TAG, "Will stop on first Shelly BLU Door/Window found!");
             
-            // Kurze Pause für BLE Stack
-            vTaskDelay(pdMS_TO_TICKS(1000));
-        }
-        
-        ESP_LOGI(TAG, "Starting 10-second discovery scan...");
-        ESP_LOGI(TAG, "Will stop on first Shelly BLU Door/Window found!");
-        
-        // Start Scan
-        self->bleManager->startScan(10, true);
+            // Start Scan
+            self->bleManager->startScan(10, true);
 
+            // Task-Parameter für Scan-Monitoring
+            struct ScanMonitorParams {
+                WebUIHandler* handler;
+                ShellyBLEManager* bleManager;
+            };
+            
+            ScanMonitorParams* params = new ScanMonitorParams{
+                self,
+                self->bleManager
+            };
+            
+            // Memory Stats VOR Task-Erstellung
+            self->logMemoryStats("Before BLE Scan Monitor Task");
+            
             xTaskCreate([](void *param) {
-                WebUIHandler *handler = (WebUIHandler *)param;
+                // RAII-Pattern
+                std::unique_ptr<ScanMonitorParams> p(
+                    static_cast<ScanMonitorParams*>(param)
+                );
                 
-                ESP_LOGI("WebUI", "📡 Scan task started");
+                ESP_LOGI(TAG, "📡 Scan monitor task started");
+                
+                // Watchdog entfernen (Scan kann bis zu 12 Sekunden dauern)
+                esp_task_wdt_delete(NULL);
+                
+                // Memory Stats VOR Scan
+                p->handler->logMemoryStats("Scan Monitor Start");
 
                 // Wait for scan completion
                 uint32_t elapsed = 0;
@@ -4416,58 +675,72 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                     vTaskDelay(pdMS_TO_TICKS(100));
                     elapsed += 100;
                     
-                    if (handler->bleManager && !handler->bleManager->isScanActive()) {
-                        ESP_LOGI("WebUI", "✓ Scan ended at %u ms", elapsed);
+                    if (p->bleManager && !p->bleManager->isScanActive()) {
+                        ESP_LOGI(TAG, "✓ Scan ended at %u ms", elapsed);
                         break;
                     }
                 }
+                
+                // Memory Stats NACH Scan
+                p->handler->logMemoryStats("Scan Monitor End");
 
                 // Send completion
                 const char *complete_msg = "{\"type\":\"ble_scan_complete\"}";
-                handler->broadcast_to_all_clients(complete_msg);
-                ESP_LOGI("WebUI", "✓ Scan complete sent");
+                p->handler->broadcast_to_all_clients(complete_msg);
+                ESP_LOGI(TAG, "✓ Scan complete sent");
 
                 vTaskDelay(pdMS_TO_TICKS(200));
 
                 // Send devices
-                if (handler->bleManager) {
-                    std::vector<ShellyBLEDevice> discovered = handler->bleManager->getDiscoveredDevices();
+                if (p->bleManager) {
+                    std::vector<ShellyBLEDevice> discovered = p->bleManager->getDiscoveredDevices();
 
                     if (discovered.size() > 0) {
-                        // ✅ FIXED: Lokaler Buffer (kein static mehr)
+                        // Lokaler Buffer (kein static!)
                         char json_buf[2048];
                         
                         int offset = snprintf(json_buf, sizeof(json_buf),
-                                              "{\"type\":\"ble_discovered\",\"devices\":[");
+                                            "{\"type\":\"ble_discovered\",\"devices\":[");
 
                         for (size_t i = 0; i < discovered.size() && i < 10; i++) {
                             offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
-                                              "%s{\"name\":\"%s\",\"address\":\"%s\",\"rssi\":%d,\"encrypted\":%s}",
-                                              i > 0 ? "," : "",
-                                              discovered[i].name.c_str(),
-                                              discovered[i].address.c_str(),
-                                              discovered[i].rssi,
-                                              discovered[i].isEncrypted ? "true" : "false");
+                                            "%s{\"name\":\"%s\",\"address\":\"%s\",\"rssi\":%d,\"encrypted\":%s}",
+                                            i > 0 ? "," : "",
+                                            discovered[i].name.c_str(),
+                                            discovered[i].address.c_str(),
+                                            discovered[i].rssi,
+                                            discovered[i].isEncrypted ? "true" : "false");
                         }
                         snprintf(json_buf + offset, sizeof(json_buf) - offset, "]}");
 
-                        handler->broadcast_to_all_clients(json_buf);
-                        ESP_LOGI("WebUI", "✓ Sent %d devices", discovered.size());
+                        p->handler->broadcast_to_all_clients(json_buf);
+                        ESP_LOGI(TAG, "✓ Sent %d devices", discovered.size());
                     } else {
                         const char *empty = "{\"type\":\"ble_discovered\",\"devices\":[]}";
-                        handler->broadcast_to_all_clients(empty);
-                        ESP_LOGI("WebUI", "ℹ No devices found");
+                        p->handler->broadcast_to_all_clients(empty);
+                        ESP_LOGI(TAG, "ℹ No devices found");
                     }
                 }
-
-                ESP_LOGI("WebUI", "✓ Task complete");
                 
-                // ✅ CRITICAL: Delete task!
+                // High Water Mark Logging
+                UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+                ESP_LOGI(TAG, "Task Stack High Water Mark: %u bytes", 
+                        highWater * sizeof(StackType_t));
+                
+                if (highWater < 512) {
+                    ESP_LOGW(TAG, "⚠️ Stack critically low! Consider increasing size.");
+                }
+
+                ESP_LOGI(TAG, "✓ Scan monitor task complete");
+                
+                // unique_ptr wird automatisch freigegeben
                 vTaskDelete(NULL);
                 
-            }, "ble_scan_mon", 4096, self, 1, NULL);
+            }, "ble_scan_mon", 4096, params, 1, NULL);  // Stack: 4KB (kleiner Task)
         }
     }
+
+
 
     else if (strcmp(cmd, "ble_status") == 0) {
     if (self->bleManager) {
@@ -4521,7 +794,6 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
 
             Preferences prefs;
             if (prefs.begin("ShellyBLE", true)) {
-                // Passkey aus Preferences (falls gespeichert)
                 uint32_t stored_passkey = prefs.getUInt("passkey", 0);
                 if (stored_passkey > 0) {
                     char pk_buf[8];
@@ -4531,7 +803,6 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                 prefs.end();
             }
             
-            // Wenn kein Bindkey vorhanden, versuche aus NVS zu laden
             if (bindkey.length() == 0) {
                 if (prefs.begin("ShellyBLE", true)) {
                     bindkey = prefs.getString("bindkey", "");
@@ -4559,6 +830,34 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                              continuousScanActive ? "true" : "false");
             
             if (hasData) {
+                // Berechne "seconds_ago" im Backend!
+                uint32_t currentMillis = millis();
+                uint32_t secondsAgo = 0;
+                bool timeValid = false;
+                
+                if (sensorData.lastUpdate > 0) {
+                    if (currentMillis >= sensorData.lastUpdate) {
+                        secondsAgo = (currentMillis - sensorData.lastUpdate) / 1000;
+                        timeValid = true;
+                    } else {
+                        // Overflow
+                        uint32_t millisToOverflow = (0xFFFFFFFF - sensorData.lastUpdate);
+                        secondsAgo = (millisToOverflow + currentMillis) / 1000;
+                        timeValid = true;
+                    }
+                    
+                    // Sanity check
+                    if (secondsAgo > 86400) {
+                        ESP_LOGW(TAG, "⚠ Data older than 24 hours");
+                        timeValid = false;
+                    }
+                } else {
+                    timeValid = false;
+                }
+                
+                // Sende entweder validen Wert oder -1
+                int32_t secondsAgoToSend = timeValid ? (int32_t)secondsAgo : -1;
+                
                 offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
                                   "\"valid\":true,"
                                   "\"packet_id\":%d,"
@@ -4569,7 +868,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                                   "\"rssi\":%d,"
                                   "\"has_button_event\":%s,"
                                   "\"button_event\":%d,"
-                                  "\"last_update\":%lu",
+                                  "\"seconds_ago\":%d",
                                   sensorData.packetId,
                                   sensorData.windowOpen ? "true" : "false",
                                   sensorData.battery,
@@ -4578,7 +877,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                                   sensorData.rssi,
                                   sensorData.hasButtonEvent ? "true" : "false",
                                   (int)sensorData.buttonEvent,
-                                  (unsigned long)sensorData.lastUpdate);
+                                  secondsAgoToSend);
             } else {
                 offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
                                   "\"valid\":false");
@@ -4602,9 +901,9 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     }
 }
 
-// ============================================================================
-// ✅ SMART CONNECT COMMAND (3-in-1 Workflow)
-// ============================================================================
+// ════════════════════════════════════════════════════════════════════════
+// BLE SMART CONNECT COMMAND (3-in-1 Workflow)
+// ════════════════════════════════════════════════════════════════════════
 
 else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
     if (self->bleManager) {
@@ -4631,7 +930,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
             ESP_LOGI(TAG, "Passkey: %06u", passkey);
         }
         
-        // ✅ WICHTIG: Button-Press Anleitung VORHER senden
+        // Button-Press Anleitung VORHER senden
         const char* instructions = 
             "{\"type\":\"info\",\"message\":\"<strong>📋 GET READY!</strong><br><br>"
             "<strong>RIGHT NOW:</strong><br>"
@@ -4651,7 +950,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
         // Gib User 5 Sekunden
         vTaskDelay(pdMS_TO_TICKS(5000));
         
-        // ✅ Task-basierte Ausführung (non-blocking)
+        // Task-Parameter mit std::unique_ptr
         struct SmartConnectParams {
             ShellyBLEManager* bleManager;
             WebUIHandler* handler;
@@ -4668,8 +967,14 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
             passkey
         };
         
+        // Memory Stats VOR Task-Erstellung
+        self->logMemoryStats("Before Smart Connect Task");
+        
         xTaskCreate([](void* pvParameters) {
-            SmartConnectParams* p = (SmartConnectParams*)pvParameters;
+            // RAII-Pattern: unique_ptr garantiert Freigabe!
+            std::unique_ptr<SmartConnectParams> p(
+                static_cast<SmartConnectParams*>(pvParameters)
+            );
             
             ESP_LOGI(TAG, "🚀 Smart Connect Task started");
             ESP_LOGI(TAG, "   Address: %s", p->address.c_str());
@@ -4677,6 +982,9 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
             
             // Watchdog entfernen (kann lange dauern)
             esp_task_wdt_delete(NULL);
+            
+            // Memory Stats VOR Operation
+            p->handler->logMemoryStats("Smart Connect Task Start");
             
             ESP_LOGI(TAG, "");
             ESP_LOGI(TAG, "Pre-connection Scanner Status:");
@@ -4687,8 +995,11 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
             }
             ESP_LOGI(TAG, "");
             
-            // ✅ Smart Connect aufrufen (stoppt Scanner automatisch)
+            // Smart Connect aufrufen (stoppt Scanner automatisch)
             bool success = p->bleManager->smartConnectDevice(p->address, p->passkey);
+            
+            // Memory Stats NACH Operation
+            p->handler->logMemoryStats("Smart Connect Task End");
             
             if (success) {
                 PairedShellyDevice device = p->bleManager->getPairedDevice();
@@ -4698,7 +1009,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
                 if (p->passkey > 0) {
                     // Encrypted Mode Success
                     snprintf(success_msg, sizeof(success_msg),
-                            "{\"type\":\"success\",\"message\":\"<strong>✅ Encrypted Connection Complete!</strong><br><br>"
+                            "{\"type\":\"success\",\"message\":\"<strong>Encrypted Connection Complete!</strong><br><br>"
                             "Your device is now:<br>"
                             "✓ Bonded (trusted connection)<br>"
                             "✓ Encrypted (passkey: %06u)<br>"
@@ -4784,15 +1095,21 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
                 ESP_LOGE(TAG, "✗ Smart Connect failed");
             }
             
+            // High Water Mark Logging
+            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+            ESP_LOGI(TAG, "Task Stack High Water Mark: %u bytes", 
+                     highWater * sizeof(StackType_t));
+            
+            if (highWater < 512) {
+                ESP_LOGW(TAG, "⚠️ Stack critically low! Consider increasing size.");
+            }
+            
             ESP_LOGI(TAG, "✓ Smart Connect Task completed");
             
-            delete p;
+            // unique_ptr wird hier automatisch freigegeben!
             vTaskDelete(NULL);
-
-            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-            ESP_LOGI(TAG, "Task Stack (ble_smart) usage: %u bytes free", highWater * sizeof(StackType_t));  
             
-        }, "ble_smart", 4096, params, 5, NULL);
+        }, "ble_smart", 8192, params, 5, NULL);  // Stack: 8KB
         
         ESP_LOGI(TAG, "✓ Smart Connect task created");
     }
@@ -4814,7 +1131,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_connect\"", 20) == 0) {
         ESP_LOGI(TAG, "═══════════════════════════════════");
         ESP_LOGI(TAG, "Address: %s", address.c_str());
         
-        // ✅ Sende Anweisungen VOR dem Connect-Versuch
+        // Sende Anweisungen VOR dem Connect-Versuch
         const char* instructions = 
             "{\"type\":\"info\",\"message\":\"<strong>📋 GET READY!</strong><br><br>"
             "<strong>RIGHT NOW:</strong><br>"
@@ -4831,10 +1148,10 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_connect\"", 20) == 0) {
         };
         httpd_ws_send_frame_async(req->handle, fd, &frame);
         
-        // ✅ Gib User 5 Sekunden zum Lesen + Button drücken
+        // Gib User 5 Sekunden zum Lesen + Button drücken
         vTaskDelay(pdMS_TO_TICKS(5000));
         
-        // ✅ Jetzt verbinden
+        // Jetzt verbinden
         if (self->bleManager->connectDevice(address)) {
             const char* success = 
                 "{\"type\":\"success\",\"message\":\"<strong>✓ Bonding Complete!</strong><br><br>"
@@ -4876,7 +1193,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_connect\"", 20) == 0) {
             self->broadcast_to_all_clients(status_buf);
             
         } else {
-            // ✅ BESSERE ERROR MESSAGE mit Troubleshooting
+            // BESSERE ERROR MESSAGE mit Troubleshooting
             const char* error = 
                 "{\"type\":\"error\",\"message\":\"<strong>✗ Bonding Failed</strong><br><br>"
                 "<strong>Most likely causes:</strong><br><br>"
@@ -4977,9 +1294,10 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_encrypt\"", 20) == 0) {
     }
 }
 
-// ============================================================================
-// BLE Enable Encryption Command (Phase 2) - NON-BLOCKING
-// ============================================================================
+// ════════════════════════════════════════════════════════════════════════
+// BLE ENABLE ENCRYPTION (Phase 2)
+// ════════════════════════════════════════════════════════════════════════
+
 else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
     if (self->bleManager) {
         String json = String(cmd);
@@ -5014,7 +1332,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
         };
         httpd_ws_send_frame_async(req->handle, fd, &frame);
         
-        // ✅ Task-Parameter für non-blocking Execution
+        // Task-Parameter für non-blocking Execution
         struct EncryptionTaskParams {
             ShellyBLEManager* bleManager;
             WebUIHandler* handler;
@@ -5031,18 +1349,29 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
             passkey
         };
         
-        // ✅ Starte separaten Task für nicht-blockierende Ausführung!
+        // Memory Stats VOR Task-Erstellung
+        self->logMemoryStats("Before Enable Encryption Task");
+        
+        // Starte separaten Task für nicht-blockierende Ausführung!
         xTaskCreate([](void* pvParameters) {
-            EncryptionTaskParams* p = (EncryptionTaskParams*)pvParameters;
+            // RAII-Pattern
+            std::unique_ptr<EncryptionTaskParams> p(
+                static_cast<EncryptionTaskParams*>(pvParameters)
+            );
             
             ESP_LOGI(TAG, "🔐 Encryption Task started for %s", p->address.c_str());
             
-            // ✅ WICHTIG: Watchdog für diesen Task entfernen!
-            // Dieser Task ist nicht zeitkritisch und kann lange dauern (bis zu 60s)
+            // Watchdog entfernen (kann bis zu 60s dauern)
             esp_task_wdt_delete(NULL);
             
-            // ✅ Enable Encryption (mit internen Watchdog-Resets)
+            // Memory Stats VOR Operation
+            p->handler->logMemoryStats("Enable Encryption Start");
+            
+            // Enable Encryption (mit internen Watchdog-Resets)
             bool success = p->bleManager->enableEncryption(p->address, p->passkey);
+            
+            // Memory Stats NACH Operation
+            p->handler->logMemoryStats("Enable Encryption End");
             
             if (success) {
                 // Hole Device-Info für Success-Message
@@ -5050,7 +1379,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
                 
                 char success_msg[768];
                 snprintf(success_msg, sizeof(success_msg),
-                        "{\"type\":\"success\",\"message\":\"<strong>✅ Encryption Enabled!</strong><br><br>"
+                        "{\"type\":\"success\",\"message\":\"<strong>Encryption Enabled!</strong><br><br>"
                         "Your device is now securely encrypted.<br><br>"
                         "<strong>🔑 Bindkey:</strong> %s<br><br>"
                         "⚠️ <strong>SAVE THIS BINDKEY!</strong><br>"
@@ -5061,7 +1390,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
                         "Continuous scan will now pick up sensor data...\"}",
                         device.bindkey.c_str());
                 
-                // Sende Erfolgs-Nachricht
+                                // Sende Erfolgs-Nachricht
                 if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
                     httpd_ws_frame_t frame = {
                         .type = HTTPD_WS_TYPE_TEXT,
@@ -5076,21 +1405,21 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
 
                 vTaskDelay(pdMS_TO_TICKS(3000));
     
-                  char close_msg[128];
-                  snprintf(close_msg, sizeof(close_msg),
-                          "{\"type\":\"modal_close\",\"modal_id\":\"enable-encryption-modal\"}");
-                  
-                  if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
-                      httpd_ws_frame_t frame = {
-                          .type = HTTPD_WS_TYPE_TEXT,
-                          .payload = (uint8_t*)close_msg,
-                          .len = strlen(close_msg)
-                      };
-                      httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
-                      xSemaphoreGive(p->handler->client_mutex);
-                  }
+                char close_msg[128];
+                snprintf(close_msg, sizeof(close_msg),
+                        "{\"type\":\"modal_close\",\"modal_id\":\"enable-encryption-modal\"}");
                 
-                // ✅ Status-Update nach kurzer Verzögerung
+                if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+                    httpd_ws_frame_t frame = {
+                        .type = HTTPD_WS_TYPE_TEXT,
+                        .payload = (uint8_t*)close_msg,
+                        .len = strlen(close_msg)
+                    };
+                    httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
+                    xSemaphoreGive(p->handler->client_mutex);
+                }
+                
+                // Status-Update nach kurzer Verzögerung
                 vTaskDelay(pdMS_TO_TICKS(1000));
                 
                 char status_buf[512];
@@ -5106,7 +1435,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
                 
                 p->handler->broadcast_to_all_clients(status_buf);
                 
-                // ✅ Continuous Scan starten
+                // Continuous Scan starten
                 ESP_LOGI(TAG, "→ Starting continuous scan for sensor data...");
                 p->bleManager->startContinuousScan();
                 
@@ -5134,23 +1463,29 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
                 ESP_LOGE(TAG, "✗ Encryption failed");
             }
             
+            // High Water Mark Logging
+            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+            ESP_LOGI(TAG, "Task Stack High Water Mark: %u bytes", 
+                     highWater * sizeof(StackType_t));
+            
+            if (highWater < 512) {
+                ESP_LOGW(TAG, "⚠️ Stack critically low! Consider increasing size.");
+            }
+            
             ESP_LOGI(TAG, "✓ Encryption task completed");
             
-            delete p;
+            // unique_ptr wird automatisch freigegeben
             vTaskDelete(NULL);
-
-            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-            ESP_LOGI(TAG, "Task Stack (ble_enc) usage: %u bytes free", highWater * sizeof(StackType_t));
             
-        }, "ble_enc", 4096, params, 5, NULL);  // ✅ Stack: 8KB, Priorität: 5
+        }, "ble_enc", 8192, params, 5, NULL);  // Stack: 8KB
         
         ESP_LOGI(TAG, "✓ Encryption task created");
     }
 }
 
-// ============================================================================
-// ✅ PAIR ALREADY-ENCRYPTED DEVICE (Passkey + Bindkey Known)
-// ============================================================================
+// ════════════════════════════════════════════════════════════════════════
+// BLE PAIR ALREADY-ENCRYPTED DEVICE (Passkey + Bindkey Known)
+// ════════════════════════════════════════════════════════════════════════
 
 else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
     if (self->bleManager) {
@@ -5180,7 +1515,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
         ESP_LOGI(TAG, "Bindkey: %s", bindkey.c_str());
         ESP_LOGI(TAG, "");
         
-        // ✅ Validate inputs
+        // Validate inputs
         if (bindkey.length() != 32) {
             ESP_LOGE(TAG, "✗ Invalid bindkey length: %d (expected 32)", bindkey.length());
             
@@ -5196,7 +1531,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
             return ESP_OK;
         }
         
-        // ✅ Validate hex characters
+        // Validate hex characters
         for (int i = 0; i < 32; i++) {
             char c = bindkey[i];
             if (!((c >= '0' && c <= '9') || (c >= 'a' && c <= 'f') || (c >= 'A' && c <= 'F'))) {
@@ -5218,7 +1553,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
         ESP_LOGI(TAG, "✓ Input validation passed");
         ESP_LOGI(TAG, "");
         
-        // ✅ Info-Message an Client
+        // Info-Message an Client
         const char* info = 
             "{\"type\":\"info\",\"message\":\"<strong>🔐 Pairing with Encrypted Device</strong><br><br>"
             "Establishing secure connection...<br>"
@@ -5235,7 +1570,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
         };
         httpd_ws_send_frame_async(req->handle, fd, &frame);
         
-        // ✅ Task-Parameter vorbereiten
+        // Task-Parameter vorbereiten
         struct EncryptedKnownParams {
             ShellyBLEManager* bleManager;
             WebUIHandler* handler;
@@ -5254,15 +1589,24 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
             bindkey
         };
         
-        // ✅ Task erstellen (non-blocking)
+        // Memory Stats VOR Task-Erstellung
+        self->logMemoryStats("Before Encrypted Known Pairing Task");
+        
+        // Task erstellen (non-blocking)
         xTaskCreate([](void* pvParameters) {
-            EncryptedKnownParams* p = (EncryptedKnownParams*)pvParameters;
+            // RAII-Pattern
+            std::unique_ptr<EncryptedKnownParams> p(
+                static_cast<EncryptedKnownParams*>(pvParameters)
+            );
             
             ESP_LOGI(TAG, "🔐 Already-Encrypted Pairing Task started");
             ESP_LOGI(TAG, "   Address: %s", p->address.c_str());
             
             // Watchdog entfernen
             esp_task_wdt_delete(NULL);
+            
+            // Memory Stats VOR Operation
+            p->handler->logMemoryStats("Encrypted Known Pairing Start");
             
             // ════════════════════════════════════════════════════════════════
             // SCHRITT 1: Secure Bonding (OHNE Button-Press!)
@@ -5308,7 +1652,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
                     xSemaphoreGive(p->handler->client_mutex);
                 }
                 
-                delete p;
+                // unique_ptr wird automatisch freigegeben
                 vTaskDelete(NULL);
                 return;
             }
@@ -5343,7 +1687,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
                 }
                 
                 NimBLEDevice::deleteClient(pClient);
-                delete p;
+                // unique_ptr cleanup
                 vTaskDelete(NULL);
                 return;
             }
@@ -5367,12 +1711,12 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
                         .type = HTTPD_WS_TYPE_TEXT,
                         .payload = (uint8_t*)error,
                         .len = strlen(error)
-                    };
+                                            };
                     httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
                     xSemaphoreGive(p->handler->client_mutex);
                 }
                 
-                delete p;
+                // unique_ptr cleanup
                 vTaskDelete(NULL);
                 return;
             }
@@ -5447,13 +1791,16 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
             ESP_LOGI(TAG, "✓ Continuous scan started");
             ESP_LOGI(TAG, "");
             
+            // Memory Stats NACH Operation
+            p->handler->logMemoryStats("Encrypted Known Pairing End");
+            
             // ════════════════════════════════════════════════════════════════
             // SUCCESS MESSAGE
             // ════════════════════════════════════════════════════════════════
             
             char success_msg[1024];
             snprintf(success_msg, sizeof(success_msg),
-                    "{\"type\":\"success\",\"message\":\"<strong>✅ Encrypted Device Paired!</strong><br><br>"
+                    "{\"type\":\"success\",\"message\":\"<strong>Encrypted Device Paired!</strong><br><br>"
                     "Your device is now connected:<br>"
                     "✓ Secure bonded connection<br>"
                     "✓ Passkey: %06u<br>"
@@ -5499,24 +1846,29 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
             
             p->handler->broadcast_to_all_clients(status_buf);
             
+            // High Water Mark Logging
+            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+            ESP_LOGI(TAG, "Task Stack High Water Mark: %u bytes", 
+                     highWater * sizeof(StackType_t));
+            
+            if (highWater < 512) {
+                ESP_LOGW(TAG, "⚠️ Stack critically low! Consider increasing size.");
+            }
+            
             ESP_LOGI(TAG, "");
             ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-            ESP_LOGI(TAG, "║  ✅ TASK COMPLETE                 ║");
+            ESP_LOGI(TAG, "║  TASK COMPLETE                 ║");
             ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
             ESP_LOGI(TAG, "");
             
-            delete p;
+            // unique_ptr wird automatisch freigegeben
             vTaskDelete(NULL);
-
-            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-            ESP_LOGI(TAG, "Task Stack (ble_enc_known)usage: %u bytes free", highWater * sizeof(StackType_t));
             
-        }, "ble_enc_known", 4096, params, 5, NULL);
+        }, "ble_enc_known", 8192, params, 5, NULL);  // Stack: 8KB
         
         ESP_LOGI(TAG, "✓ Already-Encrypted pairing task created");
     }
 }
-
 
 
 
@@ -5576,7 +1928,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair\"", 17) == 0) {
             
             ESP_LOGI(TAG, "✓ Pairing successful");
             
-            // ✅ Continuous Scan starten
+            // Continuous Scan starten
             ESP_LOGI(TAG, "→ Starting continuous scan for sensor data...");
             self->bleManager->startContinuousScan();
             
@@ -5629,7 +1981,7 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
         ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
         ESP_LOGI(TAG, "");
         
-        // ✅ KRITISCH: stopScan(true) = manueller Stop!
+        // KRITISCH: stopScan(true) = manueller Stop!
         // Dies verhindert Auto-Restart und setzt NVS auf false
         self->bleManager->stopScan(true);
         
@@ -5647,7 +1999,7 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
         ESP_LOGI(TAG, "  Will NOT auto-restart");
         ESP_LOGI(TAG, "");
         
-        // ✅ Status-Update nach kurzer Verzögerung
+        // Status-Update nach kurzer Verzögerung
         vTaskDelay(pdMS_TO_TICKS(500));
         
         // Sende aktuellen BLE Status
@@ -5711,9 +2063,10 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
         };
         httpd_ws_send_frame_async(req->handle, fd, &frame);
     }
-    // ============================================================================
-    // BLE Read Sensor Data (GATT)
-    // ============================================================================
+
+    // ════════════════════════════════════════════════════════════════════════
+    // BLE READ SENSOR DATA (GATT)
+    // ════════════════════════════════════════════════════════════════════════
 
     else if (strcmp(cmd, "read_sensor_data") == 0) {
         if (self->bleManager) {
@@ -5725,6 +2078,7 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
                     .len = strlen(error)
                 };
                 httpd_ws_send_frame_async(req->handle, fd, &frame);
+                free(buf);
                 return ESP_OK;
             }
             
@@ -5733,9 +2087,8 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
             ESP_LOGI(TAG, "═══════════════════════════════════");
             
             PairedShellyDevice device = self->bleManager->getPairedDevice();
-            ShellyBLESensorData data;
             
-            // ✅ GATT Read in separatem Task (non-blocking)
+            // GATT Read in separatem Task (non-blocking)
             struct ReadTaskParams {
                 ShellyBLEManager* bleManager;
                 WebUIHandler* handler;
@@ -5750,16 +2103,28 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
                 device.address
             };
             
+            // Memory Stats VOR Task-Erstellung
+            self->logMemoryStats("Before Read Sensor Data Task");
+            
             xTaskCreate([](void* pvParameters) {
-                ReadTaskParams* p = (ReadTaskParams*)pvParameters;
+                // RAII-Pattern
+                std::unique_ptr<ReadTaskParams> p(
+                    static_cast<ReadTaskParams*>(pvParameters)
+                );
                 
                 ESP_LOGI(TAG, "📖 Read Task started for %s", p->address.c_str());
                 
                 // Watchdog für diesen Task entfernen (kann lange dauern)
                 esp_task_wdt_delete(NULL);
                 
+                // Memory Stats VOR Operation
+                p->handler->logMemoryStats("Read Sensor Data Start");
+                
                 ShellyBLESensorData data;
                 bool success = p->bleManager->readSampleBTHomeData(p->address, data);
+                
+                // Memory Stats NACH Operation
+                p->handler->logMemoryStats("Read Sensor Data End");
                 
                 if (success) {
                     // Erfolg - Sende Daten an WebUI
@@ -5796,8 +2161,8 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
                 } else {
                     // Fehler
                     const char* error = "{\"type\":\"sensor_data_result\","
-                                      "\"success\":false,"
-                                      "\"error\":\"Failed to read sensor data\"}";
+                                    "\"success\":false,"
+                                    "\"error\":\"Failed to read sensor data\"}";
                     
                     if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
                         httpd_ws_frame_t frame = {
@@ -5812,13 +2177,19 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
                     ESP_LOGE(TAG, "✗ Failed to read sensor data");
                 }
                 
-                delete p;
-                vTaskDelete(NULL);
-
+                // High Water Mark Logging
                 UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-                ESP_LOGI(TAG, "Task Stack (ble_read) usage: %u bytes free", highWater * sizeof(StackType_t));
+                ESP_LOGI(TAG, "Task Stack High Water Mark: %u bytes", 
+                        highWater * sizeof(StackType_t));
                 
-            }, "ble_read", 4096, params, 5, NULL);
+                if (highWater < 512) {
+                    ESP_LOGW(TAG, "⚠️ Stack critically low! Consider increasing size.");
+                }
+                
+                // unique_ptr wird automatisch freigegeben
+                vTaskDelete(NULL);
+                
+            }, "ble_read", 8192, params, 5, NULL);  // Stack: 8KB
             
             // Sofort Info an User senden
             const char* info = "{\"type\":\"info\",\"message\":\"Reading sensor data via GATT...\"}";
@@ -5830,6 +2201,7 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
             httpd_ws_send_frame_async(req->handle, fd, &frame);
         }
     }
+
     else if (strcmp(cmd, "contact_sensor_status") == 0) {
         extern bool contact_sensor_matter_enabled;
         extern bool contact_sensor_endpoint_active;
@@ -5857,35 +2229,114 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
     return ESP_OK;
 }
 
-void WebUIHandler::remove_client(int fd) {
-    unregister_client(fd);
+// ============================================================================
+// Client Management
+// ============================================================================
+
+void WebUIHandler::register_client(int fd) {
+    if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        if (active_clients.size() >= MAX_CLIENTS) {
+            ESP_LOGW(TAG, "✗ WebSocket limit reached (%d/%d) - rejecting fd=%d", 
+                     active_clients.size(), MAX_CLIENTS, fd);
+            xSemaphoreGive(client_mutex);
+            
+            close(fd);
+            return;
+        }
+        
+        ClientInfo client;
+        client.fd = fd;
+        client.last_activity = millis();
+        
+        active_clients.push_back(client);
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "Client connected: fd=%d (total: %d)", fd, active_clients.size());
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        xSemaphoreGive(client_mutex);
+    }
 }
 
-void WebUIHandler::cleanup_idle_clients() {
+void WebUIHandler::unregister_client(int fd) {
     if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
-        uint32_t now = millis();
-        std::vector<int> timeout_fds;
+        ESP_LOGI(TAG, "Closing socket fd=%d...", fd);
         
+        active_clients.erase(
+            std::remove_if(active_clients.begin(), active_clients.end(),
+                          [fd](const ClientInfo& c) { return c.fd == fd; }),
+            active_clients.end()
+        );
+        
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "Client disconnected: fd=%d (remaining: %d)", fd, active_clients.size());
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        xSemaphoreGive(client_mutex);
+    }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// WebSocket Broadcast mit Heap-Allokation
+// ════════════════════════════════════════════════════════════════════════
+
+void WebUIHandler::broadcast_to_all_clients(const char* message) {
+    if (!server || !message) return;
+    
+    // PRE-BROADCAST MEMORY CHECK
+    logMemoryStats("Before WS Broadcast");
+    
+    if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        size_t msg_len = strlen(message);
+        
+        // KRITISCHER FIX: Heap-Allokation für async Send
+        char* msg_copy = (char*)malloc(msg_len + 1);
+        if (!msg_copy) {
+            ESP_LOGE(TAG, "✗ Failed to allocate %u bytes for broadcast", msg_len + 1);
+            xSemaphoreGive(client_mutex);
+            return;
+        }
+        strcpy(msg_copy, message);
+        
+        ESP_LOGI(TAG, "→ Broadcasting to %d clients (%u bytes, heap-allocated)", 
+                 active_clients.size(), msg_len);
+        
+        httpd_ws_frame_t ws_pkt;
+        memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+        ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+        ws_pkt.payload = (uint8_t*)msg_copy;
+        ws_pkt.len = msg_len;
+        
+        // Kopie der Client-FDs (verhindert Deadlock bei unregister_client)
+        std::vector<int> target_fds;
+        target_fds.reserve(active_clients.size());
         for (const auto& client : active_clients) {
-            if (now - client.last_activity > WS_TIMEOUT_MS) {
-                ESP_LOGW(TAG, "Client fd=%d timed out (idle for %u ms)", 
-                         client.fd, now - client.last_activity);
-                timeout_fds.push_back(client.fd);
+            target_fds.push_back(client.fd);
+        }
+        xSemaphoreGive(client_mutex);
+        
+        // Sende ohne Mutex (async Calls)
+        int success_count = 0;
+        for (int fd : target_fds) {
+            esp_err_t ret = httpd_ws_send_frame_async(server, fd, &ws_pkt);
+            
+            if (ret == ESP_OK) {
+                success_count++;
+            } else {
+                ESP_LOGW(TAG, "Failed to send to fd=%d: %s", fd, esp_err_to_name(ret));
             }
         }
         
-        xSemaphoreGive(client_mutex);
+        ESP_LOGI(TAG, "✓ Broadcast complete: %d/%d clients", 
+                 success_count, target_fds.size());
         
-        // Cleanup außerhalb des Mutex
-        for (int fd : timeout_fds) {
-            unregister_client(fd);
-        }
+        // ESP-IDF kopiert den Buffer intern SOFORT
+        free(msg_copy);
         
-        if (timeout_fds.size() > 0) {
-            ESP_LOGI(TAG, "Cleaned up %d idle clients", timeout_fds.size());
-        }
+        // POST-BROADCAST MEMORY CHECK
+        logMemoryStats("After WS Broadcast");
+        
+    } else {
+        ESP_LOGW(TAG, "Could not acquire mutex for broadcast");
     }
-  }
+}
 
   // ============================================================================
   // WebSocket Broadcast: BLE State Change
@@ -5932,63 +2383,205 @@ void WebUIHandler::cleanup_idle_clients() {
   // ============================================================================
 
   void WebUIHandler::broadcastSensorDataUpdate(const String& address, const ShellyBLESensorData& data) {
-      ESP_LOGI(TAG, "");
-      ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-      ESP_LOGI(TAG, "║   BROADCASTING SENSOR DATA        ║");
-      ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-      ESP_LOGI(TAG, "Address: %s", address.c_str());
-      ESP_LOGI(TAG, "Battery: %d%% | Window: %s", 
-              data.battery, 
-              data.windowOpen ? "OPEN" : "CLOSED");
-      ESP_LOGI(TAG, "Packet ID: %d", data.packetId);
-      ESP_LOGI(TAG, "Active clients: %d", active_clients.size());
-      
-      char json_buf[512];
-      snprintf(json_buf, sizeof(json_buf),
-              "{\"type\":\"ble_sensor_update\","
-              "\"address\":\"%s\","
-              "\"window_open\":%s,"
-              "\"battery\":%d,"
-              "\"illuminance\":%u,"
-              "\"rotation\":%d,"
-              "\"rssi\":%d,"
-              "\"packet_id\":%d,"
-              "\"has_button_event\":%s,"
-              "\"button_event\":%d,"
-              "\"last_update\":%lu}",
-              address.c_str(),
-              data.windowOpen ? "true" : "false",
-              data.battery,
-              data.illuminance,
-              data.rotation,
-              data.rssi,
-              data.packetId,
-              data.hasButtonEvent ? "true" : "false",
-              (int)data.buttonEvent,
-              (unsigned long)data.lastUpdate);
-      
-      ESP_LOGI(TAG, "Broadcasting message: %s", json_buf);
-      broadcast_to_all_clients(json_buf);
-      ESP_LOGI(TAG, "✓ Broadcast complete");
-      ESP_LOGI(TAG, "");
-  }
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   BROADCASTING SENSOR DATA        ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "Address: %s", address.c_str());
+        ESP_LOGI(TAG, "Battery: %d%% | Window: %s", 
+                data.battery, 
+                data.windowOpen ? "OPEN" : "CLOSED");
+        ESP_LOGI(TAG, "Packet ID: %d", data.packetId);
+        ESP_LOGI(TAG, "Active clients: %d", active_clients.size());
+        
+        // Berechne "seconds_ago" mit Validierung
+        uint32_t currentMillis = millis();
+        uint32_t secondsAgo = 0;
+        bool timeValid = false;
+        
+        // Prüfe auf valide lastUpdate
+        if (data.lastUpdate > 0) {
+            if (currentMillis >= data.lastUpdate) {
+                // Normal case
+                secondsAgo = (currentMillis - data.lastUpdate) / 1000;
+                timeValid = true;
+                
+                ESP_LOGI(TAG, "Time calculation:");
+                ESP_LOGI(TAG, "  Current millis: %u", currentMillis);
+                ESP_LOGI(TAG, "  Last update:    %u", data.lastUpdate);
+                ESP_LOGI(TAG, "  Difference:     %u ms", currentMillis - data.lastUpdate);
+                ESP_LOGI(TAG, "  Seconds ago:    %u", secondsAgo);
+                
+            } else {
+                // millis() overflow (nach ~49 Tagen)
+                ESP_LOGW(TAG, "⚠ millis() overflow detected!");
+                
+                uint32_t millisToOverflow = (0xFFFFFFFF - data.lastUpdate);
+                secondsAgo = (millisToOverflow + currentMillis) / 1000;
+                timeValid = true;
+                
+                ESP_LOGI(TAG, "  Overflow calculation: %u seconds", secondsAgo);
+            }
+            
+            // Wenn secondsAgo zu groß (> 1 Stunde ohne Update)
+            if (secondsAgo > 3600) {
+                ESP_LOGW(TAG, "");
+                ESP_LOGW(TAG, "⚠️ WARNING: Last update very old!");
+                ESP_LOGW(TAG, "   Seconds ago: %u (%.1f hours)", secondsAgo, secondsAgo / 3600.0f);
+                ESP_LOGW(TAG, "   Possible issue: No new sensor data received!");
+                ESP_LOGW(TAG, "");
+                
+                // Markiere als ungültig wenn > 24 Stunden
+                if (secondsAgo > 86400) {
+                    ESP_LOGE(TAG, "✗ Data too old (> 24 hours), marking as invalid");
+                    timeValid = false;
+                }
+            }
+            
+        } else {
+            ESP_LOGW(TAG, "");
+            ESP_LOGW(TAG, "⚠ lastUpdate is 0 - no valid timestamp!");
+            ESP_LOGW(TAG, "  This indicates no sensor data has been received yet.");
+            ESP_LOGW(TAG, "");
+            timeValid = false;
+        }
+        
+        char json_buf[512];
+        
+        if (timeValid) {
+            snprintf(json_buf, sizeof(json_buf),
+                    "{\"type\":\"ble_sensor_update\","
+                    "\"address\":\"%s\","
+                    "\"window_open\":%s,"
+                    "\"battery\":%d,"
+                    "\"illuminance\":%u,"
+                    "\"rotation\":%d,"
+                    "\"rssi\":%d,"
+                    "\"packet_id\":%d,"
+                    "\"has_button_event\":%s,"
+                    "\"button_event\":%d,"
+                    "\"seconds_ago\":%u}",
+                    address.c_str(),
+                    data.windowOpen ? "true" : "false",
+                    data.battery,
+                    data.illuminance,
+                    data.rotation,
+                    data.rssi,
+                    data.packetId,
+                    data.hasButtonEvent ? "true" : "false",
+                    (int)data.buttonEvent,
+                    secondsAgo);
+        } else {
+            snprintf(json_buf, sizeof(json_buf),
+                    "{\"type\":\"ble_sensor_update\","
+                    "\"address\":\"%s\","
+                    "\"window_open\":%s,"
+                    "\"battery\":%d,"
+                    "\"illuminance\":%u,"
+                    "\"rotation\":%d,"
+                    "\"rssi\":%d,"
+                    "\"packet_id\":%d,"
+                    "\"has_button_event\":%s,"
+                    "\"button_event\":%d,"
+                    "\"seconds_ago\":-1}",
+                    address.c_str(),
+                    data.windowOpen ? "true" : "false",
+                    data.battery,
+                    data.illuminance,
+                    data.rotation,
+                    data.rssi,
+                    data.packetId,
+                    data.hasButtonEvent ? "true" : "false",
+                    (int)data.buttonEvent);
+        }
+        
+        ESP_LOGI(TAG, "Broadcasting message: %s", json_buf);
+        broadcast_to_all_clients(json_buf);
+        ESP_LOGI(TAG, "✓ Broadcast complete");
+        ESP_LOGI(TAG, "");
+    }
 
-  // ============================================================================
-  // Helper: Send Modal Close Command
-  // ============================================================================
+    // ============================================================================
+    // Helper: Send Modal Close Command
+    // ============================================================================
 
-  void WebUIHandler::sendModalClose(int fd, const char* modal_id) {
-      char msg[128];
-      snprintf(msg, sizeof(msg),
-              "{\"type\":\"modal_close\",\"modal_id\":\"%s\"}",
-              modal_id);
-      
-      httpd_ws_frame_t frame = {
-          .type = HTTPD_WS_TYPE_TEXT,
-          .payload = (uint8_t*)msg,
-          .len = strlen(msg)
-      };
-      
-      httpd_ws_send_frame_async(server, fd, &frame);
-      ESP_LOGI(TAG, "→ Sent modal close command: %s", modal_id);
+    void WebUIHandler::sendModalClose(int fd, const char* modal_id) {
+        char msg[128];
+        snprintf(msg, sizeof(msg),
+                "{\"type\":\"modal_close\",\"modal_id\":\"%s\"}",
+                modal_id);
+        
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)msg,
+            .len = strlen(msg)
+        };
+        
+        httpd_ws_send_frame_async(server, fd, &frame);
+        ESP_LOGI(TAG, "→ Sent modal close command: %s", modal_id);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Memory Monitoring Helper
+    // ════════════════════════════════════════════════════════════════════════
+
+    void WebUIHandler::logMemoryStats(const char* location) {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║  MEMORY STATS @ %-17s║", location);
+        ESP_LOGI(TAG, "╠═══════════════════════════════════╣");
+        
+        uint32_t free_heap = esp_get_free_heap_size();
+        uint32_t min_free_heap = esp_get_minimum_free_heap_size();
+        uint32_t largest_block = heap_caps_get_largest_free_block(MALLOC_CAP_8BIT);
+        
+        multi_heap_info_t info;
+        heap_caps_get_info(&info, MALLOC_CAP_8BIT);
+        
+        ESP_LOGI(TAG, "║ Free Heap:         %6u bytes    ║", free_heap);
+        ESP_LOGI(TAG, "║ Min Free (ever):   %6u bytes    ║", min_free_heap);
+        ESP_LOGI(TAG, "║ Largest Block:     %6u bytes    ║", largest_block);
+        ESP_LOGI(TAG, "║ Total Allocated:   %6u bytes    ║", info.total_allocated_bytes);
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        
+        // WARNUNG bei kritischem Heap
+        if (free_heap < 20000) {
+            ESP_LOGW(TAG, "⚠️ WARNING: Free heap below 20KB!");
+        }
+        
+        if (largest_block < 10000) {
+            ESP_LOGW(TAG, "⚠️ WARNING: Largest free block below 10KB - fragmentation!");
+        }
+        
+        ESP_LOGI(TAG, "");
+    }
+
+    void WebUIHandler::remove_client(int fd) {
+    unregister_client(fd);
+}
+
+void WebUIHandler::cleanup_idle_clients() {
+    if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
+        uint32_t now = millis();
+        std::vector<int> timeout_fds;
+        
+        for (const auto& client : active_clients) {
+            if (now - client.last_activity > WS_TIMEOUT_MS) {
+                ESP_LOGW(TAG, "Client fd=%d timed out (idle for %u ms)", 
+                         client.fd, now - client.last_activity);
+                timeout_fds.push_back(client.fd);
+            }
+        }
+        
+        xSemaphoreGive(client_mutex);
+        
+        // Cleanup außerhalb des Mutex
+        for (int fd : timeout_fds) {
+            unregister_client(fd);
+        }
+        
+        if (timeout_fds.size() > 0) {
+            ESP_LOGI(TAG, "Cleaned up %d idle clients", timeout_fds.size());
+        }
+    }
   }

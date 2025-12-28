@@ -1,3 +1,8 @@
+// web_ui_handler.h
+
+#ifndef WEB_UI_HANDLER_H
+#define WEB_UI_HANDLER_H
+
 #pragma once
 
 #include <Arduino.h>
@@ -5,6 +10,7 @@
 #include "rollershutter_driver.h"
 #include "shelly_ble_manager.h"
 #include <vector>
+#include <memory>
 #include <freertos/FreeRTOS.h>
 #include <freertos/semphr.h>
 
@@ -33,6 +39,7 @@ public:
     void broadcastSensorDataUpdate(const String& address, 
                                     const ShellyBLESensorData& data);
     void sendModalClose(int fd, const char* modal_id);
+    void logMemoryStats(const char* location);
     
 
 private:
@@ -41,7 +48,7 @@ private:
     httpd_handle_t server;
     SemaphoreHandle_t client_mutex;
     
-    // ✓ NEU: Client mit Timestamp
+    // Client mit Timestamp
     struct ClientInfo {
         int fd;
         uint32_t last_activity;
@@ -59,4 +66,30 @@ private:
     
     static esp_err_t root_handler(httpd_req_t *req);
     static esp_err_t ws_handler(httpd_req_t *req);
+
+    // RAII Helper für WebSocket Messages
+    struct WSMessageBuffer {
+        char* buffer;
+        size_t size;
+        
+        WSMessageBuffer(const char* msg) {
+            size = strlen(msg) + 1;
+            buffer = (char*)malloc(size);
+            if (buffer) {
+                strcpy(buffer, msg);
+            }
+        }
+        
+        ~WSMessageBuffer() {
+            if (buffer) {
+                free(buffer);
+            }
+        }
+        
+        // Non-copyable
+        WSMessageBuffer(const WSMessageBuffer&) = delete;
+        WSMessageBuffer& operator=(const WSMessageBuffer&) = delete;
+    };
 };
+
+#endif // WEB_UI_HANDLER_H
