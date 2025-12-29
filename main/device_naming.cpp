@@ -148,33 +148,93 @@ bool DeviceNaming::apply() {
     ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
     ESP_LOGI(TAG, "");
     
-    // ========================================================================
+    // ════════════════════════════════════════════════════════════════════
     // 1. Update mDNS Hostname
-    // ========================================================================
+    // ════════════════════════════════════════════════════════════════════
     
-    if (MDNS.begin(_current.hostname.c_str())) {
-        ESP_LOGI(TAG, "✓ mDNS hostname set: %s.local", _current.hostname.c_str());
+    static bool mdns_initialized = false;
+    static String last_hostname = "";
+    
+    // ────────────────────────────────────────────────────────────────────
+    // Szenario A: Erste Initialisierung (beim Boot)
+    // ────────────────────────────────────────────────────────────────────
+    
+    if (!mdns_initialized) {
+        ESP_LOGI(TAG, "→ First-time mDNS initialization...");
         
-        // Registriere mDNS Service für Auto-Discovery
-        MDNS.addService("beltwinder", "tcp", 80);
-        MDNS.addServiceTxt("beltwinder", "tcp", "version", APP_VERSION);
+        if (MDNS.begin(_current.hostname.c_str())) {
+            ESP_LOGI(TAG, "✓ mDNS hostname set: %s.local", _current.hostname.c_str());
+            
+            MDNS.addService("beltwinder", "tcp", 80);
+            MDNS.addServiceTxt("beltwinder", "tcp", "version", APP_VERSION);
+            MDNS.addServiceTxt("beltwinder", "tcp", "room", _current.room.c_str());
+            MDNS.addServiceTxt("beltwinder", "tcp", "type", _current.type.c_str());
+            
+            last_hostname = _current.hostname;
+            mdns_initialized = true;
+            
+            ESP_LOGI(TAG, "✓ mDNS fully initialized");
+        } else {
+            ESP_LOGW(TAG, "⚠ mDNS failed to initialize");
+            return false;
+        }
+    }
+    
+    // ────────────────────────────────────────────────────────────────────
+    // Szenario B: Hostname hat sich geändert → Neustart erforderlich
+    // ────────────────────────────────────────────────────────────────────
+    
+    else if (last_hostname != _current.hostname) {
+        ESP_LOGI(TAG, "→ Hostname changed: %s → %s", 
+                 last_hostname.c_str(), _current.hostname.c_str());
+        ESP_LOGI(TAG, "→ Restarting mDNS with new hostname...");
+        
+        // Stop old mDNS
+        MDNS.end();
+        
+        // Restart with new hostname
+        if (MDNS.begin(_current.hostname.c_str())) {
+            ESP_LOGI(TAG, "✓ mDNS hostname updated: %s.local", _current.hostname.c_str());
+            
+            // Re-add service
+            MDNS.addService("beltwinder", "tcp", 80);
+            MDNS.addServiceTxt("beltwinder", "tcp", "version", APP_VERSION);
+            MDNS.addServiceTxt("beltwinder", "tcp", "room", _current.room.c_str());
+            MDNS.addServiceTxt("beltwinder", "tcp", "type", _current.type.c_str());
+            
+            last_hostname = _current.hostname;
+            
+            ESP_LOGI(TAG, "✓ mDNS restarted successfully");
+        } else {
+            ESP_LOGE(TAG, "✗ Failed to restart mDNS");
+            mdns_initialized = false;  // Mark as failed, retry next time
+            return false;
+        }
+    }
+    
+    // ────────────────────────────────────────────────────────────────────
+    // Szenario C: Nur TXT Records ändern (Hostname bleibt gleich)
+    // ────────────────────────────────────────────────────────────────────
+    
+    else {
+        ESP_LOGI(TAG, "→ Hostname unchanged, updating TXT records...");
+        
+        // Nur die dynamischen TXT Records updaten
         MDNS.addServiceTxt("beltwinder", "tcp", "room", _current.room.c_str());
         MDNS.addServiceTxt("beltwinder", "tcp", "type", _current.type.c_str());
         
-    } else {
-        ESP_LOGW(TAG, "⚠ mDNS failed to set hostname");
+        ESP_LOGI(TAG, "✓ mDNS TXT records updated");
     }
     
-    // ========================================================================
+    // ════════════════════════════════════════════════════════════════════
     // 2. Update Matter Device Name (Basic Information Cluster)
-    // ========================================================================
+    // ════════════════════════════════════════════════════════════════════
     
     extern uint16_t window_covering_endpoint_id;
     
     if (window_covering_endpoint_id != 0) {
         ESP_LOGD(TAG, "→ Updating Matter device name...");
         
-        // KORREKT: esp_matter_char_str für Strings
         esp_matter_attr_val_t name_val = 
             esp_matter_char_str(const_cast<char*>(_current.matterName.c_str()), 
                                _current.matterName.length() + 1);
@@ -198,7 +258,7 @@ bool DeviceNaming::apply() {
     }
     
     ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "✓ Device name applied");
+    ESP_LOGI(TAG, "✓ Device name applied successfully");
     ESP_LOGI(TAG, "");
     
     return true;
@@ -210,41 +270,28 @@ bool DeviceNaming::apply() {
 
 bool DeviceNaming::isValidRoom(const String& room) {
     if (room.length() == 0 || room.length() > 20) {
+        ESP_LOGW(TAG, "Invalid room length: %d (must be 1-20)", room.length());
         return false;
     }
     
-    // Prüfe Zeichen - RICHTIG für UTF-8 Umlaute
+    // Nur prüfen auf absolut verbotene Zeichen
     for (size_t i = 0; i < room.length(); i++) {
-        unsigned char c = room[i];
+        char c = room[i];
         
-        // Alphanumerisch OK
-        if (isalnum(c)) continue;
-        
-        // Space OK
-        if (c == ' ') continue;
-        
-        // UTF-8 Multi-Byte Zeichen (Umlaute) OK
-        // Umlaute beginnen mit 0xC0 oder höher
-        if (c >= 0xC0) {
-            // Das ist ein UTF-8 Multi-Byte Zeichen
-            // Überspringe die Folgebytes
-            if ((c & 0xE0) == 0xC0) {
-                // 2-Byte Zeichen (ä, ö, ü, etc.)
-                i++; // Skip nächstes Byte
-            } else if ((c & 0xF0) == 0xE0) {
-                // 3-Byte Zeichen
-                i += 2; // Skip nächste 2 Bytes
-            } else if ((c & 0xF8) == 0xF0) {
-                // 4-Byte Zeichen
-                i += 3; // Skip nächste 3 Bytes
-            }
-            continue;
+        // Verboten: Control Characters, Null-Bytes
+        if (c < 32 || c == 127) {
+            ESP_LOGW(TAG, "Invalid control character at position %d", i);
+            return false;
         }
         
-        // Alles andere ist ungültig
-        return false;
+        // Verboten: Quotes und Backslash (JSON-Breaking)
+        if (c == '"' || c == '\'' || c == '\\') {
+            ESP_LOGW(TAG, "Invalid special character at position %d: '%c'", i, c);
+            return false;
+        }
     }
     
+    ESP_LOGD(TAG, "✓ Room validation passed: '%s'", room.c_str());
     return true;
 }
 
