@@ -717,10 +717,6 @@ String ShellyBLEManager::getScanStatus() const {
     return "Idle";
 }
 
-// ═══════════════════════════════════════════════════════════════════════
-// KRITISCHE METHODE: on_device_found (ersetzt onAdvertisedDevice)
-// ═══════════════════════════════════════════════════════════════════════
-
 bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &device) {
     std::string name = device.get_name();
     std::string address = device.get_address_str();
