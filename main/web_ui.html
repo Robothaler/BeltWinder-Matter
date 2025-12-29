@@ -530,6 +530,30 @@
     .btn.primary::before {
       background: linear-gradient(135deg, #2196F3, #42A5F5);
     }
+
+    /* Restart Button Animation */
+    @keyframes rotate {
+        from { transform: rotate(0deg); }
+        to { transform: rotate(360deg); }
+    }
+
+    .btn:active .rotate-icon {
+        animation: rotate 0.5s ease;
+    }
+
+    /* Pulsing Effect for Restart Hint */
+    @keyframes pulse {
+        0%, 100% { 
+            box-shadow: 0 0 0 0 rgba(33, 150, 243, 0.7);
+        }
+        50% { 
+            box-shadow: 0 0 0 10px rgba(33, 150, 243, 0);
+        }
+    }
+
+    #restart-hint {
+        animation: pulse 2s infinite;
+    }
     
     /* ============================================================================
        Direction Selector
@@ -1346,6 +1370,48 @@
         </button>
       </div>
 
+      <!-- Drift Statistics Section -->
+      <div class="card mt-4">
+          <div class="card-header">
+              <h5>📊 Drift Statistics</h5>
+          </div>
+          <div class="card-body">
+              <div class="row">
+                  <div class="col-md-6">
+                      <p><strong>Calibration Status:</strong> <span id="cal-status">-</span></p>
+                      <p><strong>Max Pulse Count:</strong> <span id="max-pulses">-</span></p>
+                      <p><strong>Measured Average:</strong> <span id="avg-pulses">-</span></p>
+                      <p><strong>Full Cycles:</strong> <span id="full-cycles">-</span></p>
+                  </div>
+                  <div class="col-md-6">
+                      <p><strong>Drift:</strong> <span id="drift-percent" class="badge bg-success">-</span></p>
+                      <p><strong>Drift (Pulses):</strong> <span id="drift-pulses">-</span></p>
+                      <div class="progress" style="height: 25px;">
+                          <div id="drift-bar" class="progress-bar" role="progressbar" 
+                              style="width: 0%;" aria-valuenow="0" aria-valuemin="0" aria-valuemax="100">
+                              0%
+                          </div>
+                      </div>
+                      <small class="text-muted">Auto-correction at 10%</small>
+                  </div>
+              </div>
+              
+              <hr>
+              
+              <h6>📈 Measurement History</h6>
+              <canvas id="drift-chart" height="100"></canvas>
+              
+              <div class="mt-3">
+                  <button class="btn btn-info btn-sm" onclick="refreshDriftStats()">
+                      🔄 Refresh Statistics
+                  </button>
+                  <button class="btn btn-warning btn-sm" onclick="resetDriftHistory()">
+                      🗑️ Reset History
+                  </button>
+              </div>
+          </div>
+      </div>
+
       <!-- Device Naming Configuration -->
         <div class="card">
         <h2>Device Name Configuration</h2>
@@ -1488,6 +1554,136 @@
         </div>
       </div>
 
+      <!-- Device Restart -->
+
+    <div class="card">
+      <h2>Device Restart</h2>
+      
+      <p style="color:#888;margin-bottom:20px;line-height:1.8">
+        ⚠️ Restart the device to apply the new hostname. 
+        The device will reboot and be available under the new mDNS name within 30 seconds.
+      </p>
+      
+      <div class="alert" style="background:rgba(33,150,243,0.1);border-left-color:#2196F3">
+        <strong>ℹ️ When to restart:</strong>
+        <ul style="margin:10px 0 0 20px;line-height:1.8">
+          <li>After changing device name</li>
+          <li>After firmware update issues</li>
+          <li>To apply system changes</li>
+        </ul>
+      </div>
+      
+      <button class="btn secondary" onclick="restartDevice()" style="width:100%">
+        <span class="rotate-icon" style="display:inline-block">🔄</span>
+        <span>Restart Now</span>
+      </button> 
+    </div>
+
+    <!-- OTA-Update Section -->
+
+    <div class="card">
+      <h2>Firmware Update</h2>
+      
+      <!-- Current Version Display -->
+      <div style="background:rgba(255,255,255,0.04);padding:18px;border-radius:14px;margin-bottom:20px">
+        <div style="font-size:0.9em;color:#888;margin-bottom:5px">Current Version</div>
+        <div id="current-version" style="font-size:1.5em;font-weight:bold;color:#2196F3">
+          v1.0.0
+        </div>
+      </div>
+      
+      <!-- File Upload Form -->
+      <div class="alert warning">
+        <strong>⚠️ Important</strong>
+        <p style="margin-top:8px">
+          • Download latest firmware.bin from GitHub<br>
+          • Device will reboot after update<br>
+          • Do not disconnect power during update!
+        </p>
+      </div>
+      
+      <form id="ota-upload-form" enctype="multipart/form-data">
+        <div class="input-group">
+          <label for="firmware-file">
+            Select Firmware File (.bin)
+          </label>
+          <input type="file" 
+                id="firmware-file" 
+                name="firmware"
+                accept=".bin"
+                onchange="validateFirmwareFile()"
+                style="width:100%;padding:14px;background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);border-radius:12px;color:#e0e0e0">
+        </div>
+        
+        <!-- File Info Display -->
+        <div id="file-info" style="display:none;margin-top:15px;padding:15px;background:rgba(33,150,243,0.1);border-radius:12px;border:1px solid rgba(33,150,243,0.3)">
+          <div style="font-weight:bold;margin-bottom:8px">📄 Selected File</div>
+          <div style="font-size:0.9em;color:#ccc">
+            <strong>Name:</strong> <span id="file-name">-</span><br>
+            <strong>Size:</strong> <span id="file-size">-</span><br>
+          </div>
+        </div>
+        
+        <!-- Upload Button -->
+        <button type="submit" 
+                class="btn primary" 
+                id="upload-btn"
+                disabled
+                style="width:100%;margin-top:20px">
+          <span>📤 Upload & Flash Firmware</span>
+        </button>
+      </form>
+      
+      <!-- Progress Bar (hidden initially) -->
+      <div id="upload-progress" style="display:none;margin-top:25px">
+        <div class="alert" style="background:rgba(33,150,243,0.1);border-left-color:#2196F3">
+          <strong>⏳ Uploading & Flashing...</strong>
+          <p style="margin-top:10px">Do not disconnect power!</p>
+        </div>
+        
+        <div style="background:rgba(0,0,0,0.3);border-radius:8px;overflow:hidden;height:40px;margin-top:15px">
+          <div id="upload-progress-bar" 
+              style="background:linear-gradient(90deg,#2196F3,#21CBF3);height:100%;width:0%;transition:width 0.3s;display:flex;align-items:center;justify-content:center;font-weight:bold;font-size:1.1em">
+            <span id="upload-progress-text">0%</span>
+          </div>
+        </div>
+        
+        <div style="text-align:center;margin-top:15px;color:#888;font-size:0.9em">
+          <span id="upload-speed">-- KB/s</span> | 
+          <span id="upload-eta">ETA: --</span>
+        </div>
+      </div>
+      
+      <!-- Success Message -->
+      <div id="upload-success" style="display:none;margin-top:20px">
+        <div class="alert success">
+          <strong>✓ Update Successful!</strong>
+          <p style="margin-top:10px">Device is rebooting...</p>
+          <p style="margin-top:8px;font-size:0.9em;color:#ccc">
+            Page will reload automatically in <span id="reboot-countdown">10</span> seconds
+          </p>
+        </div>
+      </div>
+      
+      <!-- Error Message -->
+      <div id="upload-error" style="display:none;margin-top:20px">
+        <div class="alert error">
+          <strong>✗ Update Failed</strong>
+          <p style="margin-top:10px" id="upload-error-text">Unknown error</p>
+        </div>
+      </div>
+      
+      <!-- GitHub Link -->
+      <div style="margin-top:25px;text-align:center">
+        <a href="https://github.com/Robothaler/BeltWinder-Matter/releases" 
+          target="_blank" 
+          rel="noopener noreferrer"
+          style="color:#2196F3;text-decoration:none;font-weight:600">
+          📦 Download Latest Firmware from GitHub →
+        </a>
+      </div>
+    </div>
+
       <div class="card">
         <h2>Factory Reset</h2>
         <p style="color:#888;margin-bottom:20px;line-height:1.8">
@@ -1498,67 +1694,6 @@
         </button>
       </div>
     </div>
-
-    <!-- OTA-Update Section -->
-
-    <div class="card">
-    <h2>Firmware Update</h2>
-    <div id="ota-status">
-        <p style="color:#888;margin-bottom:20px">
-        Current Version: <strong id="current-version">Loading...</strong>
-        </p>
-        
-        <!-- Update Available -->
-        <div id="update-available" class="hidden" style="margin-bottom:20px">
-        <div class="alert success">
-            <strong>✓ Update Available!</strong>
-            <p style="margin-top:10px">
-            New Version: <strong id="new-version">--</strong><br>
-            Size: <span id="update-size">--</span>
-            </p>
-            <div id="release-notes" style="margin-top:15px;padding:12px;background:rgba(0,0,0,0.2);border-radius:8px;max-height:200px;overflow-y:auto">
-            <strong>Release Notes:</strong>
-            <pre id="release-notes-text" style="white-space:pre-wrap;margin-top:8px;font-size:0.9em"></pre>
-            </div>
-        </div>
-        
-        <button class="btn primary" onclick="startOTAUpdate()" id="ota-install-btn" 
-                style="width:100%;margin-top:15px" aria-label="Install firmware update">
-            <span>📥 Install Update</span>
-        </button>
-        </div>
-        
-        <!-- Up to Date -->
-        <div id="update-uptodate" class="hidden">
-        <div class="alert success">
-            <strong>✓ Up to Date</strong>
-            <p style="margin-top:8px">You are running the latest firmware version.</p>
-        </div>
-        </div>
-        
-        <!-- Check Button -->
-        <button class="btn secondary" onclick="checkForUpdate()" id="ota-check-btn" 
-                style="width:100%" aria-label="Check for firmware update">
-        <span>🔍 Check for Updates</span>
-        </button>
-    </div>
-    
-    <!-- Progress Bar -->
-    <div id="ota-progress" class="hidden" style="margin-top:25px">
-        <div class="alert" style="background:rgba(33,150,243,0.1);border-left-color:#2196F3">
-        <strong>⏳ Installing Update...</strong>
-        <p style="margin-top:10px">Please do not disconnect power!</p>
-        </div>
-        
-        <div style="background:rgba(0,0,0,0.3);border-radius:8px;overflow:hidden;height:30px;margin-top:15px">
-        <div id="ota-progress-bar" style="background:linear-gradient(90deg,#2196F3,#21CBF3);height:100%;width:0%;transition:width 0.3s;display:flex;align-items:center;justify-content:center;font-weight:bold">
-            <span id="ota-progress-text">0%</span>
-        </div>
-        </div>
-    </div>
-    </div>
-
-  </div>
 
   <!-- ============================================================================
        Factory Reset Confirmation Modal
@@ -2178,6 +2313,10 @@
         }
       }
 
+      if (data.ver) {
+          document.getElementById('current-version').textContent = data.ver;
+      }
+
       if (data.type === 'device_name') {
         console.log('📋 Device name received:', data);
         
@@ -2220,24 +2359,35 @@
         }
 
         if (data.type === 'device_name_saved') {
-        hideLoading();
-        
-        const btn = document.getElementById('save-name-btn');
-        btn.disabled = false;
-        btn.innerHTML = '<span>💾 Save Device Name</span>';
-        
-        // Update current display
-        document.getElementById('current-hostname').innerText = data.hostname;
-        document.getElementById('current-matter-name').innerText = data.matterName;
-        
-        showErrorBanner('Success!', 
-                        'Device name saved and applied. Visible in network as: ' + data.hostname, 
-                        'success');
-        
-        console.log('✓ Device name saved:');
-        console.log('  Hostname:', data.hostname);
-        console.log('  Matter Name:', data.matterName);
-        }
+          hideLoading();
+          
+          const btn = document.getElementById('save-name-btn');
+          btn.disabled = false;
+          btn.innerHTML = '<span>💾 Save Device Name</span>';
+          
+          // Update current display
+          document.getElementById('current-hostname').innerText = data.hostname;
+          document.getElementById('current-matter-name').innerText = data.matterName;
+          
+          showErrorBanner('Success!', 
+                          'Device name saved. Restart to apply new hostname.', 
+                          'success');
+          
+          // ✅ NEU: Zeige Restart Hint
+          const restartHint = document.getElementById('restart-hint');
+          if (restartHint) {
+              restartHint.style.display = 'block';
+              
+              // Auto-Scroll zu Restart Button
+              setTimeout(() => {
+                  restartHint.scrollIntoView({ behavior: 'smooth', block: 'center' });
+              }, 500);
+          }
+          
+          console.log('✓ Device name saved:');
+          console.log('  Hostname:', data.hostname);
+          console.log('  Matter Name:', data.matterName);
+      } 
 
       if (data.type === 'ota_check_result') {
         hideLoading();
@@ -2366,7 +2516,8 @@
     // ============================================================================
     
     function handleStatusUpdate(data) {
-      document.getElementById('pos').innerText = data.pos + '%';
+      let openPercent = 100 - data.pos;
+      document.getElementById('pos').innerText = openPercent + '% offen';
       document.getElementById('calib').innerText = data.cal ? 'Yes' : 'No';
       document.getElementById('inv').innerText = data.inv ? 'Inverted' : 'Normal';
       updateDirectionButtons(data.inv);
@@ -2573,6 +2724,293 @@
       }
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // File Upload Functions
+    // ════════════════════════════════════════════════════════════════════════
+
+    function validateFirmwareFile() {
+        const fileInput = document.getElementById('firmware-file');
+        const file = fileInput.files[0];
+        const uploadBtn = document.getElementById('upload-btn');
+        const fileInfo = document.getElementById('file-info');
+        
+        if (!file) {
+            uploadBtn.disabled = true;
+            fileInfo.style.display = 'none';
+            return;
+        }
+        
+        // Validate file extension
+        if (!file.name.endsWith('.bin')) {
+            showErrorBanner('Invalid File', 'Please select a .bin firmware file', 'error');
+            fileInput.value = '';
+            uploadBtn.disabled = true;
+            fileInfo.style.display = 'none';
+            return;
+        }
+        
+        // Validate file size (max 2MB for ESP32)
+        const maxSize = 2 * 1024 * 1024; // 2MB
+        if (file.size > maxSize) {
+            showErrorBanner('File Too Large', 
+                          `File size: ${(file.size / 1024 / 1024).toFixed(2)} MB (max: 2 MB)`, 
+                          'error');
+            fileInput.value = '';
+            uploadBtn.disabled = true;
+            fileInfo.style.display = 'none';
+            return;
+        }
+        
+        // Display file info
+        document.getElementById('file-name').textContent = file.name;
+        document.getElementById('file-size').textContent = 
+            (file.size / 1024).toFixed(1) + ' KB';
+        
+        fileInfo.style.display = 'block';
+        uploadBtn.disabled = false;
+        
+        console.log('✓ Valid firmware file selected:', file.name);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Upload Handler with Progress Tracking
+    // ════════════════════════════════════════════════════════════════════════
+
+    document.addEventListener('DOMContentLoaded', () => {
+        const form = document.getElementById('ota-upload-form');
+        
+        if (form) {
+            form.addEventListener('submit', async (e) => {
+                e.preventDefault();
+                
+                const fileInput = document.getElementById('firmware-file');
+                const file = fileInput.files[0];
+                
+                if (!file) {
+                    showErrorBanner('No File Selected', 'Please select a firmware file', 'error');
+                    return;
+                }
+                
+                // Confirm before upload
+                if (!confirm(`Upload and flash firmware?\n\nFile: ${file.name}\nSize: ${(file.size / 1024).toFixed(1)} KB\n\nDevice will reboot after update.`)) {
+                    return;
+                }
+                
+                console.log('🚀 Starting firmware upload...');
+                console.log('  File:', file.name);
+                console.log('  Size:', file.size, 'bytes');
+                
+                // Hide form, show progress
+                form.style.display = 'none';
+                document.getElementById('upload-progress').style.display = 'block';
+                document.getElementById('upload-error').style.display = 'none';
+                document.getElementById('upload-success').style.display = 'none';
+                
+                // Prepare FormData
+                const formData = new FormData();
+                formData.append('firmware', file);
+                
+                // Upload with Progress Tracking
+                try {
+                    const startTime = Date.now();
+                    
+                    const xhr = new XMLHttpRequest();
+                    
+                    // Progress Handler
+                    xhr.upload.addEventListener('progress', (e) => {
+                        if (e.lengthComputable) {
+                            const percent = Math.round((e.loaded / e.total) * 100);
+                            const elapsed = (Date.now() - startTime) / 1000; // seconds
+                            const speed = (e.loaded / 1024) / elapsed; // KB/s
+                            const eta = ((e.total - e.loaded) / (e.loaded / elapsed)); // seconds
+                            
+                            // Update Progress Bar
+                            document.getElementById('upload-progress-bar').style.width = percent + '%';
+                            document.getElementById('upload-progress-text').textContent = percent + '%';
+                            
+                            // Update Speed & ETA
+                            document.getElementById('upload-speed').textContent = 
+                                speed.toFixed(1) + ' KB/s';
+                            document.getElementById('upload-eta').textContent = 
+                                'ETA: ' + Math.ceil(eta) + 's';
+                            
+                            console.log(`📊 Upload Progress: ${percent}% (${speed.toFixed(1)} KB/s)`);
+                        }
+                    });
+                    
+                    // Success Handler
+                    xhr.addEventListener('load', () => {
+                        if (xhr.status === 200) {
+                            console.log('✓ Upload complete!');
+                            
+                            // Show success message
+                            document.getElementById('upload-progress').style.display = 'none';
+                            document.getElementById('upload-success').style.display = 'block';
+                            
+                            // Countdown to reload
+                            let countdown = 10;
+                            const countdownEl = document.getElementById('reboot-countdown');
+                            
+                            const timer = setInterval(() => {
+                                countdown--;
+                                countdownEl.textContent = countdown;
+                                
+                                if (countdown <= 0) {
+                                    clearInterval(timer);
+                                    console.log('🔄 Reloading page...');
+                                    location.reload();
+                                }
+                            }, 1000);
+                            
+                        } else {
+                            throw new Error(`HTTP ${xhr.status}: ${xhr.statusText}`);
+                        }
+                    });
+                    
+                    // Error Handler
+                    xhr.addEventListener('error', () => {
+                        throw new Error('Network error during upload');
+                    });
+                    
+                    // Timeout Handler (5 minutes)
+                    xhr.timeout = 5 * 60 * 1000;
+                    xhr.addEventListener('timeout', () => {
+                        throw new Error('Upload timeout (5 minutes)');
+                    });
+                    
+                    // Send Request
+                    xhr.open('POST', '/update', true);
+                    xhr.send(formData);
+                    
+                } catch (error) {
+                    console.error('✗ Upload failed:', error);
+                    
+                    // Show error
+                    document.getElementById('upload-progress').style.display = 'none';
+                    document.getElementById('upload-error').style.display = 'block';
+                    document.getElementById('upload-error-text').textContent = error.message;
+                    
+                    // Re-enable form
+                    setTimeout(() => {
+                        form.style.display = 'block';
+                        document.getElementById('upload-error').style.display = 'none';
+                    }, 5000);
+                }
+            });
+        }
+    });
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Device Restart Function
+    // ════════════════════════════════════════════════════════════════════════
+
+    function restartDevice() {
+        if (!confirm('Restart device now?')) return;
+        
+        // Hole aktuellen und neuen Hostname
+        const currentHostname = window.location.hostname;
+        const newHostname = document.getElementById('preview-hostname').textContent
+                                    .replace('.local', '');
+        
+        console.log('Current hostname:', currentHostname);
+        console.log('New hostname:', newHostname);
+        
+        const hostnameChanged = (newHostname !== currentHostname && 
+                                newHostname !== 'BW-Unbenannt-Fenster');
+        
+        AppState.ws.send('restart');
+        
+        showLoading('Restarting device...');
+        
+        setTimeout(() => {
+            hideLoading();
+            
+            if (hostnameChanged) {
+                // ════════════════════════════════════════════════════════════
+                // Hostname geändert → Zeige Anleitung für neue URL
+                // ════════════════════════════════════════════════════════════
+                
+                const modal = document.createElement('div');
+                modal.className = 'modal';
+                modal.innerHTML = `
+                    <div class="modal-box">
+                        <h3>🔄 Device Restarted</h3>
+                        
+                        <div class="alert success">
+                            <strong>✓ Hostname Changed</strong>
+                            <p style="margin-top:10px">
+                                The device is now available under a new address:
+                            </p>
+                        </div>
+                        
+                        <div style="background:rgba(33,150,243,0.1);padding:20px;border-radius:12px;margin:20px 0;text-align:center">
+                            <div style="font-size:0.9em;color:#888;margin-bottom:10px">
+                                New Address
+                            </div>
+                            <a href="http://${newHostname}.local" 
+                              style="font-size:1.3em;font-weight:bold;color:#2196F3;text-decoration:none">
+                                http://${newHostname}.local
+                            </a>
+                        </div>
+                        
+                        <div style="color:#888;font-size:0.9em;text-align:center;margin-bottom:20px">
+                            Click the link above or wait for automatic redirect...
+                        </div>
+                        
+                        <div style="text-align:center">
+                            <div class="spinner" style="margin:0 auto"></div>
+                            <div style="margin-top:10px;color:#888">
+                                Redirecting in <span id="redirect-countdown">10</span>s
+                            </div>
+                        </div>
+                    </div>
+                `;
+                
+                document.body.appendChild(modal);
+                modal.classList.remove('hidden');
+                
+                // Countdown & Auto-Redirect
+                let countdown = 10;
+                const countdownEl = document.getElementById('redirect-countdown');
+                
+                const timer = setInterval(() => {
+                    countdown--;
+                    countdownEl.textContent = countdown;
+                    
+                    if (countdown <= 0) {
+                        clearInterval(timer);
+                        window.location.href = `http://${newHostname}.local`;
+                    }
+                }, 1000);
+                
+            } else {
+                // ════════════════════════════════════════════════════════════
+                // Hostname unverändert → Normale Page Reload
+                // ════════════════════════════════════════════════════════════
+                
+                showErrorBanner('Device Restarting', 
+                              'Reconnecting...', 
+                              'warning');
+                
+                let countdown = 20;
+                const countdownInterval = setInterval(() => {
+                    countdown--;
+                    
+                    if (countdown <= 0) {
+                        clearInterval(countdownInterval);
+                        location.reload();
+                    } else {
+                        const banner = document.getElementById('error-banner-message');
+                        if (banner) {
+                            banner.textContent = `Reconnecting in ${countdown} seconds...`;
+                        }
+                    }
+                }, 1000);
+            }
+            
+        }, 5000);
+    }
+
     // ============================================================================
     // OTA Functions
     // ============================================================================
@@ -2640,6 +3078,113 @@
     console.log(`📊 OTA Progress: ${percent}% (${downloaded} / ${total} bytes)`);
     }
 
+    // ════════════════════════════════════════════════════════════════════════
+    // SHUTTER DRIFT CORRECTION FUNCTIONS
+    // ════════════════════════════════════════════════════════════════════════
+
+    let driftChart = null;
+
+    function refreshDriftStats() {
+        fetch('/api/drift')
+            .then(response => response.json())
+            .then(data => {
+                // Update Text
+                document.getElementById('cal-status').textContent = 
+                    data.calibrated ? '✓ Calibrated' : '✗ Not Calibrated';
+                document.getElementById('max-pulses').textContent = data.maxPulseCount;
+                document.getElementById('avg-pulses').textContent = data.measuredAverage;
+                document.getElementById('full-cycles').textContent = data.fullCycleCount;
+                
+                // Update Drift Badge
+                let driftPercent = data.driftPercent || 0;
+                let driftBadge = document.getElementById('drift-percent');
+                let driftBar = document.getElementById('drift-bar');
+                
+                driftBadge.textContent = driftPercent.toFixed(2) + '%';
+                driftBar.style.width = Math.min(driftPercent, 100) + '%';
+                driftBar.textContent = driftPercent.toFixed(1) + '%';
+                
+                // Badge Color
+                if (driftPercent < 5) {
+                    driftBadge.className = 'badge bg-success';
+                    driftBar.className = 'progress-bar bg-success';
+                } else if (driftPercent < 10) {
+                    driftBadge.className = 'badge bg-warning';
+                    driftBar.className = 'progress-bar bg-warning';
+                } else {
+                    driftBadge.className = 'badge bg-danger';
+                    driftBar.className = 'progress-bar bg-danger';
+                }
+                
+                document.getElementById('drift-pulses').textContent = data.driftPulses || 0;
+                
+                // Update Chart
+                updateDriftChart(data.bottomHistory || []);
+            });
+    }
+
+    function updateDriftChart(history) {
+        const ctx = document.getElementById('drift-chart').getContext('2d');
+        
+        if (driftChart) {
+            driftChart.destroy();
+        }
+        
+        driftChart = new Chart(ctx, {
+            type: 'line',
+            data: {
+                labels: history.map((_, i) => `Cycle ${i + 1}`),
+                datasets: [{
+                    label: 'Bottom Limit (Pulses)',
+                    data: history,
+                    borderColor: 'rgb(75, 192, 192)',
+                    backgroundColor: 'rgba(75, 192, 192, 0.2)',
+                    tension: 0.1
+                }]
+            },
+            options: {
+                responsive: true,
+                plugins: {
+                    legend: {
+                        display: true
+                    },
+                    tooltip: {
+                        mode: 'index',
+                        intersect: false
+                    }
+                },
+                scales: {
+                    y: {
+                        beginAtZero: false,
+                        title: {
+                            display: true,
+                            text: 'Pulses'
+                        }
+                    }
+                }
+            }
+        });
+    }
+
+    function resetDriftHistory() {
+        if (confirm('Reset drift history? This will clear all measurements but keep calibration.')) {
+            fetch('/api/drift/reset', { method: 'POST' })
+                .then(response => response.json())
+                .then(data => {
+                    if (data.success) {
+                        alert('Drift history reset successfully!');
+                        refreshDriftStats();
+                    }
+                });
+        }
+    }
+
+    // Auto-refresh alle 30 Sekunden
+    setInterval(refreshDriftStats, 30000);
+
+    // Initial load
+    refreshDriftStats();
+
 
     // ════════════════════════════════════════════════════════════════════════
     // GLOBALE VARIABLEN FÜR LIVE-UPDATE
@@ -2683,72 +3228,77 @@
             document.getElementById('ble-packet-id').innerText = data.packet_id;
         }
         
-        // ✅ Update "Last Update" Zeit mit NaN-Schutz
-    if (document.getElementById('ble-last-update')) {
-        const secondsAgo = data.seconds_ago;
-        
-        console.log('⏰ Time update:');
-        console.log('  Received seconds_ago:', secondsAgo);
-        console.log('  Type:', typeof secondsAgo);
-        
-        // ✅ KRITISCHER FIX: Validiere seconds_ago
-        let timeStr;
-        
-        if (secondsAgo === undefined || secondsAgo === null) {
-            // Backend hat keinen Wert gesendet
-            timeStr = 'Unknown';
-            console.warn('⚠ seconds_ago is undefined/null');
+        if (document.getElementById('ble-last-update')) {
+            const secondsAgo = data.seconds_ago;
             
-        } else if (secondsAgo === -1) {
-            // ✅ NEU: Backend signalisiert "ungültig"
-            timeStr = 'No recent data';
-            console.warn('⚠ seconds_ago is -1 (invalid)');
+            console.log('⏰ Time update:');
+            console.log('  Received seconds_ago:', secondsAgo);
+            console.log('  Type:', typeof secondsAgo);
+            console.log('  Is NaN?', isNaN(secondsAgo));
+            console.log('  Is null?', secondsAgo === null);
+            console.log('  Is undefined?', secondsAgo === undefined);
             
-            // Reset für Live-Update
-            lastKnownSecondsAgo = 0;
-            lastUpdateTime = 0;
+            let timeStr;
             
-        } else if (isNaN(secondsAgo)) {
-            // Sollte nicht vorkommen, aber sicher ist sicher
-            timeStr = 'Invalid';
-            console.error('✗ seconds_ago is NaN!');
-            
-            // Reset
-            lastKnownSecondsAgo = 0;
-            lastUpdateTime = 0;
-            
-        } else if (secondsAgo < 0) {
-            // Negative Werte (außer -1) sind ungültig
-            timeStr = 'Invalid';
-            console.error('✗ seconds_ago is negative:', secondsAgo);
-            
-            // Reset
-            lastKnownSecondsAgo = 0;
-            lastUpdateTime = 0;
-            
-        } else {
-            // ✅ Valider Wert
-            lastKnownSecondsAgo = secondsAgo;
-            lastUpdateTime = Date.now();
-            
-            console.log('✓ Valid time, stored for live-update');
-            
-            if (secondsAgo === 0) {
-                timeStr = 'Just now';
-            } else if (secondsAgo < 60) {
-                timeStr = secondsAgo + 's ago';
-            } else if (secondsAgo < 3600) {
-                timeStr = Math.floor(secondsAgo / 60) + 'm ago';
-            } else if (secondsAgo < 86400) {
-                timeStr = Math.floor(secondsAgo / 3600) + 'h ago';
+            // Prüfe alle ungültigen Werte
+            if (secondsAgo === undefined || secondsAgo === null) {
+                // Backend hat keinen Wert gesendet
+                timeStr = 'Unknown';
+                console.warn('⚠ seconds_ago is undefined/null');
+                
+                // Reset Live-Update
+                lastKnownSecondsAgo = 0;
+                lastUpdateTime = 0;
+                
+            } else if (secondsAgo === -1) {
+                // Backend signalisiert explizit "ungültig"
+                timeStr = 'No recent data';
+                console.warn('⚠ seconds_ago is -1 (no valid data)');
+                
+                // Reset Live-Update
+                lastKnownSecondsAgo = 0;
+                lastUpdateTime = 0;
+                
+            } else if (isNaN(secondsAgo)) {
+                // Sollte nicht vorkommen, aber sicher ist sicher
+                timeStr = 'Invalid';
+                console.error('✗ seconds_ago is NaN!');
+                
+                // Reset Live-Update
+                lastKnownSecondsAgo = 0;
+                lastUpdateTime = 0;
+                
+            } else if (secondsAgo < 0) {
+                // Negative Werte (außer -1) sind ungültig
+                timeStr = 'Invalid';
+                console.error('✗ seconds_ago is negative:', secondsAgo);
+                
+                // Reset Live-Update
+                lastKnownSecondsAgo = 0;
+                lastUpdateTime = 0;
+                
             } else {
-                timeStr = Math.floor(secondsAgo / 86400) + 'd ago';
+                lastKnownSecondsAgo = secondsAgo;
+                lastUpdateTime = Date.now();
+                
+                console.log('✓ Valid time received, stored for live-update');
+                
+                if (secondsAgo === 0) {
+                    timeStr = 'Just now';
+                } else if (secondsAgo < 60) {
+                    timeStr = secondsAgo + 's ago';
+                } else if (secondsAgo < 3600) {
+                    timeStr = Math.floor(secondsAgo / 60) + 'm ago';
+                } else if (secondsAgo < 86400) {
+                    timeStr = Math.floor(secondsAgo / 3600) + 'h ago';
+                } else {
+                    timeStr = Math.floor(secondsAgo / 86400) + 'd ago';
+                }
             }
+            
+            document.getElementById('ble-last-update').innerText = timeStr;
+            console.log('  Display:', timeStr);
         }
-        
-        document.getElementById('ble-last-update').innerText = timeStr;
-        console.log('  Display:', timeStr);
-    }
         
         // Button events
         if (data.has_button_event) {
@@ -2824,6 +3374,7 @@
             AppState.ws.send('matter_status');
             break;
           case 'ble':
+            console.log('→ Loading BLE status...');
             AppState.ws.send('ble_status');
             AppState.ws.send('contact_sensor_status');
             break;
@@ -3236,6 +3787,39 @@
         }
         
         return parts.join(' ');
+    }
+
+    function formatLastUpdate(secondsAgo) {
+        const element = document.getElementById('ble-last-update');
+        
+        if (secondsAgo < 0 || isNaN(secondsAgo)) {
+            element.style.color = '#666';
+            return 'Unknown';
+        }
+        
+        let timeStr;
+        
+        if (secondsAgo === 0) {
+            timeStr = 'Just now';
+            element.style.color = '#4CAF50';  // Grün
+        } else if (secondsAgo < 60) {
+            timeStr = secondsAgo + 's ago';
+            element.style.color = '#4CAF50';  // Grün
+        } else if (secondsAgo < 300) {  // < 5 Minuten
+            timeStr = Math.floor(secondsAgo / 60) + 'm ago';
+            element.style.color = '#2196F3';  // Blau
+        } else if (secondsAgo < 3600) {  // < 1 Stunde
+            timeStr = Math.floor(secondsAgo / 60) + 'm ago';
+            element.style.color = '#FF9800';  // Orange
+        } else if (secondsAgo < 86400) {  // < 24 Stunden
+            timeStr = Math.floor(secondsAgo / 3600) + 'h ago';
+            element.style.color = '#f44336';  // Rot
+        } else {
+            timeStr = Math.floor(secondsAgo / 86400) + 'd ago';
+            element.style.color = '#666';  // Grau
+        }
+        
+        return timeStr;
     }
 
     // ════════════════════════════════════════════════════════════════════════
@@ -4240,6 +4824,10 @@
                 console.error('  lastKnownSecondsAgo:', lastKnownSecondsAgo);
                 
                 element.innerText = 'Error';
+                
+                // Reset
+                lastKnownSecondsAgo = 0;
+                lastUpdateTime = 0;
                 return;
             }
             

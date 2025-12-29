@@ -40,6 +40,9 @@ public:
                                     const ShellyBLESensorData& data);
     void sendModalClose(int fd, const char* modal_id);
     void logMemoryStats(const char* location);
+
+    static esp_err_t drift_stats_handler(httpd_req_t *req);
+    static esp_err_t drift_reset_handler(httpd_req_t *req);
     
 
 private:

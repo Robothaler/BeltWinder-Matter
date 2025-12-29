@@ -13,6 +13,9 @@
 #include <esp_matter_cluster.h>
 #include <esp_matter_feature.h> 
 
+#include <esp_ota_ops.h>
+#include <esp_partition.h>
+
 #include "config.h"
 #include "credentials.h"
 #include "rollershutter_driver.h"
@@ -87,6 +90,134 @@ static void removeContactSensorEndpoint();
 static void removePowerSourceEndpoint();
 void enableContactSensorMatter();
 void disableContactSensorMatter();
+
+// ============================================================================
+// Subscription Handlers (Vereinfacht - ohne private Methoden)
+// ============================================================================
+
+class SubscriptionHandler : public chip::app::ReadHandler::ApplicationCallback {
+public:
+    void OnSubscriptionEstablished(chip::app::ReadHandler& readHandler) override {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   ✓ SUBSCRIPTION ESTABLISHED     ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        
+        // ✅ Sende initiales Update (verzögert)
+        // Nicht sofort, sondern nach 100ms damit Session bereit ist
+        subscriptionEstablishedTime = millis();
+        needsInitialUpdate = true;
+    }
+    
+    void OnSubscriptionTerminated(chip::app::ReadHandler& readHandler) override {
+        ESP_LOGW(TAG, "");
+        ESP_LOGW(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGW(TAG, "║   ⚠ SUBSCRIPTION TERMINATED      ║");
+        ESP_LOGW(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGW(TAG, "Reason: Session closed or timeout");
+        ESP_LOGW(TAG, "");
+    }
+    
+    // ✅ Öffentliche Methode zum Senden des initialen Updates
+    void sendInitialUpdateIfNeeded() {
+        if (!needsInitialUpdate) {
+            return;
+        }
+        
+        // Warte 100ms nach Subscription
+        if (millis() - subscriptionEstablishedTime < 100) {
+            return;
+        }
+        
+        needsInitialUpdate = false;
+        
+        if (!shutter_handle || window_covering_endpoint_id == 0) {
+            ESP_LOGW(TAG, "⚠ Cannot send initial update - endpoints not ready");
+            return;
+        }
+        
+        ESP_LOGI(TAG, "→ Sending initial attribute updates...");
+        
+        // Current Position
+        uint8_t percent = shutter_driver_get_current_percent(shutter_handle);
+        uint16_t pos_100ths = percent * 100;
+        
+        esp_matter_attr_val_t pos_val = esp_matter_uint16(pos_100ths);
+        attribute::report(window_covering_endpoint_id, 
+                         chip::app::Clusters::WindowCovering::Id,
+                         chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
+                         &pos_val);
+        
+        // Operational Status
+        RollerShutter::State state = shutter_driver_get_current_state(shutter_handle);
+        uint8_t opStateValue = 0x00;  // Default: Stopped
+        
+        if (state == RollerShutter::State::MOVING_UP || 
+            state == RollerShutter::State::CALIBRATING_UP) {
+            opStateValue = 0x05;  // MovingUpOrOpen
+        } else if (state == RollerShutter::State::MOVING_DOWN || 
+                   state == RollerShutter::State::CALIBRATING_DOWN) {
+            opStateValue = 0x06;  // MovingDownOrClose
+        }
+        
+        esp_matter_attr_val_t opstate_val = esp_matter_uint8(opStateValue);
+        attribute::report(window_covering_endpoint_id, 
+                         chip::app::Clusters::WindowCovering::Id,
+                         chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id, 
+                         &opstate_val);
+        
+        ESP_LOGI(TAG, "✓ Initial update sent: Position=%d%%, OpState=0x%02X", 
+                 percent, opStateValue);
+        ESP_LOGI(TAG, "");
+    }
+    
+private:
+    uint32_t subscriptionEstablishedTime = 0;
+    bool needsInitialUpdate = false;
+};
+
+static SubscriptionHandler subscriptionHandler;
+
+// ============================================================================
+// Operational State Callback (für Shutter → Matter Updates)
+// ============================================================================
+
+void onShutterStateChanged(RollerShutter::State state) {
+    if (window_covering_endpoint_id == 0) {
+        return;  // Endpoint noch nicht initialisiert
+    }
+    
+    uint8_t opStateValue;
+    
+    switch (state) {
+        case RollerShutter::State::MOVING_UP:
+        case RollerShutter::State::CALIBRATING_UP:
+            opStateValue = 0x05;  // MovingUpOrOpen
+            break;
+            
+        case RollerShutter::State::MOVING_DOWN:
+        case RollerShutter::State::CALIBRATING_DOWN:
+            opStateValue = 0x06;  // MovingDownOrClose
+            break;
+            
+        case RollerShutter::State::STOPPED:
+        case RollerShutter::State::CALIBRATING_VALIDATION:
+        default:
+            opStateValue = 0x00;  // Stopped
+            break;
+    }
+    
+    // Direkt als uint8 übergeben (Matter SDK erwartet Bitmap8)
+    esp_matter_attr_val_t opstate_val = esp_matter_uint8(opStateValue);
+    attribute::update(window_covering_endpoint_id, 
+                     chip::app::Clusters::WindowCovering::Id,
+                     chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id, 
+                     &opstate_val);
+    
+    ESP_LOGD(TAG, "Operational State updated: %d → Matter: 0x%02X", 
+             (int)state, opStateValue);
+}
 
 // ============================================================================
 // BLE Sensor Data Callback
@@ -395,9 +526,6 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     
     return power_source_endpoint;
 }
-
-
-
     static void removeContactSensorEndpoint() {
     if (contact_sensor_endpoint == nullptr) {
         ESP_LOGW(TAG, "No contact sensor endpoint to remove");
@@ -552,7 +680,7 @@ void setup() {
     esp_log_level_set("BLESimple", ESP_LOG_NONE);   // BLE: INFO
     esp_log_level_set("NimBLE", ESP_LOG_NONE);      // NimBLE: INFO
     esp_log_level_set("wifi", ESP_LOG_NONE);       // WiFi: ERROR
-    esp_log_level_set("Shutter", ESP_LOG_INFO);     // Shutter: DEBUG
+    esp_log_level_set("Shutter", ESP_LOG_DEBUG);     // Shutter: DEBUG
     esp_log_level_set("Main", ESP_LOG_INFO);        // Main: DEBUG
     esp_log_level_set("WebUI", ESP_LOG_NONE);       // WebUI: DEBUG
 
@@ -581,8 +709,12 @@ void setup() {
         ESP_LOGE(TAG, "Failed to initialize shutter driver");
         return;
     }
-    
+
     ((RollerShutter*)shutter_handle)->loadStateFromKVS();
+
+    // Operational State Callback registrieren
+    shutter_driver_set_operational_state_callback(shutter_handle, onShutterStateChanged);
+    ESP_LOGI(TAG, "✓ Operational State callback registered");
 
     if (Matter.isDeviceCommissioned()) {
         ESP_LOGI(TAG, "Already commissioned. Initializing hardware NOW...");
@@ -649,6 +781,7 @@ void setup() {
                  INSTALLED_OPEN_LIMIT_LIFT_CM, INSTALLED_CLOSED_LIMIT_LIFT_CM);
     }
 
+    #ifdef CONFIG_ENABLE_SCENE_CLUSTER
     // ========================================================================
     // Scene Cluster (Minimal - Controller-Managed)
     // ========================================================================
@@ -700,6 +833,7 @@ void setup() {
                     SCENE_MAPPINGS[i].description);
         }
     }
+    #endif // CONFIG_ENABLE_SCENE_CLUSTER
 
     // ========================================================================
     // Custom Cluster - Device IP
@@ -828,6 +962,14 @@ void setup() {
     ESP_ERROR_CHECK(esp_matter::start(nullptr));
     ESP_LOGI(TAG, "Matter stack started");
 
+    chip::app::InteractionModelEngine* imEngine = chip::app::InteractionModelEngine::GetInstance();
+    if (imEngine) {
+        ESP_LOGI(TAG, "✓ Subscription monitoring active");
+    } else {
+        ESP_LOGW(TAG, "⚠ Could not access InteractionModelEngine");
+    }
+
+
     bool commissioned = Matter.isDeviceCommissioned();
     bool hasFabrics = (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
 
@@ -955,6 +1097,48 @@ void setup() {
         ESP_LOGI(TAG, "  OTA will be available after commissioning + reboot");
         ESP_LOGI(TAG, "");
     }
+
+    // ════════════════════════════════════════════════════════════════════
+    // OTA Partition Check
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   OTA PARTITION INFO              ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* boot = esp_ota_get_boot_partition();
+    const esp_partition_t* update = esp_ota_get_next_update_partition(NULL);
+    
+    ESP_LOGI(TAG, "Running Partition:");
+    ESP_LOGI(TAG, "  Label:   %s", running->label);
+    ESP_LOGI(TAG, "  Address: 0x%06X", running->address);
+    ESP_LOGI(TAG, "  Size:    %u KB", running->size / 1024);
+    ESP_LOGI(TAG, "  Type:    %d (subtype: %d)", running->type, running->subtype);
+    ESP_LOGI(TAG, "");
+    
+    ESP_LOGI(TAG, "Boot Partition:");
+    ESP_LOGI(TAG, "  Label:   %s", boot->label);
+    ESP_LOGI(TAG, "  Address: 0x%06X", boot->address);
+    ESP_LOGI(TAG, "");
+    
+    if (update) {
+        ESP_LOGI(TAG, "Update Target Partition:");
+        ESP_LOGI(TAG, "  Label:   %s", update->label);
+        ESP_LOGI(TAG, "  Address: 0x%06X", update->address);
+        ESP_LOGI(TAG, "  Size:    %u KB", update->size / 1024);
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "✓ Dual-OTA Partition available");
+        ESP_LOGI(TAG, "✓ Safe rollback possible");
+    } else {
+        ESP_LOGW(TAG, "⚠️ NO Update Partition found!");
+        ESP_LOGW(TAG, "⚠️ OTA will overwrite running partition");
+        ESP_LOGW(TAG, "⚠️ Rollback NOT possible!");
+    }
+    
+    ESP_LOGI(TAG, "");
 
     // ════════════════════════════════════════════════════════════════════
     // Shelly BLE Manager (LAZY INIT - BLE bleibt aus!)
@@ -1165,6 +1349,11 @@ void setup() {
 void loop() {
     esp_task_wdt_reset();
 
+    // ════════════════════════════════════════════════════════════════
+    // Subscription Handler Update (falls neuer Subscribe)
+    // ════════════════════════════════════════════════════════════════
+    subscriptionHandler.sendInitialUpdateIfNeeded();
+
     // Commissioning Check
     static bool was_commissioned = false;
     bool has_fabrics = (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
@@ -1195,22 +1384,60 @@ void loop() {
 
     // Shutter Control Loop
     if (is_commissioned && hardware_initialized) {
-        shutter_driver_loop(shutter_handle);
+    shutter_driver_loop(shutter_handle);
 
-        // Position Update
-        if (shutter_driver_is_position_changed(shutter_handle)) {
-            uint8_t percent = shutter_driver_get_current_percent(shutter_handle);
-            uint16_t pos_100ths = percent * 100;
+    // ════════════════════════════════════════════════════════════════
+    // Smart Matter Update Strategy
+    // ════════════════════════════════════════════════════════════════
+    
+    if (shutter_driver_should_send_matter_update(shutter_handle)) {
+        uint8_t percent = shutter_driver_get_current_percent(shutter_handle);
+        uint16_t pos_100ths = percent * 100;
+        
+        RollerShutter::State state = shutter_driver_get_current_state(shutter_handle);
+        
+        esp_matter_attr_val_t val = esp_matter_uint16(pos_100ths);
+        
+        if (state == RollerShutter::State::MOVING_UP || 
+            state == RollerShutter::State::MOVING_DOWN) {
             
-            ESP_LOGD(TAG, "Position changed: %d%% (%d/10000)", percent, pos_100ths);
+            // WÄHREND Bewegung: Nur CURRENT updaten (Live-Update)
+            ESP_LOGI(TAG, "Matter Update (live): %d%%", percent);
             
-            esp_matter_attr_val_t val = esp_matter_uint16(pos_100ths);
-            attribute::update(window_covering_endpoint_id, chip::app::Clusters::WindowCovering::Id,
-                             chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, &val);
-            attribute::update(window_covering_endpoint_id, chip::app::Clusters::WindowCovering::Id,
-                             chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id, &val);
+            attribute::update(window_covering_endpoint_id, 
+                            chip::app::Clusters::WindowCovering::Id,
+                            chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
+                            &val);
+            
+        } else if (state == RollerShutter::State::STOPPED) {
+            
+            // BEI Stillstand: BEIDE updaten (Subscription Trigger!)
+            ESP_LOGI(TAG, "Matter Update (stopped): %d%%", percent);
+            
+            attribute::update(window_covering_endpoint_id, 
+                            chip::app::Clusters::WindowCovering::Id,
+                            chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
+                            &val);
+            
+            attribute::update(window_covering_endpoint_id, 
+                            chip::app::Clusters::WindowCovering::Id,
+                            chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id, 
+                            &val);  // ← Subscription Trigger!
         }
+        
+        // Operational Status (immer)
+        uint8_t opStateValue = (state == RollerShutter::State::MOVING_UP) ? 0x05 :
+                               (state == RollerShutter::State::MOVING_DOWN) ? 0x06 : 0x00;
+        
+        esp_matter_attr_val_t opstate_val = esp_matter_uint8(opStateValue);
+        attribute::update(window_covering_endpoint_id, 
+                         chip::app::Clusters::WindowCovering::Id,
+                         chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id, 
+                         &opstate_val);
+        
+        shutter_driver_mark_matter_update_sent(shutter_handle);
     }
+}
 
     // IP Address Update
     static uint32_t last_ip_check = 0;
@@ -1272,7 +1499,7 @@ void loop() {
     }
 
     // ====================================================================
-    // Arduino OTA Handler (WICHTIG!)
+    // Arduino OTA Handler
     // ====================================================================
     
     ArduinoOTA.handle();
@@ -1303,57 +1530,6 @@ void loop() {
         }
         ESP_LOGI(TAG, "");
     }
-
-    // ========================================================================
-    // Keep-Alive: Regelmäßig Attribute updaten (alle 30 Sekunden)
-    // ========================================================================
-
-    static uint32_t last_keepalive = 0;
-    if (millis() - last_keepalive >= 30000) {
-        last_keepalive = millis();
-        
-        bool updates_sent = false;
-        
-        // Contact Sensor Keep-Alive
-        if (contact_sensor_endpoint_active && contact_sensor_endpoint_id != 0) {
-            ShellyBLESensorData data;
-            if (bleManager && bleManager->getSensorData(data) && data.dataValid) {
-                // Contact State
-                esp_matter_attr_val_t contact_val = esp_matter_bool(!data.windowOpen);
-                esp_err_t ret = attribute::update(contact_sensor_endpoint_id,
-                                                chip::app::Clusters::BooleanState::Id,
-                                                chip::app::Clusters::BooleanState::Attributes::StateValue::Id,
-                                                &contact_val);
-                
-                if (ret == ESP_OK) {
-                    updates_sent = true;
-                }
-            }
-        }
-        
-        // Power Source Keep-Alive
-        if (power_source_endpoint_active && power_source_endpoint_id != 0) {
-            ShellyBLESensorData data;
-            if (bleManager && bleManager->getSensorData(data) && data.dataValid) {
-                // Battery Percentage
-                esp_matter_attr_val_t battery_val = esp_matter_nullable_uint8(data.battery * 2);
-                esp_err_t ret = attribute::update(power_source_endpoint_id,
-                                                chip::app::Clusters::PowerSource::Id,
-                                                chip::app::Clusters::PowerSource::Attributes::BatPercentRemaining::Id,
-                                                &battery_val);
-                
-                if (ret == ESP_OK) {
-                    updates_sent = true;
-                }
-            }
-        }
-        
-        if (updates_sent) {
-            ESP_LOGD(TAG, "✓ Keep-alive updates sent to controller");
-        }
-    }
-
-
 
     /*
     // Periodic Status Report (every 5 minutes)
@@ -1441,16 +1617,39 @@ static esp_err_t app_attribute_update_cb(callback_type_t type, uint16_t endpoint
         return ESP_OK;
     }
 
-    // Window Covering Commands
+    // ════════════════════════════════════════════════════════════════
+    // ✅ Window Covering Target Position (von GoToLiftPercentage Command)
+    // ════════════════════════════════════════════════════════════════
+    
     if (cluster_id == chip::app::Clusters::WindowCovering::Id) {
-                if (attribute_id == chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id) {
-            uint8_t percent = val->val.u16 / 100;
-            ESP_LOGI(TAG, "Matter command: Move to %d%%", percent);
+        if (attribute_id == chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id) {
+            
+            // Extract target position
+            uint16_t target_100ths = val->val.u16;
+            uint8_t percent = target_100ths / 100;
+            
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+            ESP_LOGI(TAG, "║       TARGET POSITION ATTRIBUTE UPDATE                    ║");
+            ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Raw value (100ths): %d", target_100ths);
+            ESP_LOGI(TAG, "Calculated percent: %d%%", percent);
+            ESP_LOGI(TAG, "Source: GoToLiftPercentage Command (0x05)");
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "→ Calling shutter_driver_go_to_lift_percent(%d)", percent);
+            ESP_LOGI(TAG, "");
+            
             shutter_driver_go_to_lift_percent(shutter_handle, percent);
+            
+            return ESP_OK;
         }
     }
     
+    // ════════════════════════════════════════════════════════════════
     // Custom Cluster - Direction Inverted
+    // ════════════════════════════════════════════════════════════════
+    
     if (cluster_id == CLUSTER_ID_ROLLERSHUTTER_CONFIG && 
         attribute_id == ATTR_ID_DIRECTION_INVERTED) {
         ESP_LOGI(TAG, "Matter: Set direction inverted = %s", val->val.b ? "true" : "false");
@@ -1459,6 +1658,7 @@ static esp_err_t app_attribute_update_cb(callback_type_t type, uint16_t endpoint
     
     return ESP_OK;
 }
+
 
 static esp_err_t app_command_cb(const ConcreteCommandPath &path, 
                                 TLV::TLVReader &reader, void *priv) {
@@ -1470,9 +1670,107 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &path,
     ESP_LOGI(TAG, "│ Command:  0x%04X", path.mCommandId);
     ESP_LOGI(TAG, "│ Endpoint: %d", path.mEndpointId);
     
-    // ========================================================================
-    // Scene Cluster Commands - KORREKTE Includes prüfen
-    // ========================================================================
+    // ════════════════════════════════════════════════════════════════
+    // Window Covering Commands
+    // ════════════════════════════════════════════════════════════════
+    
+    if (path.mClusterId == chip::app::Clusters::WindowCovering::Id) {
+        ESP_LOGI(TAG, "│ → Window Covering Command");
+        
+        switch (path.mCommandId) {
+            // ────────────────────────────────────────────────────────
+            // Command: UpOrOpen (0x00)
+            // ────────────────────────────────────────────────────────
+            case chip::app::Clusters::WindowCovering::Commands::UpOrOpen::Id: {
+                ESP_LOGI(TAG, "│   Type: UpOrOpen");
+                ESP_LOGI(TAG, "└─────────────────────────────────");
+                
+                shutter_driver_go_to_lift_percent(shutter_handle, 0);
+                
+                // ✅ Command Response senden
+                return ESP_OK;
+            }
+                
+            // ────────────────────────────────────────────────────────
+            // Command: DownOrClose (0x01)
+            // ────────────────────────────────────────────────────────
+            case chip::app::Clusters::WindowCovering::Commands::DownOrClose::Id: {
+                ESP_LOGI(TAG, "│   Type: DownOrClose");
+                ESP_LOGI(TAG, "└─────────────────────────────────");
+                
+                shutter_driver_go_to_lift_percent(shutter_handle, 100);
+                
+                // ✅ Command Response senden
+                return ESP_OK;
+            }
+                
+            // ────────────────────────────────────────────────────────
+            // Command: StopMotion (0x02)
+            // ────────────────────────────────────────────────────────
+            case chip::app::Clusters::WindowCovering::Commands::StopMotion::Id: {
+                ESP_LOGI(TAG, "│   Type: StopMotion");
+                ESP_LOGI(TAG, "└─────────────────────────────────");
+                
+                shutter_driver_stop_motion(shutter_handle);
+                
+                // ✅ Command Response senden
+                return ESP_OK;
+            }
+                
+            // ────────────────────────────────────────────────────────
+            // Command: GoToLiftPercentage (0x05)
+            // ────────────────────────────────────────────────────────
+            case chip::app::Clusters::WindowCovering::Commands::GoToLiftPercentage::Id: {
+                ESP_LOGI(TAG, "│   Type: GoToLiftPercentage");
+                
+                chip::app::Clusters::WindowCovering::Commands::GoToLiftPercentage::DecodableType cmd;
+                
+                if (chip::app::DataModel::Decode(reader, cmd) == CHIP_NO_ERROR) {
+                    uint8_t percent = cmd.liftPercent100thsValue / 100;
+                    
+                    ESP_LOGI(TAG, "│   Target: %d%%", percent);
+                    ESP_LOGI(TAG, "└─────────────────────────────────");
+                    
+                    shutter_driver_go_to_lift_percent(shutter_handle, percent);
+                    
+                    // ✅ Command Response senden
+                    return ESP_OK;
+                    
+                } else {
+                    ESP_LOGE(TAG, "│   ✗ Failed to decode command payload");
+                    ESP_LOGI(TAG, "└─────────────────────────────────");
+                    
+                    // ❌ Command failed
+                    return ESP_FAIL;
+                }
+            }
+            
+            default:
+                ESP_LOGW(TAG, "│   ⚠ Unknown command ID: 0x%04X", path.mCommandId);
+                ESP_LOGI(TAG, "└─────────────────────────────────");
+                return ESP_ERR_NOT_SUPPORTED;
+        }
+    }
+    
+    // ════════════════════════════════════════════════════════════════
+    // Custom Cluster - Calibration
+    // ════════════════════════════════════════════════════════════════
+    
+    if (path.mClusterId == CLUSTER_ID_ROLLERSHUTTER_CONFIG && 
+        path.mCommandId == CMD_ID_START_CALIBRATION) {
+        ESP_LOGI(TAG, "│ → Custom: START_CALIBRATION");
+        ESP_LOGI(TAG, "└─────────────────────────────────");
+        
+        shutter_driver_start_calibration(shutter_handle);
+        
+        // ✅ Command Response senden
+        return ESP_OK;
+    }
+
+    #ifdef CONFIG_ENABLE_SCENE_CLUSTER
+    // ════════════════════════════════════════════════════════════════
+    // Scene Cluster Commands
+    // ════════════════════════════════════════════════════════════════
     
     if (path.mClusterId == CLUSTER_ID_SCENES) {
         ESP_LOGI(TAG, "│ → Scene Cluster Command");
@@ -1480,28 +1778,17 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &path,
         if (path.mCommandId == CMD_ID_RECALL_SCENE) {
             ESP_LOGI(TAG, "│   Type: RecallScene");
             
-            // ✅ FIX: Scene Commands benötigen spezielle Includes
-            // Falls chip::app::Clusters::Scenes nicht existiert,
-            // nutze manuelle Dekodierung:
-            
-            // Struktur: groupID (uint16_t) + sceneID (uint8_t)
             uint16_t groupId = 0;
             uint8_t sceneId = 0;
             
-            // TLV Reader dekodieren (manuell)
             chip::TLV::TLVType containerType;
             if (reader.EnterContainer(containerType) == CHIP_NO_ERROR) {
-                
-                // Group ID lesen (Tag 0)
                 if (reader.Next() == CHIP_NO_ERROR) {
                     reader.Get(groupId);
                 }
-                
-                // Scene ID lesen (Tag 1)
                 if (reader.Next() == CHIP_NO_ERROR) {
                     reader.Get(sceneId);
                 }
-                
                 reader.ExitContainer(containerType);
                 
                 ESP_LOGI(TAG, "│   Group: %d", groupId);
@@ -1517,17 +1804,15 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &path,
                                  targetPos, SCENE_MAPPINGS[i].description);
                         ESP_LOGI(TAG, "└─────────────────────────────────");
                         
-                        // Rolladen bewegen
                         shutter_driver_go_to_lift_percent(shutter_handle, targetPos);
                         
-                        // Update Current Scene Attribute
+                        // Update Scene Attributes
                         esp_matter_attr_val_t scene_val = esp_matter_uint8(sceneId);
                         attribute::update(window_covering_endpoint_id, 
                                         CLUSTER_ID_SCENES,
                                         ATTR_ID_CURRENT_SCENE, 
                                         &scene_val);
                         
-                        // Mark Scene Valid
                         esp_matter_attr_val_t valid_val = esp_matter_bool(true);
                         attribute::update(window_covering_endpoint_id,
                                         CLUSTER_ID_SCENES,
@@ -1535,109 +1820,42 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &path,
                                         &valid_val);
                         
                         found = true;
-                        break;
+                        
+                        // ✅ Command Response senden
+                        return ESP_OK;
                     }
                 }
                 
                 if (!found) {
                     ESP_LOGW(TAG, "│   ⚠ Unknown Scene ID: %d", sceneId);
                     ESP_LOGI(TAG, "└─────────────────────────────────");
+                    return ESP_FAIL;
                 }
-                
-            } else {
-                ESP_LOGE(TAG, "│   ✗ Failed to decode RecallScene payload");
-                ESP_LOGI(TAG, "└─────────────────────────────────");
             }
-            
-            return ESP_OK;
         }
         
         else if (path.mCommandId == CMD_ID_GET_SCENE_MEMBERSHIP) {
             ESP_LOGI(TAG, "│   Type: GetSceneMembership");
+            ESP_LOGI(TAG, "└─────────────────────────────────");
             
-            // Ähnlich wie RecallScene - manuelle Dekodierung
-            uint16_t groupId = 0;
-            
-            chip::TLV::TLVType containerType;
-            if (reader.EnterContainer(containerType) == CHIP_NO_ERROR) {
-                if (reader.Next() == CHIP_NO_ERROR) {
-                    reader.Get(groupId);
-                }
-                reader.ExitContainer(containerType);
-                
-                ESP_LOGI(TAG, "│   Group: %d", groupId);
-                ESP_LOGI(TAG, "│   → Returning %d available scenes", SCENE_MAPPING_COUNT);
-                ESP_LOGI(TAG, "└─────────────────────────────────");
-            }
-            
+            // ✅ Command Response senden
             return ESP_OK;
         }
         
-        ESP_LOGW(TAG, "│   ⚠ Unknown Scene command: 0x%04X", path.mCommandId);
-        ESP_LOGI(TAG, "└─────────────────────────────────");
         return ESP_ERR_NOT_SUPPORTED;
     }
+    #endif // CONFIG_ENABLE_SCENE_CLUSTER
     
-    // Custom Cluster - Calibration Command
-    if (path.mClusterId == CLUSTER_ID_ROLLERSHUTTER_CONFIG && 
-        path.mCommandId == CMD_ID_START_CALIBRATION) {
-        ESP_LOGI(TAG, "│ → Custom: START_CALIBRATION");
-        ESP_LOGI(TAG, "└─────────────────────────────────");
-        shutter_driver_start_calibration(shutter_handle);
-        return ESP_OK;
-    }
-    
-    // Window Covering Commands
-    if (path.mClusterId == chip::app::Clusters::WindowCovering::Id) {
-        ESP_LOGI(TAG, "│ → Window Covering Command");
-        
-        switch (path.mCommandId) {
-            case chip::app::Clusters::WindowCovering::Commands::UpOrOpen::Id:
-                ESP_LOGI(TAG, "│   Type: UpOrOpen");
-                ESP_LOGI(TAG, "└─────────────────────────────────");
-                shutter_driver_go_to_lift_percent(shutter_handle, 0);
-                break;
-                
-            case chip::app::Clusters::WindowCovering::Commands::DownOrClose::Id:
-                ESP_LOGI(TAG, "│   Type: DownOrClose");
-                ESP_LOGI(TAG, "└─────────────────────────────────");
-                shutter_driver_go_to_lift_percent(shutter_handle, 100);
-                break;
-                
-            case chip::app::Clusters::WindowCovering::Commands::StopMotion::Id:
-                ESP_LOGI(TAG, "│   Type: StopMotion");
-                ESP_LOGI(TAG, "└─────────────────────────────────");
-                shutter_driver_stop_motion(shutter_handle);
-                break;
-                
-            case chip::app::Clusters::WindowCovering::Commands::GoToLiftPercentage::Id: {
-                chip::app::Clusters::WindowCovering::Commands::GoToLiftPercentage::DecodableType cmd;
-                if (chip::app::DataModel::Decode(reader, cmd) == CHIP_NO_ERROR) {
-                    uint8_t percent = cmd.liftPercent100thsValue / 100;
-                    ESP_LOGI(TAG, "│   Type: GoToLiftPercentage");
-                    ESP_LOGI(TAG, "│   Target: %d%%", percent);
-                    ESP_LOGI(TAG, "└─────────────────────────────────");
-                    shutter_driver_go_to_lift_percent(shutter_handle, percent);
-                } else {
-                    ESP_LOGE(TAG, "│   ✗ Failed to decode command payload");
-                    ESP_LOGI(TAG, "└─────────────────────────────────");
-                }
-                break;
-            }
-            
-            default:
-                ESP_LOGW(TAG, "│   ⚠ Unknown command ID: 0x%04X", path.mCommandId);
-                ESP_LOGI(TAG, "└─────────────────────────────────");
-                break;
-        }
-        return ESP_OK;
-    }
+    // ════════════════════════════════════════════════════════════════
+    // Unbekannter Cluster
+    // ════════════════════════════════════════════════════════════════
     
     ESP_LOGW(TAG, "│ ⚠ Unsupported cluster: 0x%04X", path.mClusterId);
     ESP_LOGI(TAG, "└─────────────────────────────────");
     
     return ESP_ERR_NOT_SUPPORTED;
 }
+
 
 // ============================================================================
 // SoftAP Stub

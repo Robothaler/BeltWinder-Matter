@@ -10,8 +10,19 @@
 #include "config.h"
 #include "rollershutter.h"
 
-typedef void *app_driver_handle_t;
+// ============================================================================
+// Operational State Callback
+// ============================================================================
 
+// Callback-Typ für Operational State Updates
+typedef void (*operational_state_callback_t)(RollerShutter::State state);
+
+
+// ============================================================================
+// Driver API
+// ============================================================================
+
+typedef void* app_driver_handle_t;
 
 /**
  * @brief Initializes the roller shutter driver and hardware.
@@ -111,5 +122,41 @@ void shutter_driver_set_window_open_logic(app_driver_handle_t handle, WindowOpen
  * @return Current state enum value.
  */
 RollerShutter::State shutter_driver_get_current_state(app_driver_handle_t handle);
+
+/**
+ * @brief Checks if the motor is currently stopped.
+ * @param handle Handle to the driver instance.
+ * @return True if the motor is stopped.
+ */
+bool shutter_driver_is_motor_stopped(app_driver_handle_t handle);
+
+// ============================================================================
+// Operational State Callback Registration
+// ============================================================================
+
+/**
+ * @brief Registers a callback to be invoked when the operational state changes.
+ * @param handle Handle to the driver instance.
+ * @param callback The callback function to register.
+ */
+void shutter_driver_set_operational_state_callback(app_driver_handle_t handle, 
+                                                   operational_state_callback_t callback);
+
+// ============================================================================
+// Smart Update Strategy
+// ============================================================================
+
+/** @brief Checks if a Matter update should be sent based on position change.
+ * @param handle Handle to the driver instance.
+ * @return True if an update should be sent.
+ */
+
+bool shutter_driver_should_send_matter_update(app_driver_handle_t handle);
+
+/**
+ * @brief Marks that a Matter update has been sent.
+ * @param handle Handle to the driver instance.
+ */
+void shutter_driver_mark_matter_update_sent(app_driver_handle_t handle);
 
 #endif // ROLLERSHUTTER_DRIVER_H

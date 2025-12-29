@@ -1,4 +1,8 @@
 #include <Arduino.h>
+
+#include "web_ui_handler.h"
+#include "device_naming.h"
+
 #include <WiFi.h>
 #include <esp_http_server.h>
 #include <esp_log.h>
@@ -16,13 +20,14 @@
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
+#include <Update.h>
 
-#include "web_ui_handler.h"
-#include "device_naming.h"
+static const char* TAG = "WebUI";
 
 extern class DeviceNaming* deviceNaming;
 
-static const char* TAG = "WebUI";
+#define CMD_MATCH(cmd_str, pattern) \
+    (strncmp(cmd_str, pattern, sizeof(pattern) - 1) == 0)
 
 struct BLETaskParams {
     WebUIHandler* handler;
@@ -49,94 +54,341 @@ struct BLETaskParams {
         "</body></html>";
 #endif
 
+
+// ════════════════════════════════════════════════════════════════════════
+// HTTP GET Handler für /update (zeigt aktuellen Status)
+// ════════════════════════════════════════════════════════════════════════
+
+static esp_err_t update_get_handler(httpd_req_t *req) {
+    // Zeige aktuelle Firmware Version + Partition Info
+    
+    const esp_app_desc_t* app_desc = esp_app_get_description();
+    const esp_partition_t* running = esp_ota_get_running_partition();
+    const esp_partition_t* boot = esp_ota_get_boot_partition();
+    
+    char response[512];
+    snprintf(response, sizeof(response),
+            "Current Firmware:\n"
+            "  Version: %s\n"
+            "  Date: %s %s\n"
+            "  IDF: %s\n\n"
+            "Partition Info:\n"
+            "  Running: %s (0x%x)\n"
+            "  Boot:    %s (0x%x)\n"
+            "  Type:    %s\n\n"
+            "Upload firmware.bin via POST to /update",
+            app_desc->version,
+            app_desc->date,
+            app_desc->time,
+            app_desc->idf_ver,
+            running->label,
+            running->address,
+            boot->label,
+            boot->address,
+            (running == boot) ? "Same (no pending update)" : "Different (rollback possible)");
+    
+    httpd_resp_set_type(req, "text/plain");
+    httpd_resp_sendstr(req, response);
+    
+    return ESP_OK;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// HTTP POST Handler für /update
+// ════════════════════════════════════════════════════════════════════════
+
+static esp_err_t update_post_handler(httpd_req_t *req) {
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   OTA UPDATE VIA HTTP POST        ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // Extrahiere Content-Length aus Header
+    size_t content_len = req->content_len;
+    
+    ESP_LOGI(TAG, "Content-Length: %u bytes (%.2f KB)", 
+             content_len, content_len / 1024.0f);
+    
+    if (content_len == 0 || content_len > (2 * 1024 * 1024)) {
+        ESP_LOGE(TAG, "✗ Invalid content length: %u", content_len);
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, 
+                           "Invalid file size (max 2MB)");
+        return ESP_FAIL;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Parse Multipart Form Data Header
+    // ════════════════════════════════════════════════════════════════════
+    
+    char boundary[128] = {0};
+    size_t boundary_len = 0;
+    
+    // Lese Content-Type Header
+    char content_type[256];
+    if (httpd_req_get_hdr_value_str(req, "Content-Type", 
+                                    content_type, sizeof(content_type)) == ESP_OK) {
+        
+        ESP_LOGI(TAG, "Content-Type: %s", content_type);
+        
+        // Extrahiere Boundary (z.B. "----WebKitFormBoundary...")
+        char* boundary_start = strstr(content_type, "boundary=");
+        if (boundary_start) {
+            boundary_start += 9; // Skip "boundary="
+            
+            // Kopiere Boundary String
+            strncpy(boundary, boundary_start, sizeof(boundary) - 1);
+            boundary_len = strlen(boundary);
+            
+            ESP_LOGI(TAG, "Boundary: %s (len=%u)", boundary, boundary_len);
+        } else {
+            ESP_LOGE(TAG, "✗ No boundary found in Content-Type");
+            httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, 
+                               "Missing boundary in multipart form");
+            return ESP_FAIL;
+        }
+    } else {
+        ESP_LOGE(TAG, "✗ No Content-Type header");
+        httpd_resp_send_err(req, HTTPD_400_BAD_REQUEST, 
+                           "Missing Content-Type header");
+        return ESP_FAIL;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Initialize OTA Update
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Initializing OTA update...");
+    
+    if (!Update.begin(UPDATE_SIZE_UNKNOWN)) {
+        ESP_LOGE(TAG, "✗ Update.begin() failed");
+        ESP_LOGE(TAG, "  Error: %s", Update.errorString());
+        
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, 
+                           "OTA init failed");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "✓ OTA Update initialized");
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Read and Flash Data in Chunks
+    // ════════════════════════════════════════════════════════════════════
+    
+    const size_t BUFFER_SIZE = 1024;
+    uint8_t* buffer = (uint8_t*)malloc(BUFFER_SIZE);
+    
+    if (!buffer) {
+        ESP_LOGE(TAG, "✗ Failed to allocate buffer");
+        Update.abort();
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, 
+                           "Memory allocation failed");
+        return ESP_FAIL;
+    }
+    
+    size_t total_received = 0;
+    size_t firmware_start = 0;
+    size_t firmware_end = 0;
+    bool firmware_started = false;
+    bool header_parsed = false;
+    
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   RECEIVING & FLASHING DATA       ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    int last_percent = -1;
+    
+    while (total_received < content_len) {
+        // Berechne wie viel wir noch empfangen können
+        size_t remaining = content_len - total_received;
+        size_t to_recv = (remaining < BUFFER_SIZE) ? remaining : BUFFER_SIZE;
+        
+        // Empfange Chunk
+        int ret = httpd_req_recv(req, (char*)buffer, to_recv);
+        
+        if (ret <= 0) {
+            if (ret == HTTPD_SOCK_ERR_TIMEOUT) {
+                ESP_LOGW(TAG, "⚠ Socket timeout - retrying...");
+                continue;
+            }
+            
+            ESP_LOGE(TAG, "✗ Failed to receive data: %d", ret);
+            break;
+        }
+        
+        total_received += ret;
+        
+        // ════════════════════════════════════════════════════════════════
+        // Parse Multipart Header (einmalig am Anfang)
+        // ════════════════════════════════════════════════════════════════
+        
+        if (!header_parsed && total_received >= 200) {
+            // Suche nach doppeltem CRLF (Ende des Headers)
+            for (size_t i = 0; i < ret - 3; i++) {
+                if (buffer[i] == '\r' && buffer[i+1] == '\n' &&
+                    buffer[i+2] == '\r' && buffer[i+3] == '\n') {
+                    
+                    firmware_start = i + 4;
+                    firmware_started = true;
+                    header_parsed = true;
+                    
+                    ESP_LOGI(TAG, "✓ Multipart header parsed");
+                    ESP_LOGI(TAG, "  Firmware data starts at byte: %u", firmware_start);
+                    
+                    // Schreibe erste Firmware-Bytes
+                    size_t first_chunk_size = ret - firmware_start;
+                    
+                    if (first_chunk_size > 0) {
+                        size_t written = Update.write(buffer + firmware_start, first_chunk_size);
+                        
+                        if (written != first_chunk_size) {
+                            ESP_LOGE(TAG, "✗ Write failed: wrote %u of %u bytes", 
+                                     written, first_chunk_size);
+                            Update.abort();
+                            free(buffer);
+                            httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, 
+                                               "Flash write error");
+                            return ESP_FAIL;
+                        }
+                        
+                        firmware_end += first_chunk_size;
+                    }
+                    
+                    break;
+                }
+            }
+            
+            if (!header_parsed) {
+                ESP_LOGW(TAG, "⚠ Header not found yet (received: %u bytes)", total_received);
+            }
+            
+        } else if (firmware_started) {
+            // ════════════════════════════════════════════════════════════
+            // Schreibe Firmware-Daten
+            // ════════════════════════════════════════════════════════════
+            
+            // Prüfe ob wir am Ende sind (Boundary Footer)
+            if (total_received >= content_len - 200) {
+                // Suche nach Boundary Ende Marker
+                // Format: "\r\n------WebKitFormBoundary...\r\n"
+                
+                bool found_end = false;
+                for (int i = ret - 1; i >= 0; i--) {
+                    if (buffer[i] == '-' && i >= 2) {
+                        // Prüfe ob das der Footer ist
+                        char test[64];
+                        snprintf(test, sizeof(test), "--%s", boundary);
+                        
+                        if (i + strlen(test) <= ret) {
+                            if (memcmp(buffer + i, test, strlen(test)) == 0) {
+                                // Footer gefunden - schneide ab
+                                ret = i - 2; // -2 für \r\n davor
+                                found_end = true;
+                                ESP_LOGI(TAG, "✓ Found boundary footer at byte %d", i);
+                                break;
+                            }
+                        }
+                    }
+                }
+            }
+            
+            if (ret > 0) {
+                size_t written = Update.write(buffer, ret);
+                
+                if (written != ret) {
+                    ESP_LOGE(TAG, "✗ Write failed: wrote %u of %u bytes", written, ret);
+                    Update.abort();
+                    free(buffer);
+                    httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, 
+                                       "Flash write error");
+                    return ESP_FAIL;
+                }
+                
+                firmware_end += ret;
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // Progress Logging (alle 5%)
+        // ════════════════════════════════════════════════════════════════
+        
+        int percent = (total_received * 100) / content_len;
+        
+        if (percent != last_percent && percent % 5 == 0) {
+            ESP_LOGI(TAG, "📊 Progress: %d%% (%u / %u bytes)", 
+                     percent, total_received, content_len);
+            last_percent = percent;
+        }
+        
+        // Watchdog Reset (wichtig bei großen Files!)
+        esp_task_wdt_reset();
+    }
+    
+    free(buffer);
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   FINALIZING OTA UPDATE           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "Total received: %u bytes", total_received);
+    ESP_LOGI(TAG, "Firmware size:  %u bytes", firmware_end);
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Finalize and Verify OTA Update
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (Update.end(true)) {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "✓✓✓ OTA UPDATE SUCCESSFUL ✓✓✓");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Written:  %u bytes", Update.progress());
+        ESP_LOGI(TAG, "Expected: %u bytes", firmware_end);
+        ESP_LOGI(TAG, "MD5 Hash: %s", Update.md5String().c_str());
+        ESP_LOGI(TAG, "");
+        
+        // Send Success Response
+        httpd_resp_set_status(req, "200 OK");
+        httpd_resp_set_type(req, "text/plain");
+        httpd_resp_sendstr(req, "Update successful! Rebooting...");
+        
+        // Short delay to send response
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        
+        ESP_LOGI(TAG, "🔄 Rebooting in 2 seconds...");
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        
+        ESP.restart();
+        
+    } else {
+        ESP_LOGE(TAG, "");
+        ESP_LOGE(TAG, "✗✗✗ OTA UPDATE FAILED ✗✗✗");
+        ESP_LOGE(TAG, "");
+        ESP_LOGE(TAG, "Error Code: %d", Update.getError());
+        ESP_LOGE(TAG, "Error String: %s", Update.errorString());
+        ESP_LOGI(TAG, "");
+        
+        Update.abort();
+        
+        char error_msg[128];
+        snprintf(error_msg, sizeof(error_msg), 
+                "Update failed: %s", Update.errorString());
+        
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, error_msg);
+        return ESP_FAIL;
+    }
+    
+    return ESP_OK;
+}
+
 // ============================================================================
 // Static Close Callback
 // ============================================================================
 
 static void ws_close_callback(httpd_handle_t hd, int sockfd) {
     ESP_LOGI("WebUI", "Socket %d closed by HTTP server", sockfd);
-}
-
-// ============================================================================
-// WebUIHandler Implementation
-// ============================================================================
-
-WebUIHandler::WebUIHandler(app_driver_handle_t h, ShellyBLEManager* ble) 
-        : handle(h), bleManager(ble), server(nullptr) {
-    client_mutex = xSemaphoreCreateMutex();
-    if (!client_mutex) {
-        ESP_LOGE(TAG, "Failed to create client mutex");
-    }
-}
-
-WebUIHandler::~WebUIHandler() {
-    if (server) {
-        httpd_stop(server);
-    }
-    if (client_mutex) {
-        vSemaphoreDelete(client_mutex);
-    }
-}
-
-void WebUIHandler::begin() {
-    httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
-    
-    // Socket-Handling optimieren
-    cfg.max_open_sockets = 5;
-    cfg.lru_purge_enable = true;
-    cfg.max_uri_handlers = 4;
-    cfg.stack_size = 8192;
-    cfg.ctrl_port = 32768;
-    cfg.close_fn = nullptr;
-    cfg.uri_match_fn = nullptr;
-    cfg.keep_alive_enable = false;
-    cfg.keep_alive_idle = 0;
-    cfg.keep_alive_interval = 0;
-    cfg.keep_alive_count = 0;
-
-    if (httpd_start(&server, &cfg) == ESP_OK) {
-        httpd_uri_t root = {
-            .uri       = "/",
-            .method    = HTTP_GET,
-            .handler   = root_handler,
-            .user_ctx  = this
-        };
-        httpd_register_uri_handler(server, &root);
-
-        httpd_uri_t ws = {
-            .uri          = "/ws",
-            .method       = HTTP_GET,
-            .handler      = ws_handler,
-            .user_ctx     = this,
-            .is_websocket = true,
-            .handle_ws_control_frames = true
-        };
-        httpd_register_uri_handler(server, &ws);
-        
-        ESP_LOGI(TAG, "HTTP server started");
-        ESP_LOGI(TAG, "  Max open sockets: %d", cfg.max_open_sockets);
-        ESP_LOGI(TAG, "  LRU purge: %s", cfg.lru_purge_enable ? "enabled" : "disabled");
-        
-        #ifdef SERVE_COMPRESSED_HTML
-            ESP_LOGI(TAG, "  Web-UI: GZIP compressed (%d bytes)", index_html_gz_len);
-        #else
-            ESP_LOGI(TAG, "  Web-UI: Uncompressed (fallback mode)");
-        #endif
-        
-        // BLE Callbacks registrieren
-        if (bleManager) {
-            ESP_LOGI(TAG, "═══════════════════════════════════");
-            ESP_LOGI(TAG, "REGISTERING BLE CALLBACKS");
-            
-            bleManager->setStateChangeCallback([this](auto oldState, auto newState) {
-                broadcastBLEStateChange(oldState, newState);
-            });
-             
-            ESP_LOGI(TAG, "✓ BLE State Callback registered");
-            ESP_LOGI(TAG, "ℹ Sensor Data forwarded via Main Loop");
-            ESP_LOGI(TAG, "═══════════════════════════════════");
-        }
-    }
 }
 
 // ============================================================================
@@ -154,11 +406,8 @@ esp_err_t WebUIHandler::root_handler(httpd_req_t *req) {
         
         httpd_resp_set_type(req, "text/html");
         httpd_resp_set_hdr(req, "Content-Encoding", "gzip");
-        
-        // Cache für 1 Stunde (spart Bandwidth)
         httpd_resp_set_hdr(req, "Cache-Control", "public, max-age=3600");
         
-        // ETag für Cache-Validation (optional)
         char etag[32];
         snprintf(etag, sizeof(etag), "\"%08x\"", index_html_gz_len);
         httpd_resp_set_hdr(req, "ETag", etag);
@@ -392,79 +641,6 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     };
     httpd_ws_send_frame_async(req->handle, fd, &frame);
 }
-
-else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
-    ESP_LOGI(TAG, "WebSocket: Save device name requested");
-    
-    extern DeviceNaming* deviceNaming;
-    if (!deviceNaming) {
-        const char* error = "{\"type\":\"error\",\"message\":\"Device naming not initialized\"}";
-        httpd_ws_frame_t frame = {
-            .type = HTTPD_WS_TYPE_TEXT,
-            .payload = (uint8_t*)error,
-            .len = strlen(error)
-        };
-        httpd_ws_send_frame_async(req->handle, fd, &frame);
-        free(buf);
-        return ESP_OK;
-    }
-    
-    // Parse JSON
-    String json = String(cmd);
-    
-    int roomStart = json.indexOf("\"room\":\"") + 8;
-    int roomEnd = json.indexOf("\"", roomStart);
-    String room = json.substring(roomStart, roomEnd);
-    
-    int typeStart = json.indexOf("\"type\":\"") + 8;
-    int typeEnd = json.indexOf("\"", typeStart);
-    String type = json.substring(typeStart, typeEnd);
-    
-    int posStart = json.indexOf("\"position\":\"") + 12;
-    int posEnd = json.indexOf("\"", posStart);
-    String position = json.substring(posStart, posEnd);
-    
-    ESP_LOGI(TAG, "  Room: %s", room.c_str());
-    ESP_LOGI(TAG, "  Type: %s", type.c_str());
-    ESP_LOGI(TAG, "  Position: %s", position.c_str());
-    
-    // Validate and save
-    if (!deviceNaming->save(room, type, position)) {
-        const char* error = "{\"type\":\"error\",\"message\":\"Invalid device name parameters\"}";
-        httpd_ws_frame_t frame = {
-            .type = HTTPD_WS_TYPE_TEXT,
-            .payload = (uint8_t*)error,
-            .len = strlen(error)
-        };
-        httpd_ws_send_frame_async(req->handle, fd, &frame);
-        free(buf);
-        return ESP_OK;
-    }
-    
-    // Apply to system (mDNS + Matter)
-    deviceNaming->apply();
-    
-    // Get updated names
-    DeviceNaming::DeviceName names = deviceNaming->getNames();
-    
-    // Send confirmation
-    char success_msg[512];
-    snprintf(success_msg, sizeof(success_msg),
-            "{\"type\":\"device_name_saved\","
-            "\"hostname\":\"%s\","
-            "\"matterName\":\"%s\"}",
-            names.hostname.c_str(),
-            names.matterName.c_str());
-    
-    httpd_ws_frame_t frame = {
-        .type = HTTPD_WS_TYPE_TEXT,
-        .payload = (uint8_t*)success_msg,
-        .len = strlen(success_msg)
-    };
-    httpd_ws_send_frame_async(req->handle, fd, &frame);
-    
-    ESP_LOGI(TAG, "✓ Device name saved and applied");
-}
     else if (strcmp(cmd, "status") == 0) {
         char status_buf[128];
         snprintf(status_buf, sizeof(status_buf), 
@@ -568,6 +744,13 @@ else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
         
         uint32_t flash_size = 0;
         esp_flash_get_size(NULL, &flash_size);
+
+        char version_str[32];
+        #ifdef APP_VERSION
+            snprintf(version_str, sizeof(version_str), "%s", APP_VERSION);
+        #else
+            snprintf(version_str, sizeof(version_str), "%s", app->version);
+        #endif
         
         char info_buf[512];
         snprintf(info_buf, sizeof(info_buf),
@@ -577,14 +760,14 @@ else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
                  "\"heap\":%u,"
                  "\"minheap\":%u,"
                  "\"flash\":%u,"
-                 "\"ver\":\"%s\","
+                 "\"ver\":\"%s\"," 
                  "\"reset\":\"%s\"}",
                  chipid,
                  esp_timer_get_time() / 1000000,
                  esp_get_free_heap_size(),
                  esp_get_minimum_free_heap_size(),
                  flash_size,
-                 app->version,
+                 version_str,
                  reset_reason_str);
         
         httpd_ws_frame_t info_frame = {
@@ -593,6 +776,119 @@ else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
             .len = strlen(info_buf)
         };
         httpd_ws_send_frame_async(req->handle, fd, &info_frame);
+    }
+    else if (CMD_MATCH(cmd, "{\"cmd\":\"save_device_name\"")) {
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║  SAVE DEVICE NAME COMMAND         ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    ESP_LOGI(TAG, "Raw Command: %s", cmd);
+    ESP_LOGI(TAG, "Command Length: %d", strlen(cmd));
+    ESP_LOGI(TAG, "");
+    
+    extern DeviceNaming* deviceNaming;
+    if (!deviceNaming) {
+        const char* error = "{\"type\":\"error\",\"message\":\"Device naming not initialized\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)error,
+            .len = strlen(error)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        free(buf);
+        return ESP_OK;
+    }
+    
+    // Parse JSON
+    String json = String(cmd);
+    
+    int roomStart = json.indexOf("\"room\":\"") + 8;
+    int roomEnd = json.indexOf("\"", roomStart);
+    String room = json.substring(roomStart, roomEnd);
+    
+    int typeStart = json.indexOf("\"type\":\"") + 8;
+    int typeEnd = json.indexOf("\"", typeStart);
+    String type = json.substring(typeStart, typeEnd);
+    
+    int posStart = json.indexOf("\"position\":\"") + 12;
+    int posEnd = json.indexOf("\"", posStart);
+    String position = json.substring(posStart, posEnd);
+    
+    ESP_LOGI(TAG, "  Room: %s", room.c_str());
+    ESP_LOGI(TAG, "  Type: %s", type.c_str());
+    ESP_LOGI(TAG, "  Position: %s", position.c_str());
+    
+    // Validate and save
+    if (!deviceNaming->save(room, type, position)) {
+        const char* error = "{\"type\":\"error\",\"message\":\"Invalid device name parameters\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)error,
+            .len = strlen(error)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        free(buf);
+        return ESP_OK;
+    }
+    
+    // Apply to system (mDNS + Matter)
+    deviceNaming->apply();
+    
+    // Get updated names
+    DeviceNaming::DeviceName names = deviceNaming->getNames();
+    
+    // Send confirmation
+    char success_msg[512];
+    snprintf(success_msg, sizeof(success_msg),
+            "{\"type\":\"device_name_saved\","
+            "\"hostname\":\"%s\","
+            "\"matterName\":\"%s\"}",
+            names.hostname.c_str(),
+            names.matterName.c_str());
+    
+    httpd_ws_frame_t frame = {
+        .type = HTTPD_WS_TYPE_TEXT,
+        .payload = (uint8_t*)success_msg,
+        .len = strlen(success_msg)
+    };
+    httpd_ws_send_frame_async(req->handle, fd, &frame);
+    
+    ESP_LOGI(TAG, "✓ Device name saved and applied");
+}
+    else if (strcmp(cmd, "restart") == 0) {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   DEVICE RESTART REQUESTED        ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "User triggered restart via WebUI");
+        ESP_LOGI(TAG, "");
+        
+        // Send confirmation to client
+        const char* confirm_msg = 
+            "{\"type\":\"info\",\"message\":\"Device restarting...\"}";
+        
+        httpd_ws_frame_t confirm_frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)confirm_msg,
+            .len = strlen(confirm_msg)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &confirm_frame);
+        
+        // Wait a moment to ensure message is sent
+        vTaskDelay(pdMS_TO_TICKS(500));
+        
+        ESP_LOGI(TAG, "🔄 Restarting ESP32 in 2 seconds...");
+        ESP_LOGI(TAG, "");
+        
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        
+        // Restart
+        esp_restart();
+        
+        // Never reached
     }
     
     // ============================================================================
@@ -740,13 +1036,14 @@ else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
         }
     }
 
-
-
     else if (strcmp(cmd, "ble_status") == 0) {
     if (self->bleManager) {
         ESP_LOGI(TAG, "BLE status requested");
         
-        // Discovery List
+        // ════════════════════════════════════════════════════════════════
+        // 1. Discovery List (bleibt unverändert)
+        // ════════════════════════════════════════════════════════════════
+        
         std::vector<ShellyBLEDevice> discovered = self->bleManager->getDiscoveredDevices();
         
         char json_buf[2048];
@@ -771,7 +1068,10 @@ else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
         };
         httpd_ws_send_frame_async(req->handle, fd, &frame);
         
-        // Paired Device Status
+        // ════════════════════════════════════════════════════════════════
+        // 2. Paired Device Status
+        // ════════════════════════════════════════════════════════════════
+        
         bool paired = self->bleManager->isPaired();
         
         ShellyBLEManager::DeviceState state = self->bleManager->getDeviceState();
@@ -830,33 +1130,62 @@ else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
                              continuousScanActive ? "true" : "false");
             
             if (hasData) {
-                // Berechne "seconds_ago" im Backend!
-                uint32_t currentMillis = millis();
-                uint32_t secondsAgo = 0;
-                bool timeValid = false;
+                // ════════════════════════════════════════════════════════
+                // ✅ FIX: Verbesserte seconds_ago Berechnung mit Debug
+                // ════════════════════════════════════════════════════════
                 
+                uint32_t currentMillis = millis();
+                int32_t secondsAgoToSend = -1;  // Default: ungültig
+                
+                ESP_LOGD(TAG, "Time Calculation:");
+                ESP_LOGD(TAG, "  Current millis: %u", currentMillis);
+                ESP_LOGD(TAG, "  Last update:    %u", sensorData.lastUpdate);
+                ESP_LOGD(TAG, "  Has data:       %s", hasData ? "true" : "false");
+                ESP_LOGD(TAG, "  Data valid:     %s", sensorData.dataValid ? "true" : "false");
+                
+                // ✅ Prüfe ob lastUpdate gesetzt wurde
                 if (sensorData.lastUpdate > 0) {
+                    uint32_t secondsAgo = 0;
+                    
+                    // Prüfe auf millis() Overflow
                     if (currentMillis >= sensorData.lastUpdate) {
-                        secondsAgo = (currentMillis - sensorData.lastUpdate) / 1000;
-                        timeValid = true;
+                        // Normal case
+                        uint32_t diff = currentMillis - sensorData.lastUpdate;
+                        secondsAgo = diff / 1000;
+                        
+                        ESP_LOGD(TAG, "  Difference:     %u ms", diff);
+                        ESP_LOGD(TAG, "  Seconds ago:    %u", secondsAgo);
+                        
                     } else {
-                        // Overflow
+                        // Overflow (nach ~49 Tagen Uptime)
                         uint32_t millisToOverflow = (0xFFFFFFFF - sensorData.lastUpdate);
-                        secondsAgo = (millisToOverflow + currentMillis) / 1000;
-                        timeValid = true;
+                        uint32_t diff = millisToOverflow + currentMillis;
+                        secondsAgo = diff / 1000;
+                        
+                        ESP_LOGW(TAG, "  millis() overflow detected!");
+                        ESP_LOGD(TAG, "  Calculated seconds: %u", secondsAgo);
                     }
                     
-                    // Sanity check
-                    if (secondsAgo > 86400) {
-                        ESP_LOGW(TAG, "⚠ Data older than 24 hours");
-                        timeValid = false;
+                    // Sanity check: Nicht älter als 24 Stunden
+                    if (secondsAgo <= 86400) {
+                        secondsAgoToSend = (int32_t)secondsAgo;
+                        ESP_LOGD(TAG, "  ✓ Valid time: %d seconds", secondsAgoToSend);
+                    } else {
+                        ESP_LOGW(TAG, "  ⚠ Data too old: %u seconds (%.1f hours)", 
+                                 secondsAgo, secondsAgo / 3600.0f);
+                        secondsAgoToSend = -1;
                     }
+                    
                 } else {
-                    timeValid = false;
+                    ESP_LOGW(TAG, "  ⚠ lastUpdate is 0 - no valid timestamp");
+                    secondsAgoToSend = -1;
                 }
                 
-                // Sende entweder validen Wert oder -1
-                int32_t secondsAgoToSend = timeValid ? (int32_t)secondsAgo : -1;
+                ESP_LOGD(TAG, "  → Sending seconds_ago: %d", secondsAgoToSend);
+                
+                // ════════════════════════════════════════════════════════
+                // JSON mit allen Sensor-Daten
+                // ════════════════════════════════════════════════════════
                 
                 offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
                                   "\"valid\":true,"
@@ -868,7 +1197,7 @@ else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
                                   "\"rssi\":%d,"
                                   "\"has_button_event\":%s,"
                                   "\"button_event\":%d,"
-                                  "\"seconds_ago\":%d",
+                                  "\"seconds_ago\":%d",  // ← int32_t, kann -1 sein
                                   sensorData.packetId,
                                   sensorData.windowOpen ? "true" : "false",
                                   sensorData.battery,
@@ -879,22 +1208,29 @@ else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
                                   (int)sensorData.buttonEvent,
                                   secondsAgoToSend);
             } else {
+                // Keine Daten verfügbar
+                ESP_LOGD(TAG, "No sensor data available");
+                
                 offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
-                                  "\"valid\":false");
+                                  "\"valid\":false,"
+                                  "\"seconds_ago\":-1");  // ← Explizit -1
             }
             
             snprintf(json_buf + offset, sizeof(json_buf) - offset, "}}");
+            
         } else {
+            // Nicht gepairt
             bool isScanActive = self->bleManager ? self->bleManager->isScanActive() : false;
-        snprintf(json_buf, sizeof(json_buf),
-                "{\"type\":\"ble_status\","
-                "\"paired\":false,"
-                "\"state\":\"%s\","
-                "\"continuous_scan_active\":%s}",
-                stateStr,
-                isScanActive ? "true" : "false");
+            snprintf(json_buf, sizeof(json_buf),
+                    "{\"type\":\"ble_status\","
+                    "\"paired\":false,"
+                    "\"state\":\"%s\","
+                    "\"continuous_scan_active\":%s}",
+                    stateStr,
+                    isScanActive ? "true" : "false");
         }
         
+        // Sende zweite Message (ble_status)
         frame.payload = (uint8_t*)json_buf;
         frame.len = strlen(json_buf);
         httpd_ws_send_frame_async(req->handle, fd, &frame);
@@ -904,8 +1240,7 @@ else if (strncmp(cmd, "{\"cmd\":\"save_device_name\"", 26) == 0) {
 // ════════════════════════════════════════════════════════════════════════
 // BLE SMART CONNECT COMMAND (3-in-1 Workflow)
 // ════════════════════════════════════════════════════════════════════════
-
-else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
+else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_smart_connect\"")) {
     if (self->bleManager) {
         String json = String(cmd);
         
@@ -1118,7 +1453,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_smart_connect\"", 26) == 0) {
 // ============================================================================
 // BLE Connect Command (Phase 1) - Mit Smart Detection
 // ============================================================================
-else if (strncmp(cmd, "{\"cmd\":\"ble_connect\"", 20) == 0) {
+else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_connect\"")) {
     if (self->bleManager) {
         String json = String(cmd);
         
@@ -1220,7 +1555,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_connect\"", 20) == 0) {
     }
 }
 
-else if (strncmp(cmd, "{\"cmd\":\"ble_encrypt\"", 20) == 0) {
+else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_encrypt\"")) {
     if (self->bleManager) {
         String json = String(cmd);
         
@@ -1298,7 +1633,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_encrypt\"", 20) == 0) {
 // BLE ENABLE ENCRYPTION (Phase 2)
 // ════════════════════════════════════════════════════════════════════════
 
-else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
+else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_enable_encryption\"")) {
     if (self->bleManager) {
         String json = String(cmd);
         
@@ -1487,7 +1822,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_enable_encryption\"", 30) == 0) {
 // BLE PAIR ALREADY-ENCRYPTED DEVICE (Passkey + Bindkey Known)
 // ════════════════════════════════════════════════════════════════════════
 
-else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
+else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"")) {
     if (self->bleManager) {
         String json = String(cmd);
         
@@ -1872,7 +2207,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"", 33) == 0) {
 
 
 
-else if (strncmp(cmd, "{\"cmd\":\"ble_unpair\"", 19) == 0) {
+else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_unpair\"")) {
     if (self->bleManager) {
         ESP_LOGI(TAG, "═══════════════════════════════════");
         ESP_LOGI(TAG, "BLE UNPAIRING");
@@ -1899,7 +2234,7 @@ else if (strncmp(cmd, "{\"cmd\":\"ble_unpair\"", 19) == 0) {
     }
 }
 
-else if (strncmp(cmd, "{\"cmd\":\"ble_pair\"", 17) == 0) {
+else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_pair\"")) {
     if (self->bleManager) {
         String json = String(cmd);
         
@@ -2228,6 +2563,203 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
     free(buf);
     return ESP_OK;
 }
+
+// ============================================================================
+// WebUIHandler Implementation
+// ============================================================================
+
+WebUIHandler::WebUIHandler(app_driver_handle_t h, ShellyBLEManager* ble) 
+        : handle(h), bleManager(ble), server(nullptr) {
+    client_mutex = xSemaphoreCreateMutex();
+    if (!client_mutex) {
+        ESP_LOGE(TAG, "Failed to create client mutex");
+    }
+}
+
+WebUIHandler::~WebUIHandler() {
+    if (server) {
+        httpd_stop(server);
+    }
+    if (client_mutex) {
+        vSemaphoreDelete(client_mutex);
+    }
+}
+
+void WebUIHandler::begin() {
+    httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
+    
+    cfg.max_open_sockets = 5;
+    cfg.lru_purge_enable = true;
+    cfg.max_uri_handlers = 8;
+    cfg.stack_size = 8192;
+    cfg.ctrl_port = 32768;
+    cfg.close_fn = nullptr;
+    cfg.uri_match_fn = nullptr;
+    cfg.keep_alive_enable = false;
+    cfg.keep_alive_idle = 0;
+    cfg.keep_alive_interval = 0;
+    cfg.keep_alive_count = 0;
+
+    if (httpd_start(&server, &cfg) == ESP_OK) {
+        
+        // ════════════════════════════════════════════════════════════════
+        // 1. Root Handler (Web-UI)
+        // ════════════════════════════════════════════════════════════════
+        
+        httpd_uri_t root = {
+            .uri       = "/",
+            .method    = HTTP_GET,
+            .handler   = root_handler,
+            .user_ctx  = this
+        };
+        httpd_register_uri_handler(server, &root);
+
+        // ════════════════════════════════════════════════════════════════
+        // 2. WebSocket Handler
+        // ════════════════════════════════════════════════════════════════
+        
+        httpd_uri_t ws = {
+            .uri          = "/ws",
+            .method       = HTTP_GET,
+            .handler      = ws_handler,
+            .user_ctx     = this,
+            .is_websocket = true,
+            .handle_ws_control_frames = true
+        };
+        httpd_register_uri_handler(server, &ws);
+        
+        // ════════════════════════════════════════════════════════════════
+        // 3. OTA Update Handler (GET - Status)
+        // ════════════════════════════════════════════════════════════════
+        
+        httpd_uri_t update_get = {
+            .uri       = "/update",
+            .method    = HTTP_GET,
+            .handler   = update_get_handler,  // ← Jetzt definiert!
+            .user_ctx  = this
+        };
+        httpd_register_uri_handler(server, &update_get);
+        
+        // ════════════════════════════════════════════════════════════════
+        // 4. OTA Update Handler (POST - Upload)
+        // ════════════════════════════════════════════════════════════════
+        
+        httpd_uri_t update_post = {
+            .uri       = "/update",
+            .method    = HTTP_POST,
+            .handler   = update_post_handler,  // ← Jetzt definiert!
+            .user_ctx  = this
+        };
+        httpd_register_uri_handler(server, &update_post);
+        
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   HTTP SERVER STARTED             ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Registered Endpoints:");
+        ESP_LOGI(TAG, "  GET  /         → Web-UI");
+        ESP_LOGI(TAG, "  GET  /ws       → WebSocket");
+        ESP_LOGI(TAG, "  GET  /update   → OTA Status");
+        ESP_LOGI(TAG, "  POST /update   → OTA Upload");
+        ESP_LOGI(TAG, "  GET  /api/drift     → Drift Statistics");
+        ESP_LOGI(TAG, "  POST /api/drift/reset → Reset Drift History"); 
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Max open sockets: %d", cfg.max_open_sockets);
+        ESP_LOGI(TAG, "LRU purge: %s", cfg.lru_purge_enable ? "enabled" : "disabled");
+        
+        #ifdef SERVE_COMPRESSED_HTML
+            ESP_LOGI(TAG, "  Web-UI: GZIP compressed (%d bytes)", index_html_gz_len);
+        #else
+            ESP_LOGI(TAG, "  Web-UI: Uncompressed (fallback mode)");
+        #endif
+        
+        ESP_LOGI(TAG, "");
+        
+        // BLE Callbacks registrieren
+        if (bleManager) {
+            ESP_LOGI(TAG, "═══════════════════════════════════");
+            ESP_LOGI(TAG, "REGISTERING BLE CALLBACKS");
+            
+            bleManager->setStateChangeCallback([this](auto oldState, auto newState) {
+                broadcastBLEStateChange(oldState, newState);
+            });
+             
+            ESP_LOGI(TAG, "✓ BLE State Callback registered");
+            ESP_LOGI(TAG, "ℹ Sensor Data forwarded via Main Loop");
+            ESP_LOGI(TAG, "═══════════════════════════════════");
+        }
+
+        // ════════════════════════════════════════════════════════════════
+        // 5. Drift Statistics Handler (GET)
+        // ════════════════════════════════════════════════════════════════
+
+        httpd_uri_t drift_get = {
+            .uri       = "/api/drift",
+            .method    = HTTP_GET,
+            .handler   = drift_stats_handler,
+            .user_ctx  = this
+        };
+        httpd_register_uri_handler(server, &drift_get);
+
+        // ════════════════════════════════════════════════════════════════
+        // 6. Drift Reset Handler (POST)
+        // ════════════════════════════════════════════════════════════════
+
+        httpd_uri_t drift_reset = {
+            .uri       = "/api/drift/reset",
+            .method    = HTTP_POST,
+            .handler   = drift_reset_handler,
+            .user_ctx  = this
+        };
+        httpd_register_uri_handler(server, &drift_reset);
+    } else {
+        ESP_LOGE(TAG, "✗ Failed to start HTTP server");
+    }
+}
+
+// ============================================================================
+// Drift Statistics API Endpoints
+// ============================================================================
+
+esp_err_t WebUIHandler::drift_stats_handler(httpd_req_t *req) {
+    WebUIHandler* self = (WebUIHandler*)req->user_ctx;
+    
+    if (!self->handle) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, 
+                           "Shutter handle not initialized");
+        return ESP_FAIL;
+    }
+    
+    // Hole Drift-Statistiken vom Shutter
+    String json = ((RollerShutter*)self->handle)->getDriftStatisticsJson();
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, json.c_str());
+    
+    return ESP_OK;
+}
+
+esp_err_t WebUIHandler::drift_reset_handler(httpd_req_t *req) {
+    WebUIHandler* self = (WebUIHandler*)req->user_ctx;
+    
+    if (!self->handle) {
+        httpd_resp_send_err(req, HTTPD_500_INTERNAL_SERVER_ERROR, 
+                           "Shutter handle not initialized");
+        return ESP_FAIL;
+    }
+    
+    ESP_LOGI(TAG, "Resetting drift history via API");
+    
+    ((RollerShutter*)self->handle)->resetDriftHistory();
+    
+    const char* success = "{\"success\":true}";
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_sendstr(req, success);
+    
+    return ESP_OK;
+}
+
 
 // ============================================================================
 // Client Management
