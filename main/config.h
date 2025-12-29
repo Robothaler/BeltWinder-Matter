@@ -5,7 +5,19 @@
 
 #pragma once
 
-#define APP_VERSION "1.3.0"
+// #define CONFIG_ENABLE_SCENE_CLUSTER
+
+#ifndef APP_VERSION
+#define APP_VERSION "v1.3.0"  // ← Manuell pflegen!
+#endif
+
+#ifndef BUILD_DATE
+#define BUILD_DATE __DATE__  // ← Automatisch vom Compiler
+#endif
+
+#ifndef BUILD_TIME
+#define BUILD_TIME __TIME__  // ← Automatisch vom Compiler
+#endif
 
 // --- Window Open Logic ---
 enum class WindowOpenLogic {
