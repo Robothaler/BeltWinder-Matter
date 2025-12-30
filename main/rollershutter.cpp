@@ -41,6 +41,7 @@ void RollerShutter::loop() {
     handleStateMachine();
     applyMotorAction();
     handleButtonRelease();
+    periodicSave();
 }
 
 // --- Public API Implementation ---
@@ -63,6 +64,27 @@ void RollerShutter::loadStateFromKVS() {
         } else {
             ESP_LOGW(TAG, "Loaded max_count = 0 (NOT CALIBRATED)");
         }
+    }
+
+    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("current_count", &currentPulseCount, sizeof(currentPulseCount), &len);
+    
+    if (err == CHIP_ERROR_KEY_NOT_FOUND) {
+        // Fallback: Wenn nicht gespeichert, auf 0 setzen
+        currentPulseCount = 0;
+        ESP_LOGW(TAG, "No current_count in KVS. Starting at 0%%.");
+    } else if (err == CHIP_NO_ERROR) {
+        // Validiere dass currentPulseCount im gültigen Bereich ist
+        if (currentPulseCount < 0) {
+            ESP_LOGW(TAG, "currentPulseCount negative (%ld), correcting to 0", (long)currentPulseCount);
+            currentPulseCount = 0;
+        } else if (calibrated && currentPulseCount > maxPulseCount) {
+            ESP_LOGW(TAG, "currentPulseCount (%ld) > maxPulseCount (%ld), correcting", 
+                     (long)currentPulseCount, (long)maxPulseCount);
+            currentPulseCount = maxPulseCount;
+        }
+        
+        ESP_LOGI(TAG, "Loaded current_count = %ld (%d%%)", 
+                 (long)currentPulseCount, getCurrentPercent());
     }
 
     uint8_t dir_inv = 0;
@@ -98,12 +120,22 @@ void RollerShutter::loadStateFromKVS() {
         fullCycleCount = 0;
     }
     
-    ESP_LOGI(TAG, "State loaded: direction=%s, windowLogic=%d", 
-             directionInverted ? "inverted" : "normal", (int)windowLogic);
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   STATE LOADED FROM NVS           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "  maxPulseCount:      %ld", (long)maxPulseCount);
+    ESP_LOGI(TAG, "  currentPulseCount:  %ld", (long)currentPulseCount);
+    ESP_LOGI(TAG, "  Current Position:   %d%%", getCurrentPercent());
+    ESP_LOGI(TAG, "  Calibrated:         %s", calibrated ? "YES" : "NO");
+    ESP_LOGI(TAG, "  Direction:          %s", directionInverted ? "INVERTED" : "NORMAL");
+    ESP_LOGI(TAG, "  Window Logic:       %d", (int)windowLogic);
+    ESP_LOGI(TAG, "");
 }
 
 void RollerShutter::saveStateToKVS() {
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("max_count", &maxPulseCount, sizeof(maxPulseCount));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("current_count", &currentPulseCount, sizeof(currentPulseCount));
     uint8_t dir_inv = directionInverted ? 1 : 0;
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("dir_inv", &dir_inv, sizeof(dir_inv));
     uint8_t logic_val = static_cast<uint8_t>(windowLogic);
@@ -114,7 +146,8 @@ void RollerShutter::saveStateToKVS() {
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("top_idx", &topLimitHistoryIndex, sizeof(topLimitHistoryIndex));
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("bottom_idx", &bottomLimitHistoryIndex, sizeof(bottomLimitHistoryIndex));
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("cycle_count", &fullCycleCount, sizeof(fullCycleCount));
-    ESP_LOGI(TAG, "State saved to KVS.");
+    ESP_LOGI(TAG, "State saved to KVS (max=%ld, current=%ld)", 
+             (long)maxPulseCount, (long)currentPulseCount);
 }
 
 void RollerShutter::moveToPercent(uint8_t percent) {
@@ -227,10 +260,61 @@ void RollerShutter::moveToPercent(uint8_t percent) {
 }
 
 void RollerShutter::stop() {
-    targetPulseCount = currentPulseCount;
-    buttonPostReleaseWait = false;
-    ESP_LOGI(TAG, "Stop command received.");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "════════════════════════════════════");
+    ESP_LOGI(TAG, "  🛑 STOP CALLED");
+    ESP_LOGI(TAG, "════════════════════════════════════");
+    ESP_LOGI(TAG, "Current State: %d", (int)currentState);
+    ESP_LOGI(TAG, "actualDirection: %d", (int)actualDirection);
+    ESP_LOGI(TAG, "Motor Status: UP=%d, DOWN=%d", 
+             digitalRead(CONFIG_MOTOR_UP_PIN) == LOW,
+             digitalRead(CONFIG_MOTOR_DOWN_PIN) == LOW);
+    ESP_LOGI(TAG, "");
+    
+    // State setzen (BEVOR triggerStop(), damit actualDirection noch valide ist)
+    if (currentState == State::MOVING_UP || 
+        currentState == State::MOVING_DOWN ||
+        currentState == State::CALIBRATING_UP ||
+        currentState == State::CALIBRATING_DOWN) {
+        
+        ESP_LOGI(TAG, "→ Triggering stop button press...");
+        
+        // triggerStop() wählt den richtigen Button basierend auf actualDirection
+        triggerStop();
+        
+        currentState = State::STOPPED;
+        
+        ESP_LOGI(TAG, "✓ Stop initiated");
+        ESP_LOGI(TAG, "✓ State changed to STOPPED");
+        ESP_LOGI(TAG, "");
+        
+        saveStateToKVS();  // Position sichern
+        
+        positionChanged = true;
+        
+    } else {
+        ESP_LOGW(TAG, "⚠ Stop called but already in state: %d", (int)currentState);
+        ESP_LOGI(TAG, "  actualDirection: %d", (int)actualDirection);
+        
+        // ────────────────────────────────────────────────────────────
+        // ⚠️ Edge Case: State ist STOPPED, aber Motor läuft noch
+        // ────────────────────────────────────────────────────────────
+        if (actualDirection != State::STOPPED) {
+            ESP_LOGW(TAG, "");
+            ESP_LOGW(TAG, "⚠️ EDGE CASE DETECTED:");
+            ESP_LOGW(TAG, "  State = STOPPED, but actualDirection = %d", (int)actualDirection);
+            ESP_LOGW(TAG, "  → Motor is still running! Forcing stop...");
+            ESP_LOGW(TAG, "");
+            
+            triggerStop();
+            
+            ESP_LOGI(TAG, "✓ Force-stop initiated");
+        }
+        
+        ESP_LOGI(TAG, "");
+    }
 }
+
 
 void RollerShutter::startCalibration() {
     if (currentState != State::STOPPED) {
@@ -650,6 +734,10 @@ void RollerShutter::handleStateMachine() {
                 
                 ESP_LOGI(TAG, "✓ Calibration complete!");
                 ESP_LOGI(TAG, "");
+                if (_calibrationCompleteCallback) {
+                    ESP_LOGI(TAG, "→ Calling calibration complete callback (success)");
+                    _calibrationCompleteCallback(true);
+                }
                 
             } else {
                 // ❌ INVALID: Abweichung zu groß!
@@ -666,6 +754,11 @@ void RollerShutter::handleStateMachine() {
                 
                 calibrated = false;
                 currentState = State::STOPPED;
+
+                if (_calibrationCompleteCallback) {
+                    ESP_LOGI(TAG, "→ Calling calibration complete callback (failed)");
+                    _calibrationCompleteCallback(false);
+                }
             }
             
             // Reset Kalibrierungs-Variablen
@@ -735,13 +828,66 @@ void RollerShutter::triggerMoveDown() {
 }
 
 void RollerShutter::triggerStop() {
-    ESP_LOGD(TAG, "Triggering STOP button.");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   triggerStop() CALLED            ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "  Current State:      %d", (int)currentState);
+    ESP_LOGI(TAG, "  actualDirection:    %d", (int)actualDirection);
+    ESP_LOGI(TAG, "  desiredMotorAction: %d", (int)desiredMotorAction);
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════
+    // Bestimme welche Taste gedrückt werden muss (basierend auf AKTUELLER Bewegung)
+    // ════════════════════════════════════════════════════════════════
+    
+    uint8_t pin = 0;
+    
+    // Verwende actualDirection (Hardware-Status), NICHT currentState!
+    if (actualDirection == State::MOVING_UP) {
+        // Motor läuft UP → UP-Taste drücken
+        pin = directionInverted ? pins.buttonDown : pins.buttonUp;
+        ESP_LOGI(TAG, "→ Motor running UP, pressing %s button to stop", 
+                 directionInverted ? "DOWN (inverted)" : "UP");
+        
+    } else if (actualDirection == State::MOVING_DOWN) {
+        // Motor läuft DOWN → DOWN-Taste drücken
+        pin = directionInverted ? pins.buttonUp : pins.buttonDown;
+        ESP_LOGI(TAG, "→ Motor running DOWN, pressing %s button to stop", 
+                 directionInverted ? "UP (inverted)" : "DOWN");
+        
+    } else {
+        // Motor steht bereits → Nichts tun
+        ESP_LOGI(TAG, "⚠ Motor already stopped (actualDirection = STOPPED)");
+        ESP_LOGI(TAG, "  → No button press needed");
+        ESP_LOGI(TAG, "");
+        return;
+    }
+    
+    ESP_LOGI(TAG, "  Selected pin: GPIO%d", pin);
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════
+    // Button-Press mit Priorität
+    // ════════════════════════════════════════════════════════════════
     
     // Stop hat PRIORITÄT - überschreibe buttonPostReleaseWait!
-    buttonPostReleaseWait = false;
+    if (buttonActive || buttonPostReleaseWait) {
+        ESP_LOGI(TAG, "→ Cancelling active button operation (STOP has priority)");
+        
+        // Aktuellen Button sofort freigeben
+        if (buttonActive) {
+            digitalWrite(activeButtonPin, HIGH);
+            buttonActive = false;
+        }
+        buttonPostReleaseWait = false;
+    }
     
-    uint8_t pin = directionInverted ? pins.buttonUp : pins.buttonDown;
+    // Starte Stop-Button-Press
     startButtonPress(pin);
+    
+    ESP_LOGI(TAG, "✓ Stop button press initiated (GPIO%d)", pin);
+    ESP_LOGI(TAG, "");
 }
 
 void RollerShutter::startButtonPress(uint8_t pin) {
@@ -1007,6 +1153,34 @@ void RollerShutter::resetDriftHistory() {
     saveState();
     
     ESP_LOGI(TAG, "✓ Drift history reset");
+}
+
+void RollerShutter::periodicSave() {
+    static int32_t lastSavedPulseCount = 0;
+    static uint32_t lastSaveTime = 0;
+    
+    // Speichere nur während Bewegung
+    if (currentState != State::MOVING_UP && 
+        currentState != State::MOVING_DOWN) {
+        return;
+    }
+    
+    // Rate-Limiting: Max 1x pro Sekunde
+    if (millis() - lastSaveTime < 1000) {
+        return;
+    }
+    
+    // Speichere alle 5 Pulse
+    int32_t pulseDelta = abs(currentPulseCount - lastSavedPulseCount);
+    
+    if (pulseDelta >= 5) {
+        ESP_LOGV(TAG, "Periodic save triggered: %ld pulses", (long)currentPulseCount);
+        
+        saveStateToKVS();
+        
+        lastSavedPulseCount = currentPulseCount;
+        lastSaveTime = millis();
+    }
 }
 
 // ════════════════════════════════════════════════════════════════════

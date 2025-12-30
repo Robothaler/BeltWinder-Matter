@@ -1,11 +1,106 @@
 #include "rollershutter_driver.h"
 #include "rollershutter.h"
 
+#include <app-common/zap-generated/cluster-objects.h>
+#include <app/clusters/window-covering-server/window-covering-server.h>
+
+static const char* TAG = "ShutterDriver";
+
 static RollerShutter* shutter_instance = nullptr;
 static operational_state_callback_t operational_state_callback = nullptr;
 
 // ============================================================================
-// Initialization
+// Window Covering Delegate (Matter Command Handler)
+// ============================================================================
+
+class WindowCoveringDelegateImpl : public chip::app::Clusters::WindowCovering::Delegate {
+public:
+    WindowCoveringDelegateImpl() = default;
+    ~WindowCoveringDelegateImpl() = default;
+    
+    void SetEndpoint(chip::EndpointId endpoint) {
+        mEndpointId = endpoint;
+    }
+    
+    /**
+     * @brief Called when a movement command is received (UpOrOpen, DownOrClose, GoToPosition)
+     * 
+     * Das Matter SDK verarbeitet die Commands automatisch und setzt die Attribute.
+     * Diese Methode wird als Notification aufgerufen.
+     * 
+     * @param type WindowCoveringType (Lift, Tilt, etc.)
+     * @return CHIP_NO_ERROR on success
+     */
+    CHIP_ERROR HandleMovement(chip::app::Clusters::WindowCovering::WindowCoveringType type) override {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   Delegate: HandleMovement        ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "Movement Type: %d", (int)type);
+        ESP_LOGI(TAG, "Endpoint: %d", mEndpointId);
+        ESP_LOGI(TAG, "");
+        
+        // Für Rolladen: Keine besondere Aktion nötig
+        // Die Position wird über Attribut-Updates gesteuert
+        
+        return CHIP_NO_ERROR;
+    }
+    
+    /**
+     * @brief Called when StopMotion command is received
+     * 
+     * @return CHIP_NO_ERROR on success
+     */
+    CHIP_ERROR HandleStopMotion() override {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   🛑 DELEGATE: StopMotion         ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "Endpoint: %d", mEndpointId);
+        ESP_LOGI(TAG, "Timestamp: %llu ms", esp_timer_get_time() / 1000);
+        ESP_LOGI(TAG, "");
+        
+        if (!shutter_instance) {
+            ESP_LOGE(TAG, "✗ Shutter instance is NULL!");
+            return CHIP_ERROR_INCORRECT_STATE;
+        }
+        
+        // Aktuelle State loggen
+        RollerShutter::State current_state = shutter_instance->getCurrentState();
+        ESP_LOGI(TAG, "Current State before stop: %s", 
+                current_state == RollerShutter::State::MOVING_UP ? "MOVING_UP" :
+                current_state == RollerShutter::State::MOVING_DOWN ? "MOVING_DOWN" :
+                current_state == RollerShutter::State::STOPPED ? "STOPPED" : "OTHER");
+        
+        shutter_instance->stop();
+        
+        ESP_LOGI(TAG, "✓ Stop command executed");
+        ESP_LOGI(TAG, "");
+        
+        return CHIP_NO_ERROR;
+    }
+
+private:
+    chip::EndpointId mEndpointId = chip::kInvalidEndpointId;
+};
+
+static WindowCoveringDelegateImpl coveringDelegate;
+
+// ============================================================================
+// Delegate Access Functions
+// ============================================================================
+
+chip::app::Clusters::WindowCovering::Delegate* shutter_driver_get_covering_delegate() {
+    return &coveringDelegate;
+}
+
+void shutter_driver_set_covering_delegate_endpoint(uint16_t endpoint_id) {
+    coveringDelegate.SetEndpoint(endpoint_id);
+    ESP_LOGI(TAG, "✓ Covering Delegate configured for endpoint %d", endpoint_id);
+}
+
+// ============================================================================
+// Driver Implementation (Rest bleibt wie gehabt)
 // ============================================================================
 
 app_driver_handle_t shutter_driver_init() {
@@ -14,42 +109,27 @@ app_driver_handle_t shutter_driver_init() {
     return (app_driver_handle_t)shutter_instance;
 }
 
-// ============================================================================
-// Callback Registration
-// ============================================================================
-
 void shutter_driver_set_operational_state_callback(app_driver_handle_t handle, 
                                                    operational_state_callback_t callback) {
     if (!handle) return;
     operational_state_callback = callback;
 }
 
-// ============================================================================
-// Loop (mit Callback-Aufruf)
-// ============================================================================
-
 void shutter_driver_loop(app_driver_handle_t handle) {
     if (!handle) return;
     
     RollerShutter* shutter = (RollerShutter*)handle;
     
-    // Vorheriger State merken
     static RollerShutter::State last_state = RollerShutter::State::STOPPED;
     RollerShutter::State current_state = shutter->getCurrentState();
     
-    // Normale Shutter-Loop
     shutter->loop();
     
-    // Callback aufrufen wenn State sich geändert hat
     if (current_state != last_state && operational_state_callback != nullptr) {
         operational_state_callback(current_state);
         last_state = current_state;
     }
 }
-
-// ============================================================================
-// Restliche Funktionen
-// ============================================================================
 
 esp_err_t shutter_driver_go_to_lift_percent(app_driver_handle_t handle, uint8_t percent) {
     if (!handle) return ESP_FAIL;
@@ -116,16 +196,6 @@ RollerShutter::State shutter_driver_get_current_state(app_driver_handle_t handle
     return ((RollerShutter*)handle)->getCurrentState();
 }
 
-bool shutter_driver_is_motor_stopped(app_driver_handle_t handle) {
-    if (!handle) return true;
-    
-    RollerShutter::State state = ((RollerShutter*)handle)->getCurrentState();
-    
-    // Motor ist gestoppt wenn State = STOPPED
-    // NICHT gestoppt bei: MOVING_UP, MOVING_DOWN, CALIBRATING_*
-    return (state == RollerShutter::State::STOPPED);
-}
-
 bool shutter_driver_should_send_matter_update(app_driver_handle_t handle) {
     if (!handle) return false;
     return ((RollerShutter*)handle)->shouldSendMatterUpdate();
@@ -135,4 +205,3 @@ void shutter_driver_mark_matter_update_sent(app_driver_handle_t handle) {
     if (!handle) return;
     ((RollerShutter*)handle)->markMatterUpdateSent();
 }
-

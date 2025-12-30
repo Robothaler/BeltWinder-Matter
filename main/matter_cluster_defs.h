@@ -10,11 +10,10 @@
 #define CLUSTER_ID_ROLLERSHUTTER_CONFIG 0xFFF2
 
 // === ATTRIBUTE IDs ===
-#define ATTR_ID_DIRECTION_INVERTED 0x0000  // Boolean – writable
 #define ATTR_ID_DEVICE_IP          0x0001  // String – readable (IP address)
 
 // === COMMAND IDs ===
-#define CMD_ID_START_CALIBRATION   0x0001  // No payload – trigger calibration
+static const uint32_t CMD_ID_START_CALIBRATION = 0x00;
 
 // String-Längen für Attribute
 #define DEVICE_IP_MAX_LENGTH       16      // "255.255.255.255" = 15 chars + \0

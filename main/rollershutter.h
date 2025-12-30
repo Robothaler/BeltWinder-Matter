@@ -53,6 +53,12 @@ public:
     
     bool shouldSendMatterUpdate() const;
     void markMatterUpdateSent();
+
+    typedef void (*CalibrationCompleteCallback)(bool success);
+    
+    void setCalibrationCompleteCallback(CalibrationCompleteCallback cb) {
+        _calibrationCompleteCallback = cb;
+    }
     
     // ISR-Thread-Safety
     static portMUX_TYPE pulseMux;
@@ -124,6 +130,7 @@ private:
     void handleButtonRelease();
     void saveStateToKVS();
     void saveState();
+    void periodicSave();
 
     void triggerMoveUp();
     void triggerMoveDown();
@@ -158,6 +165,7 @@ private:
     int32_t calibrationUpPulses = 0;
     int32_t calibrationDownPulses = 0;
     static constexpr float CALIBRATION_MAX_DIFF_PERCENT = 3.0f;  // Max 3% Abweichung
+    CalibrationCompleteCallback _calibrationCompleteCallback = nullptr;
     
     // Drift-Korrektur
     static const uint8_t DRIFT_HISTORY_SIZE = 10;         // Letzte 10 Messungen
@@ -177,8 +185,8 @@ private:
     uint32_t lastMatterUpdateTime = 0;
     uint8_t lastReportedPercentForMatter = 255;  // 255 = ungültig
     
-    static const uint32_t MATTER_UPDATE_INTERVAL_MS = 1000;  // Max 1x/Sekunde
-    static const uint8_t MATTER_UPDATE_HYSTERESIS = 2;       // Min 2% Änderung
+    static const uint32_t MATTER_UPDATE_INTERVAL_MS = 500;  // Max 1x/500ms
+    static const uint8_t MATTER_UPDATE_HYSTERESIS = 2;       // Min 1% Änderung
 
 
     bool hardware_initialized_local = false;
@@ -189,7 +197,7 @@ private:
     WindowOpenLogic windowLogic = DEFAULT_WINDOW_LOGIC;
 
     unsigned long calibrationStartTime = 0;
-    const unsigned long CALIBRATION_TIMEOUT = 90000;
+    const unsigned long CALIBRATION_TIMEOUT = 90000; // 90 Sekunden
 
     State lastActualDirection = State::STOPPED;
     uint8_t directionStableCounter = 0;
