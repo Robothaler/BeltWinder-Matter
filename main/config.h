@@ -7,6 +7,8 @@
 
 // #define CONFIG_ENABLE_SCENE_CLUSTER
 
+#define DEVELOP_BUILD // ← Uncomment for develop builds (NVS WiFi only)
+
 #ifndef APP_VERSION
 #define APP_VERSION "v1.3.0"  // ← Manuell pflegen!
 #endif

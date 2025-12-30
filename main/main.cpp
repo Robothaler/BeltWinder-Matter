@@ -24,6 +24,7 @@
 #include "web_ui_handler.h"
 #include "shelly_ble_manager.h"
 #include "device_naming.h"
+#include "wifi_manager.h"
 
 using namespace chip;
 using namespace esp_matter;
@@ -33,15 +34,6 @@ using namespace esp_matter::command;
 using namespace esp_matter::endpoint;
 
 static const char* TAG = "Main";
-
-// ============================================================================
-// Configuration
-// ============================================================================
-
-#if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
-const char *ssid = WIFI_SSID;
-const char *password = WIFI_PASSWORD;
-#endif
 
 const uint16_t INSTALLED_OPEN_LIMIT_LIFT_CM = 0;
 const uint16_t INSTALLED_CLOSED_LIMIT_LIFT_CM = 200;
@@ -231,6 +223,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
              data.illuminance,
              data.rotation,
              data.rssi);
+     ESP_LOGI(TAG, "  lastUpdate: %u (millis: %u)", data.lastUpdate, millis());
     
     if (data.hasButtonEvent) {
         const char* eventName = (data.buttonEvent == BUTTON_SINGLE_PRESS) ? "SINGLE PRESS" : 
@@ -240,7 +233,10 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
 
     // WebUI Update
     if (webUI) {
+        ESP_LOGI(TAG, "→ Sending sensor data to WebUI...");
         webUI->broadcastSensorDataUpdate(address, data);
+    } else {
+        ESP_LOGW(TAG, "⚠ webUI is NULL, cannot broadcast!");
     }
 
     // Matter Update (nur wenn commissioned)
@@ -660,6 +656,42 @@ void disableContactSensorMatter() {
     ESP_LOGI(TAG, "");
 }
 
+    // ════════════════════════════════════════════════════════════════════
+    // Calibration Complete Callback
+    // ════════════════════════════════════════════════════════════════════
+
+    void onCalibrationComplete(bool success) {
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   CALIBRATION %s", success ? "COMPLETE ✓    " : "FAILED ✗      ");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        
+        if (webUI) {
+            char msg[256];
+            if (success) {
+                snprintf(msg, sizeof(msg),
+                        "{\"type\":\"calibration_complete\","
+                        "\"success\":true,"
+                        "\"message\":\"Calibration successful! Shutter is now calibrated.\"}");
+            } else {
+                snprintf(msg, sizeof(msg),
+                        "{\"type\":\"calibration_complete\","
+                        "\"success\":false,"
+                        "\"message\":\"Calibration failed! Please try again.\"}");
+            }
+        
+            for (int i = 0; i < 3; i++) {
+                webUI->broadcast_to_all_clients(msg);
+                vTaskDelay(pdMS_TO_TICKS(200));
+            }
+            
+            ESP_LOGI(TAG, "✓ Sent calibration result to WebUI (3x for reliability)");
+        }
+        
+        ESP_LOGI(TAG, "");
+    }
+
 // ============================================================================
 // Setup
 // ============================================================================
@@ -667,22 +699,24 @@ void disableContactSensorMatter() {
 void setup() {
     Serial.begin(115200);
 
-    esp_log_level_set("*", ESP_LOG_INFO);           // Global: INFO
+    esp_log_level_set("*", ESP_LOG_INFO);               // Global: INFO
 
-    esp_log_level_set("chip[DL]", ESP_LOG_WARN);    // Matter: WARN
+    esp_log_level_set("chip[DL]", ESP_LOG_WARN);        // Matter: WARN
     esp_log_level_set("chip[DMG]", ESP_LOG_ERROR);  
     esp_log_level_set("chip[SC]", ESP_LOG_ERROR);
     esp_log_level_set("esp_matter_attribute", ESP_LOG_ERROR);
     esp_log_level_set("esp_matter_command", ESP_LOG_INFO);
     esp_log_level_set("esp_matter_cluster", ESP_LOG_WARN);
-    esp_log_level_set("BLEAutoStart", ESP_LOG_NONE); // BLE: INFO
-    esp_log_level_set("ShellyBLE", ESP_LOG_NONE);   // BLE: INFO
-    esp_log_level_set("BLESimple", ESP_LOG_NONE);   // BLE: INFO
-    esp_log_level_set("NimBLE", ESP_LOG_NONE);      // NimBLE: INFO
-    esp_log_level_set("wifi", ESP_LOG_NONE);       // WiFi: ERROR
-    esp_log_level_set("Shutter", ESP_LOG_DEBUG);     // Shutter: DEBUG
-    esp_log_level_set("Main", ESP_LOG_INFO);        // Main: DEBUG
-    esp_log_level_set("WebUI", ESP_LOG_NONE);       // WebUI: DEBUG
+    esp_log_level_set("WiFiMgr", ESP_LOG_DEBUG);        // WiFi Manager: DEBUG
+    esp_log_level_set("BLEAutoStart", ESP_LOG_NONE);    // BLE: INFO
+    esp_log_level_set("ShellyBLE", ESP_LOG_NONE);       // BLE: INFO
+    esp_log_level_set("BLESimple", ESP_LOG_NONE);       // BLE: INFO
+    esp_log_level_set("NimBLE", ESP_LOG_NONE);          // NimBLE: INFO
+    esp_log_level_set("wifi", ESP_LOG_NONE);            // WiFi: ERROR
+    esp_log_level_set("Shutter", ESP_LOG_DEBUG);        // Shutter: DEBUG
+    esp_log_level_set("ShutterDriver", ESP_LOG_DEBUG);  // ShutterDriver: DEBUG
+    esp_log_level_set("Main", ESP_LOG_INFO);            // Main: INFO
+    esp_log_level_set("WebUI", ESP_LOG_NONE);           // WebUI: DEBUG
 
     ESP_LOGI(TAG, "=== BeltWinder Matter - Starting ===");
 
@@ -703,16 +737,112 @@ void setup() {
     loop_task_handle = xTaskGetCurrentTaskHandle();
     esp_task_wdt_add(loop_task_handle);
 
-    // Shutter Init
-    shutter_handle = (RollerShutter*)shutter_driver_init();
+    // ════════════════════════════════════════════════════════════════
+    // WiFi Manager - NUR wenn KEINE credentials.h UND KEINE NVS!
+    // ════════════════════════════════════════════════════════════════
+    
+    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
+    
+    // ────────────────────────────────────────────────────────────
+    // 1. Prüfe credentials.h
+    // ────────────────────────────────────────────────────────────
+    
+    #ifdef DEVELOP_BUILD
+        const char* credentials_h_ssid = WIFI_SSID;
+        const char* credentials_h_password = WIFI_PASSWORD;
+        bool has_credentials_h = (strlen(credentials_h_ssid) > 0);
+    #else
+        const char* credentials_h_ssid = "";
+        const char* credentials_h_password = "";
+        bool has_credentials_h = false;
+    #endif
+    
+    // ────────────────────────────────────────────────────────────
+    // 2. Prüfe NVS Credentials
+    // ────────────────────────────────────────────────────────────
+    
+    bool has_nvs_credentials = WiFiCredentials::exists();
+    
+    // ────────────────────────────────────────────────────────────
+    // 3. Entscheide: WiFi Manager nötig?
+    // ────────────────────────────────────────────────────────────
+    
+    if (!has_credentials_h && !has_nvs_credentials) {
+        // Weder credentials.h noch NVS → WiFi Setup NÖTIG!
+        
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   FIRST BOOT DETECTED             ║");
+        ESP_LOGI(TAG, "║   WiFi Setup Required             ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "No WiFi credentials found:");
+        ESP_LOGI(TAG, "  • credentials.h: %s", has_credentials_h ? "YES" : "NOT DEFINED");
+        ESP_LOGI(TAG, "  • NVS storage:   %s", has_nvs_credentials ? "YES" : "EMPTY");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "→ Starting WiFi Setup Portal...");
+        ESP_LOGI(TAG, "");
+        
+        // Start WiFi Setup (blockiert!)
+        bool success = WiFiManager::runSetup("BeltWinder-Setup", 300000);
+        
+        if (!success) {
+            ESP_LOGE(TAG, "");
+            ESP_LOGE(TAG, "╔═══════════════════════════════════╗");
+            ESP_LOGE(TAG, "║   WiFi SETUP TIMEOUT              ║");
+            ESP_LOGE(TAG, "╚═══════════════════════════════════╝");
+            ESP_LOGE(TAG, "");
+            ESP_LOGE(TAG, "No WiFi credentials configured!");
+            ESP_LOGE(TAG, "Device cannot operate without WiFi.");
+            ESP_LOGE(TAG, "");
+            ESP_LOGE(TAG, "→ Halting...");
+            
+            while(1) {
+                delay(1000);
+            }
+        }
+        
+    } else {
+        // Credentials vorhanden → WiFi Setup ÜBERSPRINGEN!
+        
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║   WiFi CREDENTIALS AVAILABLE      ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Credentials found:");
+        ESP_LOGI(TAG, "  • credentials.h: %s", has_credentials_h ? "YES ✓" : "NO");
+        ESP_LOGI(TAG, "  • NVS storage:   %s", has_nvs_credentials ? "YES ✓" : "NO");
+        ESP_LOGI(TAG, "");
+        
+        if (has_credentials_h) {
+            ESP_LOGI(TAG, "Priority: Using credentials.h (development mode)");
+        } else {
+            ESP_LOGI(TAG, "Priority: Using NVS credentials (production mode)");
+        }
+        
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "→ WiFi Setup Portal SKIPPED");
+        ESP_LOGI(TAG, "");
+    }
+    
+    #endif
+
+    // ════════════════════════════════════════════════════════════════
+    // Shutter Driver Init
+    // ════════════════════════════════════════════════════════════════
+    
+    shutter_handle = shutter_driver_init();
     if (!shutter_handle) {
         ESP_LOGE(TAG, "Failed to initialize shutter driver");
         return;
     }
-
+    
     ((RollerShutter*)shutter_handle)->loadStateFromKVS();
 
-    // Operational State Callback registrieren
+    ((RollerShutter*)shutter_handle)->setCalibrationCompleteCallback(onCalibrationComplete);
+    ESP_LOGI(TAG, "✓ Calibration callback registered");
+    
     shutter_driver_set_operational_state_callback(shutter_handle, onShutterStateChanged);
     ESP_LOGI(TAG, "✓ Operational State callback registered");
 
@@ -729,9 +859,9 @@ void setup() {
     
     ESP_LOGI(TAG, "Shutter initialized");
 
-    // ========================================================================
-    // Matter Node & Window Covering Endpoint
-    // ========================================================================
+    // ════════════════════════════════════════════════════════════════
+    // Matter Node erstellen
+    // ════════════════════════════════════════════════════════════════
     
     node::config_t node_config;
     node_t *node = node::create(&node_config, app_attribute_update_cb, nullptr);
@@ -739,17 +869,25 @@ void setup() {
         ESP_LOGE(TAG, "Failed to create Matter node");
         return;
     }
+    
+    ESP_LOGI(TAG, "Matter node created");
 
-    // ========================================================================
-    // Window Covering Endpoint
-    // ========================================================================
+    // ════════════════════════════════════════════════════════════════
+    // Window Covering Config
+    // ════════════════════════════════════════════════════════════════
     
     window_covering_device::config_t wc_config;
-    wc_config.window_covering.type = 0;  // ROLLERSHADE
+    wc_config.window_covering.type = 0;  // Rollershutter
     wc_config.window_covering.feature_flags = 
         (uint32_t)chip::app::Clusters::WindowCovering::Feature::kLift |
         (uint32_t)chip::app::Clusters::WindowCovering::Feature::kPositionAwareLift |
         (uint32_t)chip::app::Clusters::WindowCovering::Feature::kAbsolutePosition;
+    
+    ESP_LOGI(TAG, "Window Covering config prepared");
+
+    // ════════════════════════════════════════════════════════════════
+    // Window Covering Endpoint erstellen
+    // ════════════════════════════════════════════════════════════════
     
     endpoint_t *ep = window_covering_device::create(node, &wc_config, 
                                                      ENDPOINT_FLAG_NONE, NULL);
@@ -759,27 +897,183 @@ void setup() {
     }
 
     window_covering_endpoint_id = endpoint::get_id(ep);
-    endpoint::set_priv_data(window_covering_endpoint_id, shutter_handle);
-    
-    ESP_LOGI(TAG, "Window Covering endpoint created (ID: %d) with Lift feature", 
-             window_covering_endpoint_id);
 
-    // Installed Limits setzen
+    ESP_LOGI(TAG, "Window Covering endpoint created (ID: %d)", window_covering_endpoint_id);
+
+    // ════════════════════════════════════════════════════════════════
+    // Configure Window Covering Mode (Standard Attribut!)
+    // ════════════════════════════════════════════════════════════════
+
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   CONFIGURING MODE ATTRIBUTE      ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+
     cluster_t* wc_cluster = cluster::get(ep, chip::app::Clusters::WindowCovering::Id);
+
     if (wc_cluster) {
-        esp_matter_attr_val_t open_limit = esp_matter_uint16(INSTALLED_OPEN_LIMIT_LIFT_CM);
-        attribute::update(window_covering_endpoint_id, chip::app::Clusters::WindowCovering::Id,
-                         chip::app::Clusters::WindowCovering::Attributes::InstalledOpenLimitLift::Id, 
-                         &open_limit);
+        // Lade gespeicherte Richtung
+        bool inverted = shutter_driver_get_direction_inverted(shutter_handle);
         
-        esp_matter_attr_val_t closed_limit = esp_matter_uint16(INSTALLED_CLOSED_LIMIT_LIFT_CM);
-        attribute::update(window_covering_endpoint_id, chip::app::Clusters::WindowCovering::Id,
-                         chip::app::Clusters::WindowCovering::Attributes::InstalledClosedLimitLift::Id, 
-                         &closed_limit);
+        // Mode Bitmap erstellen
+        // Bit 0 = MotorDirectionReversed
+        uint8_t mode_value = inverted ? 0x01 : 0x00;
         
-        ESP_LOGI(TAG, "Installed limits: %d-%d cm", 
-                 INSTALLED_OPEN_LIMIT_LIFT_CM, INSTALLED_CLOSED_LIMIT_LIFT_CM);
+        // Mode Attribut erstellen/updaten
+        attribute_t* mode_attr = attribute::get(wc_cluster, 
+                                            chip::app::Clusters::WindowCovering::Attributes::Mode::Id);
+        
+        if (mode_attr) {
+            // Attribut existiert bereits → Update
+            esp_matter_attr_val_t mode_val = esp_matter_bitmap8(mode_value);
+            attribute::set_val(mode_attr, &mode_val);
+            ESP_LOGI(TAG, "✓ Mode attribute updated: 0x%02X (inverted=%s)", 
+                    mode_value, inverted ? "YES" : "NO");
+        } else {
+            // Attribut existiert nicht → Create
+            esp_matter_attr_val_t mode_val = esp_matter_bitmap8(mode_value);
+            mode_attr = attribute::create(wc_cluster, 
+                                        chip::app::Clusters::WindowCovering::Attributes::Mode::Id,
+                                        ATTRIBUTE_FLAG_WRITABLE,  // ← WICHTIG: Writable!
+                                        mode_val);
+            
+            if (mode_attr) {
+                ESP_LOGI(TAG, "✓ Mode attribute created: 0x%02X (inverted=%s)", 
+                        mode_value, inverted ? "YES" : "NO");
+            } else {
+                ESP_LOGE(TAG, "✗ Failed to create Mode attribute!");
+            }
+        }
+        
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Mode Bitmap Explanation:");
+        ESP_LOGI(TAG, "  Bit 0 (MotorDirectionReversed): %s", (mode_value & 0x01) ? "SET" : "CLEAR");
+        ESP_LOGI(TAG, "  Bit 1 (CalibrationMode):        %s", (mode_value & 0x02) ? "SET" : "CLEAR");
+        ESP_LOGI(TAG, "  Bit 2 (MaintenanceMode):        %s", (mode_value & 0x04) ? "SET" : "CLEAR");
+        ESP_LOGI(TAG, "  Bit 3 (LEDFeedback):            %s", (mode_value & 0x08) ? "SET" : "CLEAR");
+        ESP_LOGI(TAG, "");
     }
+
+    // ════════════════════════════════════════════════════════════════
+    // RESTORE POSITION FROM NVS
+    // ════════════════════════════════════════════════════════════════
+
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   RESTORING SAVED POSITION        ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+
+    if (wc_cluster) {
+        // ────────────────────────────────────────────────────────────
+        // 1. Position aus Driver holen (wurde bereits aus NVS geladen!)
+        // ────────────────────────────────────────────────────────────
+        
+        uint8_t saved_percent = shutter_driver_get_current_percent(shutter_handle);
+        bool is_calibrated = shutter_driver_is_calibrated(shutter_handle);
+        
+        ESP_LOGI(TAG, "Saved State:");
+        ESP_LOGI(TAG, "  Position: %d%%", saved_percent);
+        ESP_LOGI(TAG, "  Calibrated: %s", is_calibrated ? "YES" : "NO");
+        ESP_LOGI(TAG, "");
+        
+        if (is_calibrated) {
+            // ────────────────────────────────────────────────────────────
+            // 2. Position in Matter Attribute schreiben
+            // ────────────────────────────────────────────────────────────
+            
+            uint16_t pos_100ths = saved_percent * 100;
+            
+            // Current Position
+            attribute_t* current_attr = attribute::get(wc_cluster, 
+                chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id);
+            
+            if (current_attr) {
+                esp_matter_attr_val_t current_val = esp_matter_uint16(pos_100ths);
+                esp_err_t err = attribute::set_val(current_attr, &current_val);
+                
+                if (err == ESP_OK) {
+                    ESP_LOGI(TAG, "✓ Current Position restored: %d%% (%d/100ths)", 
+                            saved_percent, pos_100ths);
+                } else {
+                    ESP_LOGE(TAG, "✗ Failed to restore Current Position: %s", 
+                            esp_err_to_name(err));
+                }
+            } else {
+                ESP_LOGE(TAG, "✗ Current Position attribute not found!");
+            }
+            
+            // Target Position (WICHTIG: Muss gleich sein wie Current!)
+            attribute_t* target_attr = attribute::get(wc_cluster, 
+                chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id);
+            
+            if (target_attr) {
+                esp_matter_attr_val_t target_val = esp_matter_uint16(pos_100ths);
+                esp_err_t err = attribute::set_val(target_attr, &target_val);
+                
+                if (err == ESP_OK) {
+                    ESP_LOGI(TAG, "✓ Target Position restored: %d%% (%d/100ths)", 
+                            saved_percent, pos_100ths);
+                } else {
+                    ESP_LOGE(TAG, "✗ Failed to restore Target Position: %s", 
+                            esp_err_to_name(err));
+                }
+            } else {
+                ESP_LOGE(TAG, "✗ Target Position attribute not found!");
+            }
+            
+            // ────────────────────────────────────────────────────────────
+            // 3. Operational Status (Stopped)
+            // ────────────────────────────────────────────────────────────
+            
+            attribute_t* opstate_attr = attribute::get(wc_cluster, 
+                chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id);
+            
+            if (opstate_attr) {
+                esp_matter_attr_val_t opstate_val = esp_matter_uint8(0x00);  // Stopped
+                attribute::set_val(opstate_attr, &opstate_val);
+                ESP_LOGI(TAG, "✓ Operational Status set to: Stopped");
+            }
+            
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "✓ Position successfully restored from NVS");
+            
+        } else {
+            ESP_LOGW(TAG, "⚠ Shutter not calibrated - using default position (0%)");
+            ESP_LOGI(TAG, "  Please run calibration first!");
+        }
+        
+        ESP_LOGI(TAG, "");
+    }
+
+    // ════════════════════════════════════════════════════════════════
+    // Register Covering Delegate
+    // ════════════════════════════════════════════════════════════════
+
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   REGISTERING COVERING DELEGATE   ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+
+    // Delegate registrieren (OHNE explizite Feature-Konfiguration)
+    shutter_driver_set_covering_delegate_endpoint(window_covering_endpoint_id);
+
+    chip::app::Clusters::WindowCovering::Delegate* delegate = 
+        shutter_driver_get_covering_delegate();
+
+    chip::app::Clusters::WindowCovering::SetDefaultDelegate(
+        (chip::EndpointId)window_covering_endpoint_id, 
+        delegate
+    );
+
+    ESP_LOGI(TAG, "✓ Covering Delegate registered for endpoint %d", 
+            window_covering_endpoint_id);
+    ESP_LOGI(TAG, "");
+
+    // Endpoint aktivieren
+    esp_matter::endpoint::enable(ep);
 
     #ifdef CONFIG_ENABLE_SCENE_CLUSTER
     // ========================================================================
@@ -842,11 +1136,6 @@ void setup() {
     cluster_t *custom_cluster = cluster::create(ep, CLUSTER_ID_ROLLERSHUTTER_CONFIG, 
                                                 CLUSTER_FLAG_SERVER);
     if (custom_cluster) {
-        // Direction Inverted
-        bool inverted = shutter_driver_get_direction_inverted(shutter_handle);
-        attribute::create(custom_cluster, ATTR_ID_DIRECTION_INVERTED, 
-                        ATTRIBUTE_FLAG_WRITABLE, esp_matter_bool(inverted));
-        
         // String vorbereiten
         esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
 
@@ -907,43 +1196,102 @@ void setup() {
         }
     }
 
-    // ========================================================================
-    // WiFi
-    // ========================================================================
+    // ════════════════════════════════════════════════════════════════
+    // WiFi Connection (SPÄT - nach Matter Endpoints!)
+    // ════════════════════════════════════════════════════════════════
     
     #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
-        WiFi.mode(WIFI_STA);
-        WiFi.begin(ssid, password);
-        
-        Serial.print("Connecting to WiFi");
-        uint8_t wifi_timeout = 0;
-        while (WiFi.status() != WL_CONNECTED && wifi_timeout < 60) {
-            delay(500);
-            Serial.print(".");
-            wifi_timeout++;
-            esp_task_wdt_reset();
-        }
-        
-        if (WiFi.status() == WL_CONNECTED) {
-            Serial.println("\nWiFi connected");
-
-            snprintf(device_ip_str, sizeof(device_ip_str), "%s", WiFi.localIP().toString().c_str());
     
-            cluster_t* custom_cluster_local = cluster::get(window_covering_endpoint_id, 
-                                                        CLUSTER_ID_ROLLERSHUTTER_CONFIG);
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   WiFi CONNECTION                 ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // Sicherheits-Delay (falls WiFi Manager gerade gelaufen ist)
+    // WiFi.mode(WIFI_OFF) braucht Zeit!
+    delay(500);
+    
+    // ────────────────────────────────────────────────────────────
+    // Priority 1: credentials.h (Entwicklung)
+    // ────────────────────────────────────────────────────────────
+    
+    if (has_credentials_h) {
+        ESP_LOGI(TAG, "Using credentials.h (development mode)");
+        ESP_LOGI(TAG, "  SSID: %s", WIFI_SSID);
+        ESP_LOGI(TAG, "");
+        
+        WiFi.mode(WIFI_STA);
+        delay(100);  // ← Kurze Pause nach mode()
+        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
+        
+    } else {
+        // ────────────────────────────────────────────────────────
+        // Priority 2: NVS Credentials (Produktion)
+        // ────────────────────────────────────────────────────────
+        
+        char wifi_ssid[64];
+        char wifi_password[64];
+        bool has_stored_wifi = WiFiCredentials::load(wifi_ssid, sizeof(wifi_ssid), 
+                                                      wifi_password, sizeof(wifi_password));
+        
+        if (has_stored_wifi) {
+            ESP_LOGI(TAG, "Using NVS credentials (production mode)");
+            ESP_LOGI(TAG, "  SSID: %s", wifi_ssid);
+            ESP_LOGI(TAG, "");
             
-            if (custom_cluster_local) {
-                attribute_t* ip_attr = attribute::get(custom_cluster_local, ATTR_ID_DEVICE_IP);
+            WiFi.mode(WIFI_STA);
+            delay(100);  // ← Kurze Pause nach mode()
+            WiFi.begin(wifi_ssid, wifi_password);
+            
+        } else {
+            ESP_LOGE(TAG, "✗ No WiFi credentials available!");
+        }
+    }
+    
+    // ────────────────────────────────────────────────────────────
+    // Wait for connection
+    // ────────────────────────────────────────────────────────────
+    
+    Serial.print("Connecting to WiFi");
+    uint8_t wifi_timeout = 0;
+    while (WiFi.status() != WL_CONNECTED && wifi_timeout < 60) {
+        delay(500);
+        Serial.print(".");
+        wifi_timeout++;
+        esp_task_wdt_reset();
+    }
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        Serial.println("\nWiFi connected");
+        
+        // Update Device IP in Custom Cluster
+        snprintf(device_ip_str, sizeof(device_ip_str), "%s", 
+                 WiFi.localIP().toString().c_str());
+
+        cluster_t* custom_cluster_local = cluster::get(window_covering_endpoint_id, 
+                                                        CLUSTER_ID_ROLLERSHUTTER_CONFIG);
+        
+        if (custom_cluster_local) {
+            attribute_t* ip_attr = attribute::get(custom_cluster_local, ATTR_ID_DEVICE_IP);
+            
+            if (ip_attr) {
+                esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
+                attribute::set_val(ip_attr, &ip_val);
                 
-                if (ip_attr) {
-                    esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
-                    attribute::set_val(ip_attr, &ip_val);
-                    
-                    ESP_LOGI(TAG, "✓ Device IP updated: %s", device_ip_str);
-                }
+                ESP_LOGI(TAG, "✓ Device IP updated: %s", device_ip_str);
             }
         }
-
+        
+        ESP_LOGI(TAG, "");
+        
+    } else {
+        ESP_LOGE(TAG, "\n✗ WiFi connection failed!");
+        ESP_LOGE(TAG, "  Device will continue WITHOUT WiFi");
+        ESP_LOGE(TAG, "  Matter commissioning may not work!");
+        ESP_LOGI(TAG, "");
+    }
+    
     #endif
 
     // ========================================================================
@@ -1248,6 +1596,18 @@ void setup() {
             if (ble->ensureBLEStarted()) {
                 ESP_LOGI(TASK_TAG, "✓ BLE started successfully");
                 ESP_LOGI(TASK_TAG, "");
+
+                if (bleManager->isPaired()) {
+                    ShellyBLESensorData data;
+                    if (bleManager->getSensorData(data) && data.dataValid) {
+                        if (webUI) {
+                            webUI->broadcastSensorDataUpdate(
+                                bleManager->getPairedDevice().address, 
+                                data
+                            );
+                        }
+                    }
+                }
                 
                 // Check Continuous Scan Preference
                 Preferences prefs;
@@ -1288,23 +1648,6 @@ void setup() {
         
     }, "ble_autostart", 6144, params, 1, NULL);
 
-
-    // Contact Sensor Status laden
-    matterPref.begin("matter", true);
-    contact_sensor_matter_enabled = matterPref.getBool("cs_matter_en", false);
-    matterPref.end();
-
-    ESP_LOGI(TAG, "Contact Sensor Matter Status:");
-    ESP_LOGI(TAG, "  User Enabled: %s", contact_sensor_matter_enabled ? "YES" : "NO");
-    ESP_LOGI(TAG, "  Contact Sensor was active: %s", cs_was_active ? "YES" : "NO");
-    ESP_LOGI(TAG, "  Power Source was active: %s", ps_was_active ? "YES" : "NO");
-
-    // Power Source sollte IMMER mit Contact Sensor erstellt werden
-    if (contact_sensor_matter_enabled && cs_was_active) {
-        ps_was_active = true;  // ← Force enable!
-        ESP_LOGI(TAG, "  → Power Source will be created with Contact Sensor");
-    }
-
     // Endpoints wiederherstellen wenn möglich
     if (contact_sensor_matter_enabled && 
         bleManager->isPaired() && 
@@ -1328,8 +1671,6 @@ void setup() {
         ESP_LOGI(TAG, "  • BLE sensor paired: %s", 
                 (bleManager && bleManager->isPaired()) ? "✓" : "✗");
     }
-
-                 
 
     // ========================================================================
     // Web UI
@@ -1386,58 +1727,103 @@ void loop() {
     if (is_commissioned && hardware_initialized) {
     shutter_driver_loop(shutter_handle);
 
+        // ════════════════════════════════════════════════════════════════
+        // Smart Matter Update Strategy
+        // ════════════════════════════════════════════════════════════════
+        
+        if (shutter_driver_should_send_matter_update(shutter_handle)) {
+            uint8_t percent = shutter_driver_get_current_percent(shutter_handle);
+            uint16_t pos_100ths = percent * 100;
+            
+            RollerShutter::State state = shutter_driver_get_current_state(shutter_handle);
+            
+            esp_matter_attr_val_t val = esp_matter_uint16(pos_100ths);
+            
+            if (state == RollerShutter::State::MOVING_UP || 
+                state == RollerShutter::State::MOVING_DOWN) {
+                
+                // WÄHREND Bewegung: Nur CURRENT updaten (Live-Update)
+                ESP_LOGI(TAG, "Matter Update (live): %d%%", percent);
+                
+                attribute::update(window_covering_endpoint_id, 
+                                chip::app::Clusters::WindowCovering::Id,
+                                chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
+                                &val);
+                
+            } else if (state == RollerShutter::State::STOPPED) {
+                
+                // BEI Stillstand: BEIDE updaten (Subscription Trigger!)
+                ESP_LOGI(TAG, "Matter Update (stopped): %d%%", percent);
+                
+                attribute::update(window_covering_endpoint_id, 
+                                chip::app::Clusters::WindowCovering::Id,
+                                chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
+                                &val);
+                
+                attribute::update(window_covering_endpoint_id, 
+                                chip::app::Clusters::WindowCovering::Id,
+                                chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id, 
+                                &val);  // ← Subscription Trigger!
+            }
+            
+            // Operational Status (immer)
+            uint8_t opStateValue = (state == RollerShutter::State::MOVING_UP) ? 0x05 :
+                                (state == RollerShutter::State::MOVING_DOWN) ? 0x06 : 0x00;
+            
+            esp_matter_attr_val_t opstate_val = esp_matter_uint8(opStateValue);
+            attribute::update(window_covering_endpoint_id, 
+                            chip::app::Clusters::WindowCovering::Id,
+                            chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id, 
+                            &opstate_val);
+            
+            shutter_driver_mark_matter_update_sent(shutter_handle);
+        }
+    }
+
     // ════════════════════════════════════════════════════════════════
-    // Smart Matter Update Strategy
+    // Periodic Sync: Mode Attribut → WebUI
     // ════════════════════════════════════════════════════════════════
     
-    if (shutter_driver_should_send_matter_update(shutter_handle)) {
-        uint8_t percent = shutter_driver_get_current_percent(shutter_handle);
-        uint16_t pos_100ths = percent * 100;
+    static uint32_t last_mode_sync = 0;
+    static uint8_t last_mode_value = 0xFF;  // Ungültiger Initialwert
+    
+    if (millis() - last_mode_sync >= 2000) {  // Alle 2 Sekunden prüfen
+        last_mode_sync = millis();
         
-        RollerShutter::State state = shutter_driver_get_current_state(shutter_handle);
-        
-        esp_matter_attr_val_t val = esp_matter_uint16(pos_100ths);
-        
-        if (state == RollerShutter::State::MOVING_UP || 
-            state == RollerShutter::State::MOVING_DOWN) {
-            
-            // WÄHREND Bewegung: Nur CURRENT updaten (Live-Update)
-            ESP_LOGI(TAG, "Matter Update (live): %d%%", percent);
-            
-            attribute::update(window_covering_endpoint_id, 
-                            chip::app::Clusters::WindowCovering::Id,
-                            chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
-                            &val);
-            
-        } else if (state == RollerShutter::State::STOPPED) {
-            
-            // BEI Stillstand: BEIDE updaten (Subscription Trigger!)
-            ESP_LOGI(TAG, "Matter Update (stopped): %d%%", percent);
-            
-            attribute::update(window_covering_endpoint_id, 
-                            chip::app::Clusters::WindowCovering::Id,
-                            chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
-                            &val);
-            
-            attribute::update(window_covering_endpoint_id, 
-                            chip::app::Clusters::WindowCovering::Id,
-                            chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id, 
-                            &val);  // ← Subscription Trigger!
+        // Mode Attribut lesen
+        cluster_t* wc_cluster = cluster::get(window_covering_endpoint_id, 
+                                            chip::app::Clusters::WindowCovering::Id);
+        if (wc_cluster) {
+            attribute_t* mode_attr = attribute::get(wc_cluster, 
+                                                   chip::app::Clusters::WindowCovering::Attributes::Mode::Id);
+            if (mode_attr) {
+                esp_matter_attr_val_t mode_val;
+                if (attribute::get_val(mode_attr, &mode_val) == ESP_OK) {
+                    uint8_t current_mode = mode_val.val.u8;
+                    
+                    // Hat sich geändert?
+                    if (current_mode != last_mode_value) {
+                        bool inverted = (current_mode & 0x01) != 0;
+                        
+                        ESP_LOGI(TAG, "Mode changed: 0x%02X → 0x%02X (inverted=%s)", 
+                                 last_mode_value, current_mode, inverted ? "YES" : "NO");
+                        
+                        // WebUI Broadcast
+                        if (webUI) {
+                            char broadcast_msg[128];
+                            snprintf(broadcast_msg, sizeof(broadcast_msg),
+                                     "{\"type\":\"direction\",\"inverted\":%s}",
+                                     inverted ? "true" : "false");
+                            
+                            webUI->broadcast_to_all_clients(broadcast_msg);
+                        }
+                        
+                        last_mode_value = current_mode;
+                    }
+                }
+            }
         }
-        
-        // Operational Status (immer)
-        uint8_t opStateValue = (state == RollerShutter::State::MOVING_UP) ? 0x05 :
-                               (state == RollerShutter::State::MOVING_DOWN) ? 0x06 : 0x00;
-        
-        esp_matter_attr_val_t opstate_val = esp_matter_uint8(opStateValue);
-        attribute::update(window_covering_endpoint_id, 
-                         chip::app::Clusters::WindowCovering::Id,
-                         chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id, 
-                         &opstate_val);
-        
-        shutter_driver_mark_matter_update_sent(shutter_handle);
     }
-}
 
     // IP Address Update
     static uint32_t last_ip_check = 0;
@@ -1613,24 +1999,34 @@ void loop() {
 static esp_err_t app_attribute_update_cb(callback_type_t type, uint16_t endpoint_id, 
                                         uint32_t cluster_id, uint32_t attribute_id, 
                                         esp_matter_attr_val_t *val, void *priv) {
-    if (type != PRE_UPDATE || endpoint_id != window_covering_endpoint_id) {
-        return ESP_OK;
-    }
-
+    
     // ════════════════════════════════════════════════════════════════
-    // ✅ Window Covering Target Position (von GoToLiftPercentage Command)
+    // Nur Window Covering Endpoint beachten
     // ════════════════════════════════════════════════════════════════
     
-    if (cluster_id == chip::app::Clusters::WindowCovering::Id) {
-        if (attribute_id == chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id) {
+    if (endpoint_id != window_covering_endpoint_id) {
+        return ESP_OK;  // Andere Endpoints ignorieren
+    }
+    
+    // ════════════════════════════════════════════════════════════════
+    // PRE_UPDATE Events (bevor Attribut geschrieben wird)
+    // ════════════════════════════════════════════════════════════════
+    
+    if (type == PRE_UPDATE) {
+        
+        // ────────────────────────────────────────────────────────────
+        // Target Position (von GoToLiftPercentage Command)
+        // ────────────────────────────────────────────────────────────
+        
+        if (cluster_id == chip::app::Clusters::WindowCovering::Id &&
+            attribute_id == chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id) {
             
-            // Extract target position
             uint16_t target_100ths = val->val.u16;
             uint8_t percent = target_100ths / 100;
             
             ESP_LOGI(TAG, "");
             ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
-            ESP_LOGI(TAG, "║       TARGET POSITION ATTRIBUTE UPDATE                    ║");
+            ESP_LOGI(TAG, "║       TARGET POSITION ATTRIBUTE UPDATE (PRE)              ║");
             ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
             ESP_LOGI(TAG, "");
             ESP_LOGI(TAG, "Raw value (100ths): %d", target_100ths);
@@ -1644,17 +2040,95 @@ static esp_err_t app_attribute_update_cb(callback_type_t type, uint16_t endpoint
             
             return ESP_OK;
         }
+        
+        // ────────────────────────────────────────────────────────────
+        // Mode Attribut (Direction)
+        // ────────────────────────────────────────────────────────────
+        
+        if (cluster_id == chip::app::Clusters::WindowCovering::Id &&
+            attribute_id == chip::app::Clusters::WindowCovering::Attributes::Mode::Id) {
+            
+            uint8_t mode_bitmap = val->val.u8;
+            
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+            ESP_LOGI(TAG, "║       MODE ATTRIBUTE UPDATE (PRE)                         ║");
+            ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Raw value (Bitmap8): 0x%02X", mode_bitmap);
+            ESP_LOGI(TAG, "");
+            
+            // Bit 0: Motor Direction Reversed
+            bool new_inverted = (mode_bitmap & 0x01) != 0;
+            bool old_inverted = shutter_driver_get_direction_inverted(shutter_handle);
+            
+            if (new_inverted != old_inverted) {
+                ESP_LOGI(TAG, "→ Direction changed: %s → %s", 
+                         old_inverted ? "INVERTED" : "NORMAL",
+                         new_inverted ? "INVERTED" : "NORMAL");
+                
+                shutter_driver_set_direction(shutter_handle, new_inverted);
+                
+                ESP_LOGI(TAG, "✓ Direction updated in driver");
+                
+                // WebUI Broadcast
+                if (webUI) {
+                    char broadcast_msg[128];
+                    snprintf(broadcast_msg, sizeof(broadcast_msg),
+                             "{\"type\":\"direction\",\"inverted\":%s}",
+                             new_inverted ? "true" : "false");
+                    
+                    webUI->broadcast_to_all_clients(broadcast_msg);
+                    
+                    ESP_LOGI(TAG, "✓ Direction change broadcasted to WebUI clients");
+                }
+            } else {
+                ESP_LOGI(TAG, "ℹ Direction unchanged: %s", 
+                         new_inverted ? "INVERTED" : "NORMAL");
+            }
+            
+            ESP_LOGI(TAG, "");
+            
+            return ESP_OK;
+        }
     }
     
     // ════════════════════════════════════════════════════════════════
-    // Custom Cluster - Direction Inverted
+    // POST_UPDATE Events (nachdem Attribut geschrieben wurde)
     // ════════════════════════════════════════════════════════════════
     
-    if (cluster_id == CLUSTER_ID_ROLLERSHUTTER_CONFIG && 
-        attribute_id == ATTR_ID_DIRECTION_INVERTED) {
-        ESP_LOGI(TAG, "Matter: Set direction inverted = %s", val->val.b ? "true" : "false");
-        shutter_driver_set_direction(shutter_handle, val->val.b);
+    else if (type == POST_UPDATE) {
+        
+        // ────────────────────────────────────────────────────────────
+        // Target Position (Falls PRE_UPDATE nicht funktioniert)
+        // ────────────────────────────────────────────────────────────
+        
+        if (cluster_id == chip::app::Clusters::WindowCovering::Id &&
+            attribute_id == chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id) {
+            
+            uint16_t target_100ths = val->val.u16;
+            uint8_t percent = target_100ths / 100;
+            
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+            ESP_LOGI(TAG, "║       TARGET POSITION ATTRIBUTE UPDATE (POST)             ║");
+            ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Raw value (100ths): %d", target_100ths);
+            ESP_LOGI(TAG, "Calculated percent: %d%%", percent);
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "→ Calling shutter_driver_go_to_lift_percent(%d)", percent);
+            ESP_LOGI(TAG, "");
+            
+            shutter_driver_go_to_lift_percent(shutter_handle, percent);
+            
+            return ESP_OK;
+        }
     }
+    
+    // ════════════════════════════════════════════════════════════════
+    // Default: Unbekanntes Attribut → OK zurückgeben
+    // ════════════════════════════════════════════════════════════════
     
     return ESP_OK;
 }
@@ -1669,57 +2143,40 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &path,
     ESP_LOGI(TAG, "│ Cluster:  0x%04X", path.mClusterId);
     ESP_LOGI(TAG, "│ Command:  0x%04X", path.mCommandId);
     ESP_LOGI(TAG, "│ Endpoint: %d", path.mEndpointId);
-    
+
     // ════════════════════════════════════════════════════════════════
-    // Window Covering Commands
+    // Window Covering Commands (Fallback wenn Delegate nicht funktioniert)
     // ════════════════════════════════════════════════════════════════
-    
+
     if (path.mClusterId == chip::app::Clusters::WindowCovering::Id) {
         ESP_LOGI(TAG, "│ → Window Covering Command");
         
         switch (path.mCommandId) {
-            // ────────────────────────────────────────────────────────
-            // Command: UpOrOpen (0x00)
-            // ────────────────────────────────────────────────────────
+            
             case chip::app::Clusters::WindowCovering::Commands::UpOrOpen::Id: {
                 ESP_LOGI(TAG, "│   Type: UpOrOpen");
                 ESP_LOGI(TAG, "└─────────────────────────────────");
                 
                 shutter_driver_go_to_lift_percent(shutter_handle, 0);
-                
-                // ✅ Command Response senden
                 return ESP_OK;
             }
-                
-            // ────────────────────────────────────────────────────────
-            // Command: DownOrClose (0x01)
-            // ────────────────────────────────────────────────────────
+            
             case chip::app::Clusters::WindowCovering::Commands::DownOrClose::Id: {
                 ESP_LOGI(TAG, "│   Type: DownOrClose");
                 ESP_LOGI(TAG, "└─────────────────────────────────");
                 
                 shutter_driver_go_to_lift_percent(shutter_handle, 100);
-                
-                // ✅ Command Response senden
                 return ESP_OK;
             }
-                
-            // ────────────────────────────────────────────────────────
-            // Command: StopMotion (0x02)
-            // ────────────────────────────────────────────────────────
+            
             case chip::app::Clusters::WindowCovering::Commands::StopMotion::Id: {
                 ESP_LOGI(TAG, "│   Type: StopMotion");
                 ESP_LOGI(TAG, "└─────────────────────────────────");
                 
                 shutter_driver_stop_motion(shutter_handle);
-                
-                // ✅ Command Response senden
                 return ESP_OK;
             }
-                
-            // ────────────────────────────────────────────────────────
-            // Command: GoToLiftPercentage (0x05)
-            // ────────────────────────────────────────────────────────
+            
             case chip::app::Clusters::WindowCovering::Commands::GoToLiftPercentage::Id: {
                 ESP_LOGI(TAG, "│   Type: GoToLiftPercentage");
                 
@@ -1732,15 +2189,11 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &path,
                     ESP_LOGI(TAG, "└─────────────────────────────────");
                     
                     shutter_driver_go_to_lift_percent(shutter_handle, percent);
-                    
-                    // ✅ Command Response senden
                     return ESP_OK;
                     
                 } else {
                     ESP_LOGE(TAG, "│   ✗ Failed to decode command payload");
                     ESP_LOGI(TAG, "└─────────────────────────────────");
-                    
-                    // ❌ Command failed
                     return ESP_FAIL;
                 }
             }
@@ -1763,7 +2216,7 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &path,
         
         shutter_driver_start_calibration(shutter_handle);
         
-        // ✅ Command Response senden
+        // Command Response senden
         return ESP_OK;
     }
 

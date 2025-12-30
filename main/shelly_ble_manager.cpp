@@ -970,6 +970,9 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
         ESP_LOGE(TAG, "│");
         ESP_LOGE(TAG, "└─────────────────────────────────");
         ESP_LOGE(TAG, "");
+
+        pairedDevice.sensorData.lastUpdate = 0;
+        pairedDevice.sensorData.dataValid = false;
     }
     
     // ════════════════════════════════════════════════════════════════════
@@ -983,8 +986,6 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
     
     return true;  // Continue scanning
 }
-
-
 
 // ════════════════════════════════════════════════════════════════════════
 // SMART CONNECT METHODE (3-in-1 Workflow)

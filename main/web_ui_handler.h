@@ -25,6 +25,7 @@ public:
     void broadcast_to_all_clients(const char* message);
     
     // ✓ Client Management
+    void disconnect_all_clients();
     void cleanup_idle_clients();
     void remove_client(int fd);
     int get_client_count() const { return active_clients.size(); }

@@ -5,6 +5,7 @@ set(app_sources
     "web_ui_handler.cpp"
     "shelly_ble_manager.cpp"
     "device_naming.cpp"
+    "wifi_manager.cpp"
 )
 
 idf_component_register(

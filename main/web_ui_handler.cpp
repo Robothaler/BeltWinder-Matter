@@ -2,6 +2,7 @@
 
 #include "web_ui_handler.h"
 #include "device_naming.h"
+#include "credentials.h"
 
 #include <WiFi.h>
 #include <esp_http_server.h>
@@ -17,10 +18,20 @@
 #include <Matter.h>
 #include <Preferences.h>
 
+#include <esp_matter.h>
+#include <esp_matter_cluster.h>
+#include <esp_matter_attribute.h>
+#include <app-common/zap-generated/cluster-objects.h>
+
+using namespace esp_matter;
+
 #include <sys/socket.h>
 #include <netinet/in.h>
 #include <arpa/inet.h>
 #include <Update.h>
+
+extern uint16_t window_covering_endpoint_id;
+extern WebUIHandler* webUI;
 
 static const char* TAG = "WebUI";
 
@@ -35,6 +46,310 @@ struct BLETaskParams {
     String address;
     uint32_t passkey;
 };
+
+static uint8_t failed_login_count = 0;
+static uint32_t last_failed_login = 0;
+static uint32_t lockout_until = 0;
+
+#ifndef HTTPD_429_TOO_MANY_REQUESTS
+    #define HTTPD_429_TOO_MANY_REQUESTS ((httpd_err_code_t)429)
+#endif
+
+// ════════════════════════════════════════════════════════════════════════
+// FORWARD DECLARATIONS
+// ════════════════════════════════════════════════════════════════════════
+
+static bool checkBasicAuth(httpd_req_t *req);
+static bool loadAuthFromNVS(char* username, size_t username_len, 
+                           char* password, size_t password_len);
+static bool saveAuthToNVS(const char* username, const char* password);
+static bool base64_decode(const char* input, char* output, size_t output_len);
+
+static esp_err_t favicon_handler(httpd_req_t *req);
+static esp_err_t apple_touch_icon_handler(httpd_req_t *req);
+
+// ════════════════════════════════════════════════════════════════════════
+// BASE64 HELPER (Implementation BEFORE first use)
+// ════════════════════════════════════════════════════════════════════════
+
+static const char base64_chars[] = 
+    "ABCDEFGHIJKLMNOPQRSTUVWXYZabcdefghijklmnopqrstuvwxyz0123456789+/";
+
+static bool base64_decode(const char* input, char* output, size_t output_len) {
+    if (!input || !output) return false;
+    
+    size_t input_len = strlen(input);
+    if (input_len == 0 || input_len % 4 != 0) return false;
+    
+    size_t output_idx = 0;
+    
+    for (size_t i = 0; i < input_len; i += 4) {
+        if (output_idx + 3 >= output_len) return false;
+        
+        const char* p1 = strchr(base64_chars, input[i]);
+        const char* p2 = strchr(base64_chars, input[i+1]);
+        
+        if (!p1 || !p2) return false;
+        
+        uint8_t a = p1 - base64_chars;
+        uint8_t b = p2 - base64_chars;
+        
+        uint8_t c = 0, d = 0;
+        
+        if (input[i+2] != '=') {
+            const char* p3 = strchr(base64_chars, input[i+2]);
+            if (!p3) return false;
+            c = p3 - base64_chars;
+        }
+        
+        if (input[i+3] != '=') {
+            const char* p4 = strchr(base64_chars, input[i+3]);
+            if (!p4) return false;
+            d = p4 - base64_chars;
+        }
+        
+        output[output_idx++] = (a << 2) | (b >> 4);
+        if (input[i+2] != '=') output[output_idx++] = (b << 4) | (c >> 2);
+        if (input[i+3] != '=') output[output_idx++] = (c << 6) | d;
+    }
+    
+    output[output_idx] = '\0';
+    return true;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// NVS AUTH MANAGEMENT
+// ════════════════════════════════════════════════════════════════════════
+
+static bool loadAuthFromNVS(char* username, size_t username_len, 
+                           char* password, size_t password_len) {
+    Preferences prefs;
+    if (!prefs.begin("webui_auth", true)) {
+        // NVS nicht verfügbar → Fallback zu credentials.h
+        #ifdef WEBUI_USERNAME
+            strncpy(username, WEBUI_USERNAME, username_len - 1);
+            username[username_len - 1] = '\0';
+            strncpy(password, WEBUI_PASSWORD, password_len - 1);
+            password[password_len - 1] = '\0';
+            ESP_LOGI(TAG, "Using credentials from credentials.h (NVS unavailable)");
+        #else
+            // Default Fallback
+            strncpy(username, "admin", username_len - 1);
+            username[username_len - 1] = '\0';
+            strncpy(password, "admin", password_len - 1);
+            password[password_len - 1] = '\0';
+            ESP_LOGW(TAG, "⚠️ Using DEFAULT credentials (INSECURE!)");
+        #endif
+        return false;
+    }
+    
+    String stored_user = prefs.getString("username", "");
+    String stored_pass = prefs.getString("password", "");
+    
+    prefs.end();
+    
+    if (stored_user.length() == 0 || stored_pass.length() == 0) {
+        // NVS leer → Erste Verwendung
+        #ifdef WEBUI_USERNAME
+            strncpy(username, WEBUI_USERNAME, username_len - 1);
+            username[username_len - 1] = '\0';
+            strncpy(password, WEBUI_PASSWORD, password_len - 1);
+            password[password_len - 1] = '\0';
+            
+            // In NVS speichern für zukünftige Änderungen
+            saveAuthToNVS(username, password);
+            
+            ESP_LOGI(TAG, "✓ Initialized NVS with credentials from credentials.h");
+        #else
+            strncpy(username, "admin", username_len - 1);
+            username[username_len - 1] = '\0';
+            strncpy(password, "admin", password_len - 1);
+            password[password_len - 1] = '\0';
+            ESP_LOGW(TAG, "⚠️ No credentials defined - using DEFAULT");
+        #endif
+        return false;
+    }
+    
+    // NVS hat Credentials → Diese verwenden
+    strncpy(username, stored_user.c_str(), username_len - 1);
+    username[username_len - 1] = '\0';
+    strncpy(password, stored_pass.c_str(), password_len - 1);
+    password[password_len - 1] = '\0';
+    
+    ESP_LOGI(TAG, "✓ Loaded credentials from NVS (user: %s)", username);
+    return true;
+}
+
+static bool saveAuthToNVS(const char* username, const char* password) {
+    if (!username || !password) return false;
+    
+    Preferences prefs;
+    if (!prefs.begin("webui_auth", false)) {
+        ESP_LOGE(TAG, "Failed to open NVS for auth storage");
+        return false;
+    }
+    
+    prefs.putString("username", username);
+    prefs.putString("password", password);
+    
+    prefs.end();
+    
+    ESP_LOGI(TAG, "✓ Auth credentials saved to NVS (user: %s)", username);
+    return true;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// HTTP BASIC AUTH CHECK
+// ════════════════════════════════════════════════════════════════════════
+
+static bool checkBasicAuth(httpd_req_t *req) {
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 1: Rate Limit Check
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (failed_login_count >= 5) {
+        uint32_t now = millis();
+        
+        if (now < lockout_until) {
+            uint32_t remaining_sec = (lockout_until - now) / 1000;
+            
+            char msg[128];
+            snprintf(msg, sizeof(msg), 
+                    "Too many failed attempts. Try again in %u seconds.", 
+                    remaining_sec);
+            
+            ESP_LOGW(TAG, "Rate limit active: %u seconds remaining", remaining_sec);
+            
+            char retry_after[16];
+            snprintf(retry_after, sizeof(retry_after), "%u", remaining_sec);
+            httpd_resp_set_hdr(req, "Retry-After", retry_after);
+            httpd_resp_send_err(req, HTTPD_429_TOO_MANY_REQUESTS, msg);
+            return false;
+        } else {
+            // Lockout abgelaufen → Reset
+            ESP_LOGI(TAG, "Rate limit expired, resetting counter");
+            failed_login_count = 0;
+            lockout_until = 0;
+        }
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 2: Get Authorization Header
+    // ════════════════════════════════════════════════════════════════════
+    
+    char auth_header[256];
+    
+    if (httpd_req_get_hdr_value_str(req, "Authorization", auth_header, sizeof(auth_header)) != ESP_OK) {
+        ESP_LOGD(TAG, "No Authorization header found");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"BeltWinder Matter\"");
+        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Authentication required");
+        
+        // Increment failed counter
+        failed_login_count++;
+        last_failed_login = millis();
+        
+        if (failed_login_count >= 5) {
+            lockout_until = millis() + 60000;
+            ESP_LOGW(TAG, "⚠️ Rate limit triggered! Locked out for 60 seconds");
+        }
+        
+        return false;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 3: Check "Basic " prefix
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (strncmp(auth_header, "Basic ", 6) != 0) {
+        ESP_LOGW(TAG, "Invalid auth format (expected 'Basic ...')");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"BeltWinder Matter\"");
+        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Invalid authentication format");
+        
+        // Increment failed counter
+        failed_login_count++;
+        last_failed_login = millis();
+        
+        if (failed_login_count >= 5) {
+            lockout_until = millis() + 60000;
+            ESP_LOGW(TAG, "⚠️ Rate limit triggered! Locked out for 60 seconds");
+        }
+        
+        return false;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 4: Load expected credentials
+    // ════════════════════════════════════════════════════════════════════
+    
+    char username[64];
+    char password[64];
+    loadAuthFromNVS(username, sizeof(username), password, sizeof(password));
+    
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 5: Decode provided credentials
+    // ════════════════════════════════════════════════════════════════════
+    
+    char decoded[128];
+    if (!base64_decode(auth_header + 6, decoded, sizeof(decoded))) {
+        ESP_LOGW(TAG, "Failed to decode Base64");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"BeltWinder Matter\"");
+        httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Invalid Base64");
+        
+        // Increment failed counter
+        failed_login_count++;
+        last_failed_login = millis();
+        
+        if (failed_login_count >= 5) {
+            lockout_until = millis() + 60000;
+            ESP_LOGW(TAG, "⚠️ Rate limit triggered! Locked out for 60 seconds");
+        }
+        
+        return false;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 6: Compare credentials
+    // ════════════════════════════════════════════════════════════════════
+    
+    char expected[128];
+    snprintf(expected, sizeof(expected), "%s:%s", username, password);
+    
+    if (strcmp(decoded, expected) == 0) {
+        // SUCCESS
+        ESP_LOGI(TAG, "✓ Authentication successful (user: %s)", username);
+        
+        // Reset rate limit counters
+        failed_login_count = 0;
+        lockout_until = 0;
+        
+        return true;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // STEP 7: Authentication FAILED
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGW(TAG, "✗ Authentication failed");
+    ESP_LOGD(TAG, "  Provided: %s", decoded);
+    ESP_LOGD(TAG, "  Expected: %s", expected);
+    
+    // Increment failed counter
+    failed_login_count++;
+    last_failed_login = millis();
+    
+    if (failed_login_count >= 5) {
+        lockout_until = millis() + 60000;  // 60 Sekunden Lockout
+        ESP_LOGW(TAG, "⚠️ Rate limit triggered! Locked out for 60 seconds");
+    } else {
+        ESP_LOGW(TAG, "Failed login attempt %d/5", failed_login_count);
+    }
+    
+    httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"BeltWinder Matter\"");
+    httpd_resp_send_err(req, HTTPD_401_UNAUTHORIZED, "Wrong username or password");
+    
+    return false;
+}
+
 
 // ============================================================================
 // GZIP Compressed HTML (Auto-Generated)
@@ -56,10 +371,54 @@ struct BLETaskParams {
 
 
 // ════════════════════════════════════════════════════════════════════════
+// Icon Handler Implementierung
+// ════════════════════════════════════════════════════════════════════════
+
+static esp_err_t favicon_handler(httpd_req_t *req) {
+    // KEIN Auth-Check für Favicon!
+    // Dies verhindert, dass Browser-Requests das Rate Limit triggern
+    
+    ESP_LOGD(TAG, "Favicon requested (no auth required)");
+    
+    // Option 1: 204 No Content (schnellste Lösung)
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+    
+    /* Option 2: Echtes Icon senden (falls gewünscht)
+    // 16x16 transparent PNG als Platzhalter
+    const uint8_t favicon_ico[] = {
+        0x89, 0x50, 0x4E, 0x47, 0x0D, 0x0A, 0x1A, 0x0A, 
+        // ... rest of icon data ...
+    };
+    httpd_resp_set_type(req, "image/x-icon");
+    httpd_resp_send(req, (const char*)favicon_ico, sizeof(favicon_ico));
+    return ESP_OK;
+    */
+}
+
+static esp_err_t apple_touch_icon_handler(httpd_req_t *req) {
+    // KEIN Auth-Check für Apple Touch Icons!
+    
+    ESP_LOGD(TAG, "Apple Touch Icon requested (no auth required)");
+    
+    // 204 No Content - Browser gibt auf und zeigt Standardicon
+    httpd_resp_set_status(req, "204 No Content");
+    httpd_resp_send(req, NULL, 0);
+    return ESP_OK;
+}
+
+// ════════════════════════════════════════════════════════════════════════
 // HTTP GET Handler für /update (zeigt aktuellen Status)
 // ════════════════════════════════════════════════════════════════════════
 
 static esp_err_t update_get_handler(httpd_req_t *req) {
+
+    // AUTH CHECK
+    if (!checkBasicAuth(req)) {
+        return ESP_FAIL;
+    }
+
     // Zeige aktuelle Firmware Version + Partition Info
     
     const esp_app_desc_t* app_desc = esp_app_get_description();
@@ -98,6 +457,12 @@ static esp_err_t update_get_handler(httpd_req_t *req) {
 // ════════════════════════════════════════════════════════════════════════
 
 static esp_err_t update_post_handler(httpd_req_t *req) {
+
+    // AUTH CHECK
+    if (!checkBasicAuth(req)) {
+        return ESP_FAIL;
+    }
+
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
     ESP_LOGI(TAG, "║   OTA UPDATE VIA HTTP POST        ║");
@@ -396,6 +761,11 @@ static void ws_close_callback(httpd_handle_t hd, int sockfd) {
 // ============================================================================
 
 esp_err_t WebUIHandler::root_handler(httpd_req_t *req) {
+    // Auth Check
+    if (!checkBasicAuth(req)) {
+        return ESP_FAIL;
+    }
+
     ESP_LOGI(TAG, "Serving Web-UI to client: %s", 
              req->user_ctx ? "authenticated" : "anonymous");
     
@@ -444,6 +814,10 @@ esp_err_t WebUIHandler::root_handler(httpd_req_t *req) {
 
 esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     if (req->method == HTTP_GET) {
+        // Auth Check beim Handshake
+        if (!checkBasicAuth(req)) {
+            return ESP_FAIL;
+        }
         WebUIHandler* self = (WebUIHandler*)req->user_ctx;
         int fd = httpd_req_to_sockfd(req);
         
@@ -572,16 +946,116 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                 result == ESP_OK ? "SUCCESS" : "FAILED");
     } 
     else if (strcmp(cmd, "invert_on") == 0) {
-        ESP_LOGI(TAG, "→ Command: INVERT DIRECTION → ON");
-        shutter_driver_set_direction(self->handle, true);
-        bool current = shutter_driver_get_direction_inverted(self->handle);
-        ESP_LOGI(TAG, "← Direction now: %s", current ? "INVERTED ✓" : "NORMAL (ERROR!)");
+            ESP_LOGI(TAG, "WebUI: Setting direction to INVERTED");
+        
+        // ════════════════════════════════════════════════════════════════
+        // 1. Update Mode Attribut in Matter
+        // ════════════════════════════════════════════════════════════════
+        
+        cluster_t* wc_cluster = cluster::get(window_covering_endpoint_id, 
+                                            chip::app::Clusters::WindowCovering::Id);
+        if (wc_cluster) {
+            attribute_t* mode_attr = attribute::get(wc_cluster, 
+                                                chip::app::Clusters::WindowCovering::Attributes::Mode::Id);
+            if (mode_attr) {
+                // Aktuellen Mode lesen
+                esp_matter_attr_val_t current_mode;
+                attribute::get_val(mode_attr, &current_mode);
+                
+                // Bit 0 setzen (MotorDirectionReversed)
+                uint8_t new_mode = current_mode.val.u8 | 0x01;
+                
+                esp_matter_attr_val_t new_val = esp_matter_bitmap8(new_mode);
+                
+                // Attribut updaten (triggert app_attribute_update_cb!)
+                attribute::update(window_covering_endpoint_id,
+                                chip::app::Clusters::WindowCovering::Id,
+                                chip::app::Clusters::WindowCovering::Attributes::Mode::Id,
+                                &new_val);
+                
+                ESP_LOGI(TAG, "✓ Mode attribute updated: 0x%02X → 0x%02X", 
+                        current_mode.val.u8, new_mode);
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // 2. WebUI Response
+        // ════════════════════════════════════════════════════════════════
+        
+        vTaskDelay(pdMS_TO_TICKS(100));  // Kurz warten bis Update propagiert ist
+        
+        bool inverted = shutter_driver_get_direction_inverted(self->handle);
+        
+        // ✅ Response Buffer definieren
+        char response[128];
+        snprintf(response, sizeof(response), 
+                "{\"type\":\"direction\",\"inverted\":%s}",
+                inverted ? "true" : "false");
+        
+        // WebSocket Frame vorbereiten
+        httpd_ws_frame_t ws_pkt;
+        memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+        ws_pkt.payload = (uint8_t*)response;
+        ws_pkt.len = strlen(response);
+        ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+        
+        httpd_ws_send_frame(req, &ws_pkt);
     }
     else if (strcmp(cmd, "invert_off") == 0) {
-        ESP_LOGI(TAG, "→ Command: INVERT DIRECTION → OFF");
-        shutter_driver_set_direction(self->handle, false);
-        bool current = shutter_driver_get_direction_inverted(self->handle);
-        ESP_LOGI(TAG, "← Direction now: %s", current ? "INVERTED (ERROR!)" : "NORMAL ✓");
+            ESP_LOGI(TAG, "WebUI: Setting direction to NORMAL");
+        
+        // ════════════════════════════════════════════════════════════════
+        // 1. Update Mode Attribut in Matter
+        // ════════════════════════════════════════════════════════════════
+        
+        cluster_t* wc_cluster = cluster::get(window_covering_endpoint_id, 
+                                            chip::app::Clusters::WindowCovering::Id);
+        if (wc_cluster) {
+            attribute_t* mode_attr = attribute::get(wc_cluster, 
+                                                chip::app::Clusters::WindowCovering::Attributes::Mode::Id);
+            if (mode_attr) {
+                // Aktuellen Mode lesen
+                esp_matter_attr_val_t current_mode;
+                attribute::get_val(mode_attr, &current_mode);
+                
+                // Bit 0 löschen (MotorDirectionReversed)
+                uint8_t new_mode = current_mode.val.u8 & ~0x01;
+                
+                esp_matter_attr_val_t new_val = esp_matter_bitmap8(new_mode);
+                
+                // Attribut updaten (triggert app_attribute_update_cb!)
+                attribute::update(window_covering_endpoint_id,
+                                chip::app::Clusters::WindowCovering::Id,
+                                chip::app::Clusters::WindowCovering::Attributes::Mode::Id,
+                                &new_val);
+                
+                ESP_LOGI(TAG, "✓ Mode attribute updated: 0x%02X → 0x%02X", 
+                        current_mode.val.u8, new_mode);
+            }
+        }
+        
+        // ════════════════════════════════════════════════════════════════
+        // 2. WebUI Response
+        // ════════════════════════════════════════════════════════════════
+        
+        vTaskDelay(pdMS_TO_TICKS(100));
+        
+        bool inverted = shutter_driver_get_direction_inverted(self->handle);
+        
+        // ✅ Response Buffer definieren
+        char response[128];
+        snprintf(response, sizeof(response), 
+                "{\"type\":\"direction\",\"inverted\":%s}",
+                inverted ? "true" : "false");
+        
+        // WebSocket Frame vorbereiten
+        httpd_ws_frame_t ws_pkt;
+        memset(&ws_pkt, 0, sizeof(httpd_ws_frame_t));
+        ws_pkt.payload = (uint8_t*)response;
+        ws_pkt.len = strlen(response);
+        ws_pkt.type = HTTPD_WS_TYPE_TEXT;
+        
+        httpd_ws_send_frame(req, &ws_pkt);
     }
     else if (strcmp(cmd, "reset") == 0) {
         ESP_LOGW(TAG, "=== Factory Reset Initiated via WebUI ===");
@@ -857,6 +1331,61 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     
     ESP_LOGI(TAG, "✓ Device name saved and applied");
 }
+    else if (CMD_MATCH(cmd, "{\"cmd\":\"change_webui_password\"")) {
+    String json = String(cmd);
+    
+    // Parse new username/password
+    int userStart = json.indexOf("\"username\":\"") + 12;
+    int userEnd = json.indexOf("\"", userStart);
+    String new_username = json.substring(userStart, userEnd);
+    
+    int passStart = json.indexOf("\"password\":\"") + 12;
+    int passEnd = json.indexOf("\"", passStart);
+    String new_password = json.substring(passStart, passEnd);
+    
+    // Validate
+    if (new_username.length() < 3 || new_password.length() < 6) {
+        const char* error = "{\"type\":\"error\",\"message\":\"Username min 3 chars, password min 6 chars\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)error,
+            .len = strlen(error)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        free(buf);
+        return ESP_OK;
+    }
+    
+    // Save to NVS
+    if (saveAuthToNVS(new_username.c_str(), new_password.c_str())) {
+        ESP_LOGI(TAG, "✓ WebUI credentials changed");
+        ESP_LOGI(TAG, "  New username: %s", new_username.c_str());
+        
+        const char* success = "{\"type\":\"success\",\"message\":\"Credentials updated! Please log in again.\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)success,
+            .len = strlen(success)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        
+        // Close WebSocket nach 2 Sekunden (Client muss sich neu anmelden)
+        vTaskDelay(pdMS_TO_TICKS(2000));
+        
+        // Alle Clients disconnecten
+        self->disconnect_all_clients();
+        
+    } else {
+        const char* error = "{\"type\":\"error\",\"message\":\"Failed to save credentials\"}";
+        httpd_ws_frame_t frame = {
+            .type = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)error,
+            .len = strlen(error)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &frame);
+    }
+}
+
     else if (strcmp(cmd, "restart") == 0) {
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
@@ -2615,7 +3144,35 @@ void WebUIHandler::begin() {
         httpd_register_uri_handler(server, &root);
 
         // ════════════════════════════════════════════════════════════════
-        // 2. WebSocket Handler
+        // 2. Icons - OHNE Auth (verhindert Rate Limiting!)
+        // ════════════════════════════════════════════════════════════════
+        
+        httpd_uri_t favicon = {
+            .uri       = "/favicon.ico",
+            .method    = HTTP_GET,
+            .handler   = favicon_handler,  // ← OHNE Auth!
+            .user_ctx  = nullptr
+        };
+        httpd_register_uri_handler(server, &favicon);
+        
+        httpd_uri_t apple_icon = {
+            .uri       = "/apple-touch-icon.png",
+            .method    = HTTP_GET,
+            .handler   = apple_touch_icon_handler,  // ← OHNE Auth!
+            .user_ctx  = nullptr
+        };
+        httpd_register_uri_handler(server, &apple_icon);
+        
+        httpd_uri_t apple_icon_precomp = {
+            .uri       = "/apple-touch-icon-precomposed.png",
+            .method    = HTTP_GET,
+            .handler   = apple_touch_icon_handler,  // ← OHNE Auth!
+            .user_ctx  = nullptr
+        };
+        httpd_register_uri_handler(server, &apple_icon_precomp);
+        
+        // ════════════════════════════════════════════════════════════════
+        // 3. WebSocket Handler - MIT Auth
         // ════════════════════════════════════════════════════════════════
         
         httpd_uri_t ws = {
@@ -2658,12 +3215,12 @@ void WebUIHandler::begin() {
         ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "Registered Endpoints:");
-        ESP_LOGI(TAG, "  GET  /         → Web-UI");
-        ESP_LOGI(TAG, "  GET  /ws       → WebSocket");
-        ESP_LOGI(TAG, "  GET  /update   → OTA Status");
-        ESP_LOGI(TAG, "  POST /update   → OTA Upload");
-        ESP_LOGI(TAG, "  GET  /api/drift     → Drift Statistics");
-        ESP_LOGI(TAG, "  POST /api/drift/reset → Reset Drift History"); 
+        ESP_LOGI(TAG, "  GET  /         → Web-UI (AUTH)");
+        ESP_LOGI(TAG, "  GET  /ws       → WebSocket (AUTH)");
+        ESP_LOGI(TAG, "  GET  /favicon.ico → Icon (NO AUTH)");
+        ESP_LOGI(TAG, "  GET  /apple-touch-icon*.png → Icons (NO AUTH)");
+        ESP_LOGI(TAG, "  GET  /update   → OTA Status (AUTH)");
+        ESP_LOGI(TAG, "  POST /update   → OTA Upload (AUTH)");
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "Max open sockets: %d", cfg.max_open_sockets);
         ESP_LOGI(TAG, "LRU purge: %s", cfg.lru_purge_enable ? "enabled" : "disabled");
@@ -3117,3 +3674,18 @@ void WebUIHandler::cleanup_idle_clients() {
         }
     }
   }
+
+  
+void WebUIHandler::disconnect_all_clients() {
+    if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(1000)) == pdTRUE) {
+        ESP_LOGI(TAG, "Disconnecting all clients (%d)", active_clients.size());
+        
+        for (const auto& client : active_clients) {
+            close(client.fd);
+        }
+        
+        active_clients.clear();
+        
+        xSemaphoreGive(client_mutex);
+    }
+}

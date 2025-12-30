@@ -4,6 +4,18 @@
   <meta charset="UTF-8">
   <meta name="viewport" content="width=device-width, initial-scale=1">
   <title>BeltWinder Matter</title>
+
+  <!-- Favicon als Data-URL (verhindert separaten Request) -->
+  <link rel="icon" type="image/png" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">
+  
+  <!-- Apple Touch Icon als Data-URL -->
+  <link rel="apple-touch-icon" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">
+  <link rel="apple-touch-icon-precomposed" href="data:image/png;base64,iVBORw0KGgoAAAANSUhEUgAAAAEAAAABCAYAAAAfFcSJAAAADUlEQVR42mNk+M9QDwADhgGAWjR9awAAAABJRU5ErkJggg==">
+  
+
+  <!-- Chart.js CDN hinzufügen -->
+  <script src="https://cdn.jsdelivr.net/npm/chart.js@4.4.0/dist/chart.umd.min.js"></script>
+  
   <style>
     /* ============================================================================
        Base Styles & CSS Variables
@@ -1579,6 +1591,70 @@
       </button> 
     </div>
 
+    <!-- WebUI Password Section -->
+
+    <div class="card">
+      <h2>🔐 WebUI Password</h2>
+      
+      <p style="color:#888;margin-bottom:20px;line-height:1.8">
+        Change the username and password for accessing this web interface.
+      </p>
+      
+      <div class="alert warning">
+        <strong>⚠️ Important</strong>
+        <ul style="margin:10px 0 0 20px;line-height:1.8">
+          <li>You will be logged out after changing</li>
+          <li>Write down your new credentials!</li>
+          <li>Lost password = Factory Reset required</li>
+        </ul>
+      </div>
+      
+      <!-- ✅ FIX: Wrap in <form> -->
+      <form id="password-change-form" onsubmit="changeWebUIPassword(); return false;">
+        
+        <div class="input-group">
+          <label for="new-username">New Username</label>
+          <input type="text" 
+                id="new-username" 
+                placeholder="admin"
+                minlength="3"
+                maxlength="32"
+                autocomplete="username">
+          <div style="font-size:0.85em;color:#888;margin-top:5px">
+            Min. 3 characters
+          </div>
+        </div>
+        
+        <div class="input-group">
+          <label for="new-password">New Password</label>
+          <input type="password" 
+                id="new-password" 
+                placeholder="Enter new password"
+                minlength="6"
+                maxlength="64"
+                autocomplete="new-password">
+          <div style="font-size:0.85em;color:#888;margin-top:5px">
+            Min. 6 characters
+          </div>
+        </div>
+        
+        <div class="input-group">
+          <label for="new-password-confirm">Confirm Password</label>
+          <input type="password" 
+                id="new-password-confirm" 
+                placeholder="Repeat password"
+                minlength="6"
+                maxlength="64"
+                autocomplete="new-password">
+        </div>
+        
+        <button type="submit" class="btn primary" style="width:100%;margin-top:10px">
+          <span>💾 Change Credentials</span>
+        </button>
+        
+      </form> <!-- ✅ Form Ende -->
+    </div>
+
     <!-- OTA-Update Section -->
 
     <div class="card">
@@ -2128,6 +2204,57 @@
     };
 
     // ============================================================================
+    // Password Management
+    // ============================================================================
+
+    function changeWebUIPassword() {
+        const username = document.getElementById('new-username').value.trim();
+        const password = document.getElementById('new-password').value;
+        const confirm = document.getElementById('new-password-confirm').value;
+        
+        // Validation
+        if (username.length < 3) {
+            showErrorBanner('Invalid Input', 'Username must be at least 3 characters', 'error');
+            return;
+        }
+        
+        if (password.length < 6) {
+            showErrorBanner('Invalid Input', 'Password must be at least 6 characters', 'error');
+            return;
+        }
+        
+        if (password !== confirm) {
+            showErrorBanner('Password Mismatch', 'Passwords do not match', 'error');
+            return;
+        }
+        
+        if (!confirm('Change WebUI credentials?\n\nYou will be logged out and must log in again with the new credentials.')) {
+            return;
+        }
+        
+        if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
+            showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
+            return;
+        }
+        
+        console.log('🔐 Changing WebUI credentials...');
+        
+        AppState.ws.send(JSON.stringify({
+            cmd: 'change_webui_password',
+            username: username,
+            password: password
+        }));
+        
+        showLoading('Changing credentials...');
+        
+        // Auto-reload nach 3 Sekunden
+        setTimeout(() => {
+            hideLoading();
+            location.reload();
+        }, 3000);
+    }
+
+    // ============================================================================
     // Error Banner Functions
     // ============================================================================
     
@@ -2373,7 +2500,7 @@
                           'Device name saved. Restart to apply new hostname.', 
                           'success');
           
-          // ✅ NEU: Zeige Restart Hint
+          // Zeige Restart Hint
           const restartHint = document.getElementById('restart-hint');
           if (restartHint) {
               restartHint.style.display = 'block';
@@ -2469,6 +2596,32 @@
           showErrorBanner(title, text, 'success');
         }
         hideLoading();
+      }
+
+      // Calibration Complete Handler
+      if (data.type === 'calibration_complete') {
+          console.log('✓ Calibration complete message received:', data);
+          
+          hideLoading();
+          
+          if (data.success) {
+              showErrorBanner('Calibration Complete', 
+                            data.message || 'Shutter is now calibrated!', 
+                            'success');
+          } else {
+              showErrorBanner('Calibration Failed', 
+                            data.message || 'Please try again. Check the logs for details.', 
+                            'error');
+          }
+          
+          // Status-Update anfordern (verzögert)
+          setTimeout(() => {
+              if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
+                  AppState.ws.send('status');
+              }
+          }, 1000);
+          
+          return;
       }
       
       // Route to specific handlers
@@ -3082,6 +3235,9 @@
     // SHUTTER DRIFT CORRECTION FUNCTIONS
     // ════════════════════════════════════════════════════════════════════════
 
+    let lastKnownSecondsAgo = 0;
+    let lastUpdateTime = 0;
+    let liveUpdateTimerId = null;
     let driftChart = null;
 
     function refreshDriftStats() {
@@ -3184,15 +3340,6 @@
 
     // Initial load
     refreshDriftStats();
-
-
-    // ════════════════════════════════════════════════════════════════════════
-    // GLOBALE VARIABLEN FÜR LIVE-UPDATE
-    // ════════════════════════════════════════════════════════════════════════
-
-    let lastKnownSecondsAgo = 0;
-    let lastUpdateTime = 0;
-    let liveUpdateTimerId = null;
     
     // ════════════════════════════════════════════════════════════════════════
     // Handle BLE Sensor Update
@@ -3234,50 +3381,20 @@
             console.log('⏰ Time update:');
             console.log('  Received seconds_ago:', secondsAgo);
             console.log('  Type:', typeof secondsAgo);
-            console.log('  Is NaN?', isNaN(secondsAgo));
-            console.log('  Is null?', secondsAgo === null);
-            console.log('  Is undefined?', secondsAgo === undefined);
             
             let timeStr;
             
-            // Prüfe alle ungültigen Werte
-            if (secondsAgo === undefined || secondsAgo === null) {
-                // Backend hat keinen Wert gesendet
-                timeStr = 'Unknown';
-                console.warn('⚠ seconds_ago is undefined/null');
+            // Handle -1 explizit
+            if (secondsAgo === -1 || secondsAgo === undefined || secondsAgo === null) {
+                timeStr = 'Waiting for data...';
+                console.warn('⚠ seconds_ago is -1 (no valid data yet)');
                 
-                // Reset Live-Update
-                lastKnownSecondsAgo = 0;
-                lastUpdateTime = 0;
-                
-            } else if (secondsAgo === -1) {
-                // Backend signalisiert explizit "ungültig"
-                timeStr = 'No recent data';
-                console.warn('⚠ seconds_ago is -1 (no valid data)');
-                
-                // Reset Live-Update
-                lastKnownSecondsAgo = 0;
-                lastUpdateTime = 0;
-                
-            } else if (isNaN(secondsAgo)) {
-                // Sollte nicht vorkommen, aber sicher ist sicher
+            } else if (isNaN(secondsAgo) || secondsAgo < 0) {
                 timeStr = 'Invalid';
-                console.error('✗ seconds_ago is NaN!');
-                
-                // Reset Live-Update
-                lastKnownSecondsAgo = 0;
-                lastUpdateTime = 0;
-                
-            } else if (secondsAgo < 0) {
-                // Negative Werte (außer -1) sind ungültig
-                timeStr = 'Invalid';
-                console.error('✗ seconds_ago is negative:', secondsAgo);
-                
-                // Reset Live-Update
-                lastKnownSecondsAgo = 0;
-                lastUpdateTime = 0;
+                console.error('✗ seconds_ago is invalid:', secondsAgo);
                 
             } else {
+                // Valide Zeit - Speichere für Live-Update
                 lastKnownSecondsAgo = secondsAgo;
                 lastUpdateTime = Date.now();
                 
@@ -4809,8 +4926,8 @@
         const element = document.getElementById('ble-last-update');
         
         // Prüfe ob Element existiert und ob wir valide Daten haben
-            if (!element || lastUpdateTime === 0) {
-                return;
+            if (!element || lastUpdateTime === 0 || isNaN(lastKnownSecondsAgo)) {
+                return;  // ← Abbrechen wenn keine Daten
             }
             
             // Berechne aktuelle Sekunden
@@ -5240,34 +5357,75 @@
         liveUpdateTimerId = setInterval(() => {
             const element = document.getElementById('ble-last-update');
             
-            // Prüfe ob Element existiert und ob wir valide Daten haben
-            if (!element || lastUpdateTime === 0) {
+            // Safety Check 1: Element existiert?
+            if (!element) {
                 return;
             }
             
-            // Berechne aktuelle Sekunden seit letztem Backend-Update
-            const elapsedSinceLastUpdate = Math.floor((Date.now() - lastUpdateTime) / 1000);
+            // Safety Check 2: Haben wir valide Daten?
+            if (lastUpdateTime === 0 || lastKnownSecondsAgo < 0) {
+                // Keine Daten → Zeige "Waiting..."
+                if (element.innerText !== 'Waiting for data...') {
+                    element.innerText = 'Waiting for data...';
+                    element.style.color = '#888';
+                }
+                return;
+            }
+            
+            // Safety Check 3: Ist lastKnownSecondsAgo eine Zahl?
+            if (isNaN(lastKnownSecondsAgo)) {
+                console.error('✗ lastKnownSecondsAgo is NaN! Resetting...');
+                lastKnownSecondsAgo = 0;
+                lastUpdateTime = 0;
+                element.innerText = 'Error';
+                element.style.color = '#f44336';
+                return;
+            }
+            
+            // Berechne aktuelle Zeit
+            const now = Date.now();
+            const elapsedSinceLastUpdate = Math.floor((now - lastUpdateTime) / 1000);
             const currentSecondsAgo = lastKnownSecondsAgo + elapsedSinceLastUpdate;
             
-            // Formatiere Zeit
+            // Safety Check 4: Ist Ergebnis valide?
+            if (isNaN(currentSecondsAgo) || currentSecondsAgo < 0) {
+                console.error('✗ Invalid currentSecondsAgo:', currentSecondsAgo);
+                element.innerText = 'Error';
+                element.style.color = '#f44336';
+                
+                // Reset
+                lastKnownSecondsAgo = 0;
+                lastUpdateTime = 0;
+                return;
+            }
+            
+            // Formatiere Zeit + Farbe
             let timeStr;
-            if (currentSecondsAgo === 0) {
-                timeStr = 'Just now';
-            } else if (currentSecondsAgo < 60) {
+            let color;
+            
+            if (currentSecondsAgo < 60) {
                 timeStr = currentSecondsAgo + 's ago';
-            } else if (currentSecondsAgo < 3600) {
+                color = '#4CAF50';  // Grün
+            } else if (currentSecondsAgo < 300) {  // < 5 Min
                 timeStr = Math.floor(currentSecondsAgo / 60) + 'm ago';
-            } else if (currentSecondsAgo < 86400) {
+                color = '#2196F3';  // Blau
+            } else if (currentSecondsAgo < 3600) {  // < 1 Stunde
+                timeStr = Math.floor(currentSecondsAgo / 60) + 'm ago';
+                color = '#FF9800';  // Orange
+            } else if (currentSecondsAgo < 86400) {  // < 24 Stunden
                 timeStr = Math.floor(currentSecondsAgo / 3600) + 'h ago';
+                color = '#f44336';  // Rot
             } else {
                 timeStr = Math.floor(currentSecondsAgo / 86400) + 'd ago';
+                color = '#666';  // Grau
             }
             
             element.innerText = timeStr;
+            element.style.color = color;
             
         }, 1000);  // Update jede Sekunde
         
-        console.log('✓ Live-Update Timer started (ID:', liveUpdateTimerId, ')');
+        console.log('✓ Live-Update Timer started (with safety checks)');
     });
 
     // Cleanup beim Page Unload
