@@ -6,6 +6,7 @@
 #pragma once
 
 // #define CONFIG_ENABLE_SCENE_CLUSTER
+// #define CONFIG_ENABLE_CUSTOM_CLUSTER_IP
 
 #define DEVELOP_BUILD // ← Uncomment for develop builds (NVS WiFi only)
 

@@ -82,6 +82,7 @@ static void removeContactSensorEndpoint();
 static void removePowerSourceEndpoint();
 void enableContactSensorMatter();
 void disableContactSensorMatter();
+void performCompleteFactoryReset();
 
 // ============================================================================
 // Subscription Handlers (Vereinfacht - ohne private Methoden)
@@ -96,7 +97,7 @@ public:
         ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
         ESP_LOGI(TAG, "");
         
-        // ✅ Sende initiales Update (verzögert)
+        // Sende initiales Update (verzögert)
         // Nicht sofort, sondern nach 100ms damit Session bereit ist
         subscriptionEstablishedTime = millis();
         needsInitialUpdate = true;
@@ -111,7 +112,7 @@ public:
         ESP_LOGW(TAG, "");
     }
     
-    // ✅ Öffentliche Methode zum Senden des initialen Updates
+    // Öffentliche Methode zum Senden des initialen Updates
     void sendInitialUpdateIfNeeded() {
         if (!needsInitialUpdate) {
             return;
@@ -708,10 +709,10 @@ void setup() {
     esp_log_level_set("esp_matter_command", ESP_LOG_INFO);
     esp_log_level_set("esp_matter_cluster", ESP_LOG_WARN);
     esp_log_level_set("WiFiMgr", ESP_LOG_DEBUG);        // WiFi Manager: DEBUG
-    esp_log_level_set("BLEAutoStart", ESP_LOG_NONE);    // BLE: INFO
-    esp_log_level_set("ShellyBLE", ESP_LOG_NONE);       // BLE: INFO
-    esp_log_level_set("BLESimple", ESP_LOG_NONE);       // BLE: INFO
-    esp_log_level_set("NimBLE", ESP_LOG_NONE);          // NimBLE: INFO
+    esp_log_level_set("BLEAutoStart", ESP_LOG_INFO);    // BLE: INFO
+    esp_log_level_set("ShellyBLE", ESP_LOG_INFO);       // BLE: INFO
+    esp_log_level_set("BLESimple", ESP_LOG_INFO);       // BLE: INFO
+    esp_log_level_set("NimBLE", ESP_LOG_INFO);          // NimBLE: INFO
     esp_log_level_set("wifi", ESP_LOG_NONE);            // WiFi: ERROR
     esp_log_level_set("Shutter", ESP_LOG_DEBUG);        // Shutter: DEBUG
     esp_log_level_set("ShutterDriver", ESP_LOG_DEBUG);  // ShutterDriver: DEBUG
@@ -1133,6 +1134,8 @@ void setup() {
     // Custom Cluster - Device IP
     // ========================================================================
 
+    #ifdef CONFIG_ENABLE_CUSTOM_CLUSTER_DEVICE_IP
+
     cluster_t *custom_cluster = cluster::create(ep, CLUSTER_ID_ROLLERSHUTTER_CONFIG, 
                                                 CLUSTER_FLAG_SERVER);
     if (custom_cluster) {
@@ -1167,6 +1170,8 @@ void setup() {
         
         ESP_LOGI(TAG, "Custom cluster 0x%04X created", CLUSTER_ID_ROLLERSHUTTER_CONFIG);
     }
+
+    #endif // CONFIG_ENABLE_CUSTOM_CLUSTER_DEVICE_IP
 
     // ========================================================================
     // Contact Sensor & Power Source
@@ -1264,6 +1269,8 @@ void setup() {
     
     if (WiFi.status() == WL_CONNECTED) {
         Serial.println("\nWiFi connected");
+
+       #ifdef CONFIG_ENABLE_CUSTOM_CLUSTER_IP
         
         // Update Device IP in Custom Cluster
         snprintf(device_ip_str, sizeof(device_ip_str), "%s", 
@@ -1284,6 +1291,8 @@ void setup() {
         }
         
         ESP_LOGI(TAG, "");
+
+        #endif // CONFIG_ENABLE_CUSTOM_CLUSTER_IP
         
     } else {
         ESP_LOGE(TAG, "\n✗ WiFi connection failed!");
@@ -1540,7 +1549,7 @@ void setup() {
         vTaskDelay(pdMS_TO_TICKS(8000));
         
         // ══════════════════════════════════════════════════════════════════
-        // CHECK: Did Matter initialize NimBLE?
+        // CHECK & INITIALIZE NIMBLE
         // ══════════════════════════════════════════════════════════════════
         
         ESP_LOGI(TASK_TAG, "→ Checking NimBLE status...");
@@ -1554,7 +1563,7 @@ void setup() {
             ESP_LOGI(TASK_TAG, "  → This is expected - Matter uses isolated BLE");
             ESP_LOGI(TASK_TAG, "  → We will initialize NimBLE ourselves");
         }
-        
+
         ESP_LOGI(TASK_TAG, "");
         
         // ══════════════════════════════════════════════════════════════════
@@ -1643,7 +1652,16 @@ void setup() {
         ESP_LOGI(TASK_TAG, "✓ Auto-start check complete");
         ESP_LOGI(TASK_TAG, "");
         
-        delete p;
+        UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+        ESP_LOGI(TAG, "Task -ble_autostart- Stack High Water Mark: %u bytes", highWater * sizeof(StackType_t));
+
+        if (highWater < 256) {  // < 1KB frei
+            ESP_LOGW(TAG, "⚠️ Stack critically low!");
+        }
+        AutoStartParams* p_copy = p;
+        esp_task_wdt_delete(NULL);
+
+        delete p_copy;
         vTaskDelete(NULL);
         
     }, "ble_autostart", 6144, params, 1, NULL);
@@ -1825,6 +1843,8 @@ void loop() {
         }
     }
 
+    #ifdef CONFIG_ENABLE_CUSTOM_CLUSTER_IP
+
     // IP Address Update
     static uint32_t last_ip_check = 0;
     if (WiFi.status() == WL_CONNECTED && millis() - last_ip_check >= 30000) {
@@ -1853,6 +1873,7 @@ void loop() {
         }
     }
 
+    #endif // CONFIG_ENABLE_CUSTOM_CLUSTER_IP
 
     // Web UI Updates
     static uint32_t last_web = 0;
@@ -2307,6 +2328,134 @@ static esp_err_t app_command_cb(const ConcreteCommandPath &path,
     ESP_LOGI(TAG, "└─────────────────────────────────");
     
     return ESP_ERR_NOT_SUPPORTED;
+}
+
+void performCompleteFactoryReset() {
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "║           ⚠️  FACTORY RESET IN PROGRESS  ⚠️              ║");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // 1. SHUTTER STATE (KVS)
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Clearing Shutter State...");
+    
+    if (shutter_handle) {
+        Preferences prefs;
+        if (prefs.begin("shutter", false)) {
+            prefs.clear();
+            prefs.end();
+            ESP_LOGI(TAG, "  ✓ Shutter KVS cleared");
+        }
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // 2. BLE MANAGER (ShellyBLE)
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Clearing BLE Data...");
+    
+    {
+        Preferences prefs;
+        if (prefs.begin("ShellyBLE", false)) {
+            prefs.clear();
+            prefs.end();
+            ESP_LOGI(TAG, "  ✓ ShellyBLE NVS cleared");
+        }
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // 3. WEBUI AUTH
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Clearing WebUI Auth...");
+    
+    {
+        Preferences prefs;
+        if (prefs.begin("webui_auth", false)) {
+            prefs.clear();
+            prefs.end();
+            ESP_LOGI(TAG, "  ✓ WebUI Auth NVS cleared");
+        }
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // 4. MATTER SETTINGS
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Clearing Matter Settings...");
+    
+    {
+        Preferences prefs;
+        if (prefs.begin("matter", false)) {
+            prefs.clear();
+            prefs.end();
+            ESP_LOGI(TAG, "  ✓ Matter NVS cleared");
+        }
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // 5. DEVICE NAMING
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Clearing Device Naming...");
+    
+    {
+        Preferences prefs;
+        if (prefs.begin("device_name", false)) {
+            prefs.clear();
+            prefs.end();
+            ESP_LOGI(TAG, "  ✓ Device Naming NVS cleared");
+        }
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // 6. WIFI CREDENTIALS
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Clearing WiFi Credentials...");
+    
+    {
+        Preferences prefs;
+        if (prefs.begin("wifi_creds", false)) {
+            prefs.clear();
+            prefs.end();
+            ESP_LOGI(TAG, "  ✓ WiFi Credentials NVS cleared");
+        }
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // 7. MATTER STACK (WICHTIG!)
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Performing Matter Factory Reset...");
+    
+    esp_matter::factory_reset();  // ← Löscht alle Matter-Daten
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "✓✓✓ FACTORY RESET COMPLETE ✓✓✓");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "All data erased:");
+    ESP_LOGI(TAG, "  • Shutter calibration & position");
+    ESP_LOGI(TAG, "  • BLE sensor pairing");
+    ESP_LOGI(TAG, "  • WebUI credentials");
+    ESP_LOGI(TAG, "  • Matter commissioning");
+    ESP_LOGI(TAG, "  • Device naming");
+    ESP_LOGI(TAG, "  • WiFi credentials");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "Device will restart in 3 seconds...");
+    ESP_LOGI(TAG, "");
+    
+    // Wait before restart
+    vTaskDelay(pdMS_TO_TICKS(3000));
+    
+    // This is called by factory_reset(), but explicit for clarity
+    // esp_restart();  // ← factory_reset() already does this
 }
 
 

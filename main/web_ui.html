@@ -362,6 +362,31 @@
       background-clip: text;
       font-weight: 600;
     }
+
+    /* ============================================================================
+       Device Discovery Cards
+       ============================================================================ */
+    
+    .device-item {
+        transition: all 0.3s cubic-bezier(0.4, 0, 0.2, 1);
+    }
+
+    .device-item:hover {
+        background: rgba(255, 255, 255, 0.08) !important;
+        transform: translateX(5px);
+        border-color: rgba(33, 150, 243, 0.3) !important;
+        box-shadow: 0 4px 20px rgba(33, 150, 243, 0.2);
+    }
+
+    /* RSSI Animation */
+    @keyframes pulse-signal {
+        0%, 100% { opacity: 1; }
+        50% { opacity: 0.6; }
+    }
+
+    .device-item:hover .rssi-icon {
+        animation: pulse-signal 2s ease-in-out infinite;
+    }
     
     /* ============================================================================
        Status Grid
@@ -1355,16 +1380,49 @@
     </div>
 
     <!-- ============================================================================
-         System Tab
-         ============================================================================ -->
-    
+     System Tab
+     ============================================================================ -->
+
     <div id="system" class="hidden" role="tabpanel" aria-labelledby="nav-system">
+      
+      <!-- System Information Card -->
       <div class="card">
         <h2>System Information</h2>
         <table class="info-table" id="sysinfo" role="table">
           <tbody></tbody>
         </table>
       </div>
+
+      <!-- Network Devices Card -->
+      <div class="card">
+        <h2>🌐 Network Devices</h2>
+        
+        <div style="display:flex;justify-content:space-between;align-items:center;margin-bottom:20px;flex-wrap:wrap;gap:10px">
+          <p style="color:#888;margin:0">
+            Other BeltWinder devices in your network
+          </p>
+          
+          <button class="btn secondary" 
+                  onclick="discoverDevices()" 
+                  id="discover-btn"
+                  style="padding:10px 20px"
+                  aria-label="Scan for devices">
+            <span>🔍 Scan Network</span>
+          </button>
+        </div>
+        
+        <!-- Device List -->
+        <div id="device-list">
+          <div style="text-align:center;color:#666;padding:40px 20px">
+            <div style="font-size:3em;margin-bottom:10px;opacity:0.3">🌐</div>
+            <div>Click "Scan Network" to discover devices</div>
+            <div style="font-size:0.85em;color:#888;margin-top:10px">
+              Finds all BeltWinder devices via mDNS
+            </div>
+          </div>
+        </div>
+      </div>
+
     </div>
 
     <!-- ============================================================================
@@ -2203,6 +2261,333 @@
       contactSensorEndpointActive: false
     };
 
+    // ════════════════════════════════════════════════════════════════════════
+    // DEVICE DISCOVERY
+    // ════════════════════════════════════════════════════════════════════════
+
+    function discoverDevices() {
+        if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
+            showErrorBanner('Connection Error', 'WebSocket not connected', 'error');
+            return;
+        }
+        
+        console.log('🔍 Starting device discovery...');
+        
+        // Button State
+        const btn = document.getElementById('discover-btn');
+        btn.disabled = true;
+        btn.innerHTML = '<span class="spinner"></span> <span>Scanning...</span>';
+        
+        // Show Loading
+        showLoading('Scanning network for BeltWinder devices...');
+        
+        // Send Command
+        AppState.ws.send('discover_devices');
+        
+        // Safety Timeout (20 seconds - WiFi scan + mDNS query kann dauern)
+        setTimeout(() => {
+            btn.disabled = false;
+            btn.innerHTML = '<span>🔍 Scan Network</span>';
+            hideLoading();
+        }, 20000);
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Handle Device Discovery Response
+    // ════════════════════════════════════════════════════════════════════════
+
+    function handleDeviceDiscovery(data) {
+        console.log('📡 Device discovery response:', data);
+        
+        hideLoading();
+        
+        // Reset Button
+        const btn = document.getElementById('discover-btn');
+        if (btn) {
+            btn.disabled = false;
+            btn.innerHTML = '<span>🔍 Scan Network</span>';
+        }
+        
+        const container = document.getElementById('device-list');
+        if (!container) return;
+        
+        // ────────────────────────────────────────────────────────────────────
+        // Empty State
+        // ────────────────────────────────────────────────────────────────────
+        
+        if (!data.devices || data.devices.length === 0) {
+            container.innerHTML = `
+                <div style="text-align:center;color:#666;padding:40px 20px">
+                    <div style="font-size:3em;margin-bottom:10px;opacity:0.3">📭</div>
+                    <div style="font-size:1.1em;margin-bottom:10px">No other devices found</div>
+                    <div style="font-size:0.9em;color:#888">
+                        • Make sure devices are powered on<br>
+                        • Check WiFi connection<br>
+                        • Devices must be on same network
+                    </div>
+                </div>
+            `;
+            
+            showErrorBanner('No Devices Found', 
+                          'No other BeltWinder devices detected', 
+                          'warning');
+            return;
+        }
+        
+        // ────────────────────────────────────────────────────────────────────
+        // Render Device List with Room & Type Info
+        // ────────────────────────────────────────────────────────────────────
+        
+        let html = '<div style="display:grid;gap:15px">';
+        
+        data.devices.forEach(device => {
+            // RSSI Color & Label
+            let rssiColor = '#f44336';  // Red (poor)
+            let rssiLabel = 'Poor';
+            let rssiIcon = '📶';
+            let rssiBarWidth = '25%';
+            
+            if (device.rssi >= -50) {
+                rssiColor = '#4CAF50';  // Green (excellent)
+                rssiLabel = 'Excellent';
+                rssiIcon = '📶📶📶📶';
+                rssiBarWidth = '100%';
+            } else if (device.rssi >= -60) {
+                rssiColor = '#8BC34A';  // Light Green (good)
+                rssiLabel = 'Good';
+                rssiIcon = '📶📶📶';
+                rssiBarWidth = '75%';
+            } else if (device.rssi >= -70) {
+                rssiColor = '#FF9800';  // Orange (fair)
+                rssiLabel = 'Fair';
+                rssiIcon = '📶📶';
+                rssiBarWidth = '50%';
+            } else if (device.rssi >= -80) {
+                rssiColor = '#FFA726';  // Light Orange (weak)
+                rssiLabel = 'Weak';
+                rssiIcon = '📶';
+                rssiBarWidth = '25%';
+            }
+            
+            // Room Icon Mapping
+            const roomIcons = {
+                'Wohnzimmer': '🛋️',
+                'Schlafzimmer': '🛏️',
+                'Kueche': '🍳',
+                'Bad': '🚿',
+                'Flur': '🚪',
+                'Buero': '💼',
+                'Kinderzimmer': '🧸',
+                'Gaestezimmer': '🛎️',
+                'Esszimmer': '🍽️',
+                'Keller': '🔦',
+                'Garage': '🚗',
+                'Terrasse': '🌿',
+                'Balkon': '🌺'
+            };
+            
+            const roomIcon = roomIcons[device.room] || '📍';
+            
+            // Type Icon
+            const typeIcon = device.type === 'Fenster' ? '🪟' : '🚪';
+            
+            html += `
+                <div class="device-item" 
+                    style="background:rgba(255,255,255,0.04);
+                            padding:20px;
+                            border-radius:14px;
+                            border:1px solid rgba(255,255,255,0.08);
+                            transition:all 0.3s;
+                            position:relative;
+                            overflow:hidden">
+                    
+                    <!-- Hover Glow Effect -->
+                    <div style="position:absolute;
+                              top:0;
+                              left:-100%;
+                              width:100%;
+                              height:100%;
+                              background:linear-gradient(90deg, transparent, rgba(33,150,243,0.1), transparent);
+                              transition:left 0.5s;
+                              pointer-events:none"
+                        class="hover-glow"></div>
+                    
+                    <div style="display:grid;
+                              gap:15px;
+                              position:relative;
+                              z-index:1">
+                        
+                        <!-- Header: Device Name + RSSI Badge -->
+                        <div style="display:flex;
+                                  justify-content:space-between;
+                                  align-items:start;
+                                  gap:15px;
+                                  flex-wrap:wrap">
+                            
+                            <!-- Device Info -->
+                            <div style="flex:1;min-width:200px">
+                                <div style="font-size:1.3em;
+                                          font-weight:bold;
+                                          margin-bottom:8px;
+                                          color:#2196F3;
+                                          display:flex;
+                                          align-items:center;
+                                          gap:8px">
+                                    <span>🎚️</span>
+                                    <span>${escapeHtml(device.hostname)}</span>
+                                </div>
+                                
+                                <!-- Location Info -->
+                                <div style="display:flex;
+                                          align-items:center;
+                                          gap:8px;
+                                          margin-bottom:5px;
+                                          font-size:0.95em">
+                                    <span style="font-size:1.2em">${roomIcon}</span>
+                                    <span style="color:#aaa;font-weight:600">
+                                        ${escapeHtml(device.room)}
+                                    </span>
+                                    <span style="color:#666">•</span>
+                                    <span style="font-size:1.1em">${typeIcon}</span>
+                                    <span style="color:#888">
+                                        ${escapeHtml(device.type)}
+                                    </span>
+                                </div>
+                            </div>
+                            
+                            <!-- RSSI Badge -->
+                            <div style="text-align:center;
+                                      min-width:100px;
+                                      background:rgba(0,0,0,0.3);
+                                      padding:12px;
+                                      border-radius:12px;
+                                      border:1px solid ${rssiColor}30">
+                                <div style="font-size:1.5em;margin-bottom:5px">
+                                    ${rssiIcon}
+                                </div>
+                                <div style="font-size:1.1em;
+                                          font-weight:bold;
+                                          color:${rssiColor};
+                                          margin-bottom:3px">
+                                    ${device.rssi} dBm
+                                </div>
+                                <div style="font-size:0.8em;color:#888">
+                                    ${rssiLabel}
+                                </div>
+                                
+                                <!-- RSSI Bar -->
+                                <div style="width:100%;
+                                          height:4px;
+                                          background:rgba(255,255,255,0.1);
+                                          border-radius:2px;
+                                          margin-top:8px;
+                                          overflow:hidden">
+                                    <div style="width:${rssiBarWidth};
+                                              height:100%;
+                                              background:${rssiColor};
+                                              transition:width 0.3s"></div>
+                                </div>
+                            </div>
+                            
+                        </div>
+                        
+                        <!-- Connection Info -->
+                        <div style="display:grid;
+                                  grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+                                  gap:12px;
+                                  padding-top:12px;
+                                  border-top:1px solid rgba(255,255,255,0.05)">
+                            
+                            <!-- IP Address -->
+                            <div>
+                                <div style="font-size:0.8em;
+                                          color:#666;
+                                          margin-bottom:5px;
+                                          text-transform:uppercase;
+                                          letter-spacing:0.5px">
+                                    📍 IP Address
+                                </div>
+                                <a href="http://${escapeHtml(device.ip)}" 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  style="color:#2196F3;
+                                          text-decoration:none;
+                                          font-family:monospace;
+                                          font-size:1.05em;
+                                          display:inline-block;
+                                          padding:6px 12px;
+                                          background:rgba(33,150,243,0.1);
+                                          border-radius:8px;
+                                          border:1px solid rgba(33,150,243,0.2);
+                                          transition:all 0.3s"
+                                  onmouseover="this.style.background='rgba(33,150,243,0.2)';
+                                              this.style.borderColor='rgba(33,150,243,0.4)'"
+                                  onmouseout="this.style.background='rgba(33,150,243,0.1)';
+                                              this.style.borderColor='rgba(33,150,243,0.2)'">
+                                    ${escapeHtml(device.ip)} ↗
+                                </a>
+                            </div>
+                            
+                            <!-- mDNS Name -->
+                            <div>
+                                <div style="font-size:0.8em;
+                                          color:#666;
+                                          margin-bottom:5px;
+                                          text-transform:uppercase;
+                                          letter-spacing:0.5px">
+                                    🌐 mDNS Name
+                                </div>
+                                <a href="http://${escapeHtml(device.hostname)}.local" 
+                                  target="_blank" 
+                                  rel="noopener noreferrer"
+                                  style="color:#4CAF50;
+                                          text-decoration:none;
+                                          font-family:monospace;
+                                          font-size:0.95em;
+                                          display:inline-block;
+                                          padding:6px 12px;
+                                          background:rgba(76,175,80,0.1);
+                                          border-radius:8px;
+                                          border:1px solid rgba(76,175,80,0.2);
+                                          transition:all 0.3s;
+                                          word-break:break-all"
+                                  onmouseover="this.style.background='rgba(76,175,80,0.2)';
+                                              this.style.borderColor='rgba(76,175,80,0.4)'"
+                                  onmouseout="this.style.background='rgba(76,175,80,0.1)';
+                                              this.style.borderColor='rgba(76,175,80,0.2)'">
+                                    ${escapeHtml(device.hostname)}.local ↗
+                                </a>
+                            </div>
+                            
+                        </div>
+                        
+                    </div>
+                </div>
+            `;
+        });
+        
+        html += '</div>';
+        
+        // Update Container
+        container.innerHTML = html;
+        
+        // Add hover effects via CSS injection
+        const style = document.createElement('style');
+        style.textContent = `
+            .device-item:hover .hover-glow {
+                left: 100%;
+            }
+        `;
+        document.head.appendChild(style);
+        
+        // Success Message
+        showErrorBanner('Scan Complete', 
+                      `Found ${data.devices.length} device(s) in your network`, 
+                      'success');
+        
+        console.log('✓ Rendered', data.devices.length, 'devices');
+    }
+
     // ============================================================================
     // Password Management
     // ============================================================================
@@ -2479,6 +2864,10 @@
         
         if (data.position) {
             document.getElementById('device-position').value = data.position;
+        }
+
+        if (data.type === 'device_discovery') {
+            handleDeviceDiscovery(data);
         }
         
         // Update preview
@@ -4916,6 +5305,14 @@
         console.log('🚀 BeltWinder Matter - Initializing...');
         connectWebSocket();
         show('overview');
+      
+        // Auto-Discovery nach 5 Sekunden
+        //setTimeout(() => {
+        //    if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
+        //        console.log('🔍 Auto-discovering devices...');
+        //        discoverDevices();
+        //    }
+        //}, 5000);
         
         // Live-Update Timer
         if (liveUpdateTimerId !== null) {

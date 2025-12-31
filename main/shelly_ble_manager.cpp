@@ -117,12 +117,13 @@ bool ShellyBLEManager::ensureBLEStarted() {
     ESP_LOGI(TAG, "✓ Scanner ready");
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║  ✓ BLE FULLY OPERATIONAL          ║");
+    ESP_LOGI(TAG, "║  ✓ BLE FULLY OPERATIONAL        ║");
     ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
     ESP_LOGI(TAG, "");
     
     return true;
 }
+
 
 void ShellyBLEManager::end() {
     if (!initialized) return;

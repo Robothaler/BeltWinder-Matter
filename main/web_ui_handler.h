@@ -7,6 +7,7 @@
 
 #include <Arduino.h>
 #include <esp_http_server.h>
+#include <ESPmDNS.h>
 #include "rollershutter_driver.h"
 #include "shelly_ble_manager.h"
 #include <vector>
@@ -15,6 +16,21 @@
 #include <freertos/semphr.h>
 
 typedef void (*endpoint_callback_t)();
+
+// ════════════════════════════════════════════════════════════════════════
+// DEVICE DISCOVERY (HEAP-FREE)
+// ════════════════════════════════════════════════════════════════════════
+
+#define MAX_DISCOVERED_DEVICES 10
+
+struct DiscoveredDevice {
+    char hostname[64];     // z.B. "BW-Wohnzimmer-Fenster-Links"
+    char ip[16];          // z.B. "192.168.1.100"
+    char room[32];        // z.B. "Wohnzimmer" (aus TXT record)
+    char type[16];        // z.B. "Fenster" (aus TXT record)
+    int8_t rssi;          // WiFi Signal Strength (-100 bis 0)
+    bool valid;           // Slot belegt?
+};
 
 class WebUIHandler {
 public:
@@ -45,6 +61,9 @@ public:
     static esp_err_t drift_stats_handler(httpd_req_t *req);
     static esp_err_t drift_reset_handler(httpd_req_t *req);
     
+    // Device Discovery (Heap-Free, nutzt existierende mDNS Registration)
+    static int discoverDevices(DiscoveredDevice* devices, int max_devices);
+    void broadcastDiscoveredDevices();
 
 private:
     app_driver_handle_t handle;

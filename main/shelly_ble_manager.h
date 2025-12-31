@@ -20,7 +20,7 @@
 #include <NimBLEClient.h>
 
 // Task Stack Sizes
-#define BLE_AUTOSTART_TASK_STACK_SIZE  (8192)   // 8KB (war 2KB)
+#define BLE_AUTOSTART_TASK_STACK_SIZE  (8192)   // 8KB
 #define BLE_RESTART_TASK_STACK_SIZE    (8192)   // 8KB
 
 // BTHome Constants

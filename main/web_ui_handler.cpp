@@ -1072,7 +1072,9 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         // wait a moment to ensure message is sent
         vTaskDelay(pdMS_TO_TICKS(1000));
         
-        esp_matter::factory_reset();
+        // ✅ CALL COMPLETE FACTORY RESET
+        extern void performCompleteFactoryReset();
+        performCompleteFactoryReset();
         
         // will never reach here (factory_reset() makes esp_restart())
     }
@@ -1419,6 +1421,36 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         
         // Never reached
     }
+
+    else if (strcmp(cmd, "discover_devices") == 0) {
+    ESP_LOGI(TAG, "WebSocket: Device Discovery requested");
+    
+    WebUIHandler* handler = self;
+    
+    xTaskCreate([](void* param) {
+        WebUIHandler* h = (WebUIHandler*)param;
+        
+        ESP_LOGI(TAG, "Discovery task started");
+        
+        // Remove from Watchdog (scan kann lange dauern)
+        esp_task_wdt_delete(NULL);
+        
+        // Run discovery
+        h->broadcastDiscoveredDevices();
+        
+        ESP_LOGI(TAG, "Discovery task complete");
+
+        UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+        ESP_LOGI(TAG, "Task -device_disc- Stack High Water Mark: %u bytes", highWater * sizeof(StackType_t));
+
+        if (highWater < 256) {  // < 1KB frei
+            ESP_LOGW(TAG, "⚠️ Stack critically low!");
+        }
+        
+        vTaskDelete(NULL);
+        
+    }, "device_disc", 4096, handler, 1, NULL); // Stack 4KB
+}
     
     // ============================================================================
     // BLE Commands
@@ -1561,7 +1593,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                 // unique_ptr wird automatisch freigegeben
                 vTaskDelete(NULL);
                 
-            }, "ble_scan_mon", 4096, params, 1, NULL);  // Stack: 4KB (kleiner Task)
+            }, "ble_scan_mon", 6144, params, 1, NULL);  // Stack: 6KB
         }
     }
 
@@ -2148,13 +2180,17 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_encrypt\"")) {
                 }
             }
 
+            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
+            ESP_LOGI(TAG, "Task -ble_enc_task- Stack High Water Mark: %u bytes", highWater * sizeof(StackType_t));
+
+            if (highWater < 256) {  // < 1KB frei
+                ESP_LOGW(TAG, "⚠️ Stack critically low!");
+            }
+
             delete p;
             vTaskDelete(NULL);
 
-            UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-            ESP_LOGI(TAG, "Task Stack (ble_enc_task) usage: %u bytes free", highWater * sizeof(StackType_t));
-
-        }, "ble_enc_task", 6144, params, 1, NULL);
+        }, "ble_enc_task", 8192, params, 1, NULL);
     }
 }
 
@@ -2329,7 +2365,7 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_enable_encryption\"")) {
             
             // High Water Mark Logging
             UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-            ESP_LOGI(TAG, "Task Stack High Water Mark: %u bytes", 
+            ESP_LOGI(TAG, "Task -ble_enc- Stack High Water Mark: %u bytes", 
                      highWater * sizeof(StackType_t));
             
             if (highWater < 512) {
@@ -2515,7 +2551,6 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"")) {
                     httpd_ws_send_frame_async(p->handler->server, p->fd, &frame);
                     xSemaphoreGive(p->handler->client_mutex);
                 }
-                
                 // unique_ptr wird automatisch freigegeben
                 vTaskDelete(NULL);
                 return;
@@ -2712,7 +2747,7 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"")) {
             
             // High Water Mark Logging
             UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-            ESP_LOGI(TAG, "Task Stack High Water Mark: %u bytes", 
+            ESP_LOGI(TAG, "Task -ble_enc_known- Stack High Water Mark: %u bytes", 
                      highWater * sizeof(StackType_t));
             
             if (highWater < 512) {
@@ -2728,7 +2763,7 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"")) {
             // unique_ptr wird automatisch freigegeben
             vTaskDelete(NULL);
             
-        }, "ble_enc_known", 8192, params, 5, NULL);  // Stack: 8KB
+        }, "ble_enc_known", 4086, params, 5, NULL);  // Stack: 4KB
         
         ESP_LOGI(TAG, "✓ Already-Encrypted pairing task created");
     }
@@ -3043,7 +3078,7 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
                 
                 // High Water Mark Logging
                 UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-                ESP_LOGI(TAG, "Task Stack High Water Mark: %u bytes", 
+                ESP_LOGI(TAG, "Task -ble_read- Stack High Water Mark: %u bytes", 
                         highWater * sizeof(StackType_t));
                 
                 if (highWater < 512) {
@@ -3688,4 +3723,232 @@ void WebUIHandler::disconnect_all_clients() {
         
         xSemaphoreGive(client_mutex);
     }
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// DEVICE DISCOVERY (HEAP-FREE, ESP32 mDNS API korrigiert)
+// ════════════════════════════════════════════════════════════════════════
+
+int WebUIHandler::discoverDevices(DiscoveredDevice* devices, int max_devices) {
+    if (!devices || max_devices == 0) {
+        return 0;
+    }
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   DISCOVERING BELTWINDER DEVICES  ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // ────────────────────────────────────────────────────────────────────
+    // SCHRITT 1: mDNS Query für "beltwinder" Service
+    // ────────────────────────────────────────────────────────────────────
+    
+    ESP_LOGI(TAG, "→ Querying mDNS for 'beltwinder' services...");
+    
+    // Query für "beltwinder._tcp"
+    int mdns_count = MDNS.queryService("beltwinder", "tcp");
+    
+    ESP_LOGI(TAG, "✓ Found %d beltwinder service(s)", mdns_count);
+    
+    if (mdns_count == 0) {
+        ESP_LOGI(TAG, "ℹ No other BeltWinder devices found");
+        return 0;
+    }
+    
+    // ────────────────────────────────────────────────────────────────────
+    // SCHRITT 2: WiFi Scan für RSSI (einmal, für alle Geräte)
+    // ────────────────────────────────────────────────────────────────────
+    
+    ESP_LOGI(TAG, "→ WiFi scan for RSSI measurement...");
+    
+    int16_t n = WiFi.scanNetworks(false, false, false, 300);
+    
+    if (n < 0) {
+        ESP_LOGW(TAG, "⚠ WiFi scan failed, RSSI unavailable");
+    } else {
+        ESP_LOGI(TAG, "✓ WiFi scan complete (%d networks)", n);
+    }
+    
+    // ────────────────────────────────────────────────────────────────────
+    // SCHRITT 3: Process discovered devices
+    // ────────────────────────────────────────────────────────────────────
+    
+    ESP_LOGI(TAG, "→ Processing discovered devices...");
+    ESP_LOGI(TAG, "");
+    
+    int found_count = 0;
+    
+    for (int i = 0; i < mdns_count && found_count < max_devices; i++) {
+        // ────────────────────────────────────────────────────────────────
+        // Get Hostname
+        // ────────────────────────────────────────────────────────────────
+        
+        String hostname = MDNS.hostname(i);
+        
+        // ────────────────────────────────────────────────────────────────
+        // Get IP Address (ESP32 mDNS API)
+        // ────────────────────────────────────────────────────────────────
+        
+        IPAddress ip = MDNS.address(i);  // ← ESP32 verwendet address(i), nicht IP(i)!
+        
+        // Skip if invalid IP
+        if (ip == IPAddress(0, 0, 0, 0)) {
+            ESP_LOGW(TAG, "  Skipping %s (no IP)", hostname.c_str());
+            continue;
+        }
+        
+        // Skip if it's our own IP
+        if (ip == WiFi.localIP()) {
+            ESP_LOGD(TAG, "  Skipping self: %s", hostname.c_str());
+            continue;
+        }
+        
+        // ────────────────────────────────────────────────────────────────
+        // Extract TXT Records (room, type)
+        // ────────────────────────────────────────────────────────────────
+        
+        String room = "";
+        String type = "";
+        
+        // ESP32 mDNS: Anzahl der TXT records
+        int txt_count = MDNS.numTxt(i);
+        
+        for (int j = 0; j < txt_count; j++) {
+            String key = MDNS.txtKey(i, j);
+            String value = MDNS.txt(i, j);
+            
+            if (key == "room") {
+                room = value;
+            } else if (key == "type") {
+                type = value;
+            }
+        }
+        
+        // ────────────────────────────────────────────────────────────────
+        // Estimate RSSI from WiFi scan
+        // ────────────────────────────────────────────────────────────────
+        
+        int8_t rssi = -100;  // Default: very weak
+        
+        if (n > 0) {
+            // Verwende aktuelles WiFi RSSI als Schätzung
+            // (alle Geräte im gleichen Netzwerk haben ähnliche Werte)
+            rssi = WiFi.RSSI();
+            
+            // Optional: Versuche genaueren Wert durch IP-Matching
+            // (funktioniert nur wenn Geräte als WiFi APs sichtbar sind)
+            for (int j = 0; j < n; j++) {
+                // Compare SSID with hostname (approximation)
+                String scan_ssid = WiFi.SSID(j);
+                if (scan_ssid.indexOf(hostname) >= 0) {
+                    rssi = WiFi.RSSI(j);
+                    ESP_LOGD(TAG, "  Found RSSI match for %s: %d dBm", 
+                             hostname.c_str(), rssi);
+                    break;
+                }
+            }
+        }
+        
+        // ────────────────────────────────────────────────────────────────
+        // Store in static buffer (HEAP-FREE!)
+        // ────────────────────────────────────────────────────────────────
+        
+        DiscoveredDevice* dev = &devices[found_count];
+        
+        // Hostname
+        strncpy(dev->hostname, hostname.c_str(), sizeof(dev->hostname) - 1);
+        dev->hostname[sizeof(dev->hostname) - 1] = '\0';
+        
+        // IP
+        snprintf(dev->ip, sizeof(dev->ip), "%s", ip.toString().c_str());
+        
+        // Room
+        strncpy(dev->room, room.c_str(), sizeof(dev->room) - 1);
+        dev->room[sizeof(dev->room) - 1] = '\0';
+        
+        // Type
+        strncpy(dev->type, type.c_str(), sizeof(dev->type) - 1);
+        dev->type[sizeof(dev->type) - 1] = '\0';
+        
+        // RSSI
+        dev->rssi = rssi;
+        
+        // Valid
+        dev->valid = true;
+        
+        // Log
+        ESP_LOGI(TAG, "  [%d] %s", found_count + 1, dev->hostname);
+        ESP_LOGI(TAG, "      IP:   %s", dev->ip);
+        ESP_LOGI(TAG, "      Room: %s", dev->room[0] ? dev->room : "(unknown)");
+        ESP_LOGI(TAG, "      Type: %s", dev->type[0] ? dev->type : "(unknown)");
+        ESP_LOGI(TAG, "      RSSI: %d dBm", dev->rssi);
+        ESP_LOGI(TAG, "");
+        
+        found_count++;
+    }
+    
+    // ────────────────────────────────────────────────────────────────────
+    // Cleanup
+    // ────────────────────────────────────────────────────────────────────
+    
+    if (n > 0) {
+        WiFi.scanDelete();
+    }
+    
+    ESP_LOGI(TAG, "✓ Discovery complete: Found %d device(s)", found_count);
+    ESP_LOGI(TAG, "");
+    
+    return found_count;
+}
+
+
+// ════════════════════════════════════════════════════════════════════════
+// Broadcast Discovered Devices to WebUI
+// ════════════════════════════════════════════════════════════════════════
+
+void WebUIHandler::broadcastDiscoveredDevices() {
+    ESP_LOGI(TAG, "Broadcasting discovered devices to clients...");
+    
+    // ✅ STATISCHER BUFFER (kein Heap!)
+    static DiscoveredDevice devices[MAX_DISCOVERED_DEVICES];
+    
+    // Clear buffer
+    memset(devices, 0, sizeof(devices));
+    
+    // Discover
+    int count = discoverDevices(devices, MAX_DISCOVERED_DEVICES);
+    
+    if (count == 0) {
+        const char* empty_msg = "{\"type\":\"device_discovery\",\"devices\":[]}";
+        broadcast_to_all_clients(empty_msg);
+        return;
+    }
+    
+    // ✅ JSON Builder (Stack-basiert, kein Heap!)
+    char json_buf[2048];  // 2KB Stack Buffer
+    int offset = 0;
+    
+    offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+                      "{\"type\":\"device_discovery\",\"devices\":[");
+    
+    for (int i = 0; i < count && i < MAX_DISCOVERED_DEVICES; i++) {
+        if (!devices[i].valid) continue;
+        
+        offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+                          "%s{\"hostname\":\"%s\",\"ip\":\"%s\",\"room\":\"%s\",\"type\":\"%s\",\"rssi\":%d}",
+                          (i > 0) ? "," : "",
+                          devices[i].hostname,
+                          devices[i].ip,
+                          devices[i].room,
+                          devices[i].type,
+                          devices[i].rssi);
+    }
+    
+    snprintf(json_buf + offset, sizeof(json_buf) - offset, "]}");
+    
+    // Broadcast
+    broadcast_to_all_clients(json_buf);
+    
+    ESP_LOGI(TAG, "✓ Broadcasted %d devices", count);
 }
