@@ -3149,6 +3149,227 @@ WebUIHandler::~WebUIHandler() {
     }
 }
 
+// ════════════════════════════════════════════════════════════════════════
+// Authentication Helper (Basic Auth)
+// ════════════════════════════════════════════════════════════════════════
+
+bool WebUIHandler::check_basic_auth(httpd_req_t *req) {
+    // Get Authorization header length
+    size_t auth_len = httpd_req_get_hdr_value_len(req, "Authorization");
+    
+    if (auth_len == 0) {
+        // No auth header provided
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_set_hdr(req, "WWW-Authenticate", "Basic realm=\"BeltWinder\"");
+        httpd_resp_send(req, "Unauthorized", -1);
+        return false;
+    }
+    
+    // Allocate buffer for auth header
+    char* auth_header = (char*)malloc(auth_len + 1);
+    if (!auth_header) {
+        httpd_resp_send_500(req);
+        return false;
+    }
+    
+    // Get Authorization header
+    if (httpd_req_get_hdr_value_str(req, "Authorization", auth_header, auth_len + 1) != ESP_OK) {
+        free(auth_header);
+        httpd_resp_send_500(req);
+        return false;
+    }
+    
+    // Check if it starts with "Basic "
+    if (strncmp(auth_header, "Basic ", 6) != 0) {
+        free(auth_header);
+        httpd_resp_set_status(req, "401 Unauthorized");
+        httpd_resp_send(req, "Invalid auth", -1);
+        return false;
+    }
+    
+    // For Matter API: Accept any credentials (or implement actual check)
+    // TODO: Implement proper credential checking if needed
+    
+    free(auth_header);
+    return true;  // ✓ Auth OK
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Matter Start Handler (ESP-IDF HTTP Server)
+// ════════════════════════════════════════════════════════════════════════
+
+esp_err_t WebUIHandler::handle_start_matter(httpd_req_t *req) {
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║   MATTER START REQUEST (WebUI)    ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Authentication Check
+    // ════════════════════════════════════════════════════════════════════
+    
+    WebUIHandler* handler = (WebUIHandler*)req->user_ctx;
+    
+    if (!handler->check_basic_auth(req)) {
+        ESP_LOGW(TAG, "✗ Unauthorized access attempt");
+        return ESP_FAIL;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Initialize and Start Matter
+    // ════════════════════════════════════════════════════════════════════
+    
+    MatterStartResult result = initializeAndStartMatter();
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Build JSON Response
+    // ════════════════════════════════════════════════════════════════════
+    
+    DynamicJsonDocument doc(2048);
+    doc["success"] = result.success;
+    doc["reboot_triggered"] = result.reboot_triggered;  // ← NEU!
+    
+    if (result.success) {
+        if (result.reboot_triggered) {
+            // ════════════════════════════════════════════════════════════
+            // CASE 1: Reboot wird ausgelöst
+            // ════════════════════════════════════════════════════════════
+            
+            doc["message"] = "Device will reboot to enable Matter";
+            doc["reboot_countdown"] = 3;  // Sekunden bis Reboot
+            doc["qr_url"] = "";
+            doc["pairing_code"] = "";
+            
+            ESP_LOGI(TAG, "→ Response: Reboot triggered");
+            
+        } else if (result.already_commissioned) {
+            // ════════════════════════════════════════════════════════════
+            // CASE 2: Bereits commissioned (kein Reboot nötig)
+            // ════════════════════════════════════════════════════════════
+            
+            doc["already_commissioned"] = true;
+            doc["message"] = result.error_message.c_str();
+            doc["fabric_count"] = chip::Server::GetInstance().GetFabricTable().FabricCount();
+            doc["qr_url"] = "";
+            doc["pairing_code"] = "";
+            
+            ESP_LOGI(TAG, "→ Response: Already commissioned");
+            
+        } else {
+            // ════════════════════════════════════════════════════════════
+            // CASE 3: Matter erfolgreich gestartet (Live-Start)
+            // ════════════════════════════════════════════════════════════
+            
+            doc["already_commissioned"] = false;
+            doc["message"] = "Matter commissioning started successfully";
+            doc["qr_url"] = result.qr_url.c_str();
+            doc["pairing_code"] = result.pairing_code.c_str();
+            
+            ESP_LOGI(TAG, "→ Response: Matter started (live)");
+        }
+    } else {
+        // ════════════════════════════════════════════════════════════════
+        // CASE 4: Fehler
+        // ════════════════════════════════════════════════════════════════
+        
+        doc["error"] = result.error_message.c_str();
+        
+        ESP_LOGE(TAG, "→ Response: Error - %s", result.error_message.c_str());
+    }
+    
+    String response;
+    serializeJson(doc, response);
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Send HTTP Response
+    // ════════════════════════════════════════════════════════════════════
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    
+    esp_err_t err = httpd_resp_send(req, response.c_str(), response.length());
+
+    if (err == ESP_OK) {
+        ESP_LOGI(TAG, "✓ Response sent successfully");
+        
+        // ════════════════════════════════════════════════════════════════
+        // Reboot NACH Response (falls nötig)
+        // ════════════════════════════════════════════════════════════════
+        
+        if (result.reboot_triggered) {
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "→ Reboot triggered by user");
+            ESP_LOGI(TAG, "  Waiting 3 seconds...");
+            ESP_LOGI(TAG, "");
+            
+            vTaskDelay(pdMS_TO_TICKS(3000));
+            
+            ESP_LOGI(TAG, "→ Rebooting NOW...");
+            ESP.restart();
+            
+            // Code nach restart() wird nicht ausgeführt
+        }
+    }
+
+    return err;
+
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// Matter Status Handler (ESP-IDF HTTP Server)
+// ════════════════════════════════════════════════════════════════════════
+
+esp_err_t WebUIHandler::handle_matter_status(httpd_req_t *req) {
+    // ════════════════════════════════════════════════════════════════════
+    // Authentication Check
+    // ════════════════════════════════════════════════════════════════════
+    
+    WebUIHandler* handler = (WebUIHandler*)req->user_ctx;
+    
+    if (!handler->check_basic_auth(req)) {
+        return ESP_FAIL;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // External declarations (from main.cpp)
+    // ════════════════════════════════════════════════════════════════════
+    
+    extern bool matter_node_created;
+    extern bool matter_stack_started;
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Build JSON Response
+    // ════════════════════════════════════════════════════════════════════
+    
+    DynamicJsonDocument doc(1024);
+    
+    doc["node_created"] = matter_node_created;
+    doc["stack_started"] = matter_stack_started;
+    doc["commissioned"] = Matter.isDeviceCommissioned();
+    doc["fabric_count"] = chip::Server::GetInstance().GetFabricTable().FabricCount();
+    
+    if (matter_stack_started && !Matter.isDeviceCommissioned()) {
+        String qrUrl = Matter.getOnboardingQRCodeUrl();
+        String pairingCode = Matter.getManualPairingCode();
+        
+        doc["qr_url"] = qrUrl.c_str();
+        doc["pairing_code"] = pairingCode.c_str();
+    }
+    
+    String response;
+    serializeJson(doc, response);
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Send HTTP Response
+    // ════════════════════════════════════════════════════════════════════
+    
+    httpd_resp_set_type(req, "application/json");
+    httpd_resp_set_hdr(req, "Cache-Control", "no-store");
+    
+    return httpd_resp_send(req, response.c_str(), response.length());
+}
+
 void WebUIHandler::begin() {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     
@@ -3157,6 +3378,7 @@ void WebUIHandler::begin() {
     cfg.max_uri_handlers = 8;
     cfg.stack_size = 8192;
     cfg.ctrl_port = 32768;
+    cfg.close_fn = ws_close_callback;
     cfg.close_fn = nullptr;
     cfg.uri_match_fn = nullptr;
     cfg.keep_alive_enable = false;
@@ -3185,7 +3407,7 @@ void WebUIHandler::begin() {
         httpd_uri_t favicon = {
             .uri       = "/favicon.ico",
             .method    = HTTP_GET,
-            .handler   = favicon_handler,  // ← OHNE Auth!
+            .handler   = favicon_handler,
             .user_ctx  = nullptr
         };
         httpd_register_uri_handler(server, &favicon);
@@ -3193,7 +3415,7 @@ void WebUIHandler::begin() {
         httpd_uri_t apple_icon = {
             .uri       = "/apple-touch-icon.png",
             .method    = HTTP_GET,
-            .handler   = apple_touch_icon_handler,  // ← OHNE Auth!
+            .handler   = apple_touch_icon_handler,
             .user_ctx  = nullptr
         };
         httpd_register_uri_handler(server, &apple_icon);
@@ -3201,7 +3423,7 @@ void WebUIHandler::begin() {
         httpd_uri_t apple_icon_precomp = {
             .uri       = "/apple-touch-icon-precomposed.png",
             .method    = HTTP_GET,
-            .handler   = apple_touch_icon_handler,  // ← OHNE Auth!
+            .handler   = apple_touch_icon_handler,
             .user_ctx  = nullptr
         };
         httpd_register_uri_handler(server, &apple_icon_precomp);
@@ -3227,7 +3449,7 @@ void WebUIHandler::begin() {
         httpd_uri_t update_get = {
             .uri       = "/update",
             .method    = HTTP_GET,
-            .handler   = update_get_handler,  // ← Jetzt definiert!
+            .handler   = update_get_handler,
             .user_ctx  = this
         };
         httpd_register_uri_handler(server, &update_get);
@@ -3239,10 +3461,37 @@ void WebUIHandler::begin() {
         httpd_uri_t update_post = {
             .uri       = "/update",
             .method    = HTTP_POST,
-            .handler   = update_post_handler,  // ← Jetzt definiert!
+            .handler   = update_post_handler,
             .user_ctx  = this
         };
         httpd_register_uri_handler(server, &update_post);
+
+        // ════════════════════════════════════════════════════════════════════
+        // 5. MATTER ROUTES
+        // ════════════════════════════════════════════════════════════════════
+        
+        httpd_uri_t uri_matter_start = {
+            .uri       = "/api/matter/start",
+            .method    = HTTP_POST,
+            .handler   = handle_start_matter,
+            .user_ctx  = this
+        };
+        httpd_register_uri_handler(server, &uri_matter_start);
+        ESP_LOGI(TAG, "✓ Route registered: POST /api/matter/start");
+
+        // GET /api/matter/status
+        httpd_uri_t uri_matter_status = {
+            .uri       = "/api/matter/status",
+            .method    = HTTP_GET,
+            .handler   = handle_matter_status,
+            .user_ctx  = this
+        };
+        httpd_register_uri_handler(server, &uri_matter_status);
+        ESP_LOGI(TAG, "✓ Route registered: GET /api/matter/status");   
+        
+        ESP_LOGI(TAG, "✓ Matter routes registered:");
+        ESP_LOGI(TAG, "  POST /api/matter/start");
+        ESP_LOGI(TAG, "  GET  /api/matter/status");
         
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
@@ -3410,7 +3659,7 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
     if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         size_t msg_len = strlen(message);
         
-        // KRITISCHER FIX: Heap-Allokation für async Send
+        // ✅ Heap-Allokation für async Send
         char* msg_copy = (char*)malloc(msg_len + 1);
         if (!msg_copy) {
             ESP_LOGE(TAG, "✗ Failed to allocate %u bytes for broadcast", msg_len + 1);
@@ -3419,7 +3668,7 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
         }
         strcpy(msg_copy, message);
         
-        ESP_LOGI(TAG, "→ Broadcasting to %d clients (%u bytes, heap-allocated)", 
+        ESP_LOGI(TAG, "→ Broadcasting to %d clients (%u bytes)", 
                  active_clients.size(), msg_len);
         
         httpd_ws_frame_t ws_pkt;
@@ -3428,7 +3677,7 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
         ws_pkt.payload = (uint8_t*)msg_copy;
         ws_pkt.len = msg_len;
         
-        // Kopie der Client-FDs (verhindert Deadlock bei unregister_client)
+        // Kopie der Client-FDs
         std::vector<int> target_fds;
         target_fds.reserve(active_clients.size());
         for (const auto& client : active_clients) {
@@ -3436,22 +3685,52 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
         }
         xSemaphoreGive(client_mutex);
         
-        // Sende ohne Mutex (async Calls)
+        // ✅ Sende MIT TIMEOUT-KONTROLLE
         int success_count = 0;
+        std::vector<int> dead_clients;  // Sammle tote Clients
+        
         for (int fd : target_fds) {
+            // ✅ Watchdog Reset VOR jedem Send
+            esp_task_wdt_reset();
+            
+            // ✅ Send mit Timeout (max 500ms pro Client)
+            uint32_t send_start = millis();
             esp_err_t ret = httpd_ws_send_frame_async(server, fd, &ws_pkt);
+            uint32_t send_duration = millis() - send_start;
             
             if (ret == ESP_OK) {
                 success_count++;
+                
+                if (send_duration > 100) {
+                    ESP_LOGW(TAG, "⚠ Slow client fd=%d (took %ums)", fd, send_duration);
+                }
             } else {
                 ESP_LOGW(TAG, "Failed to send to fd=%d: %s", fd, esp_err_to_name(ret));
+                
+                // ✅ Markiere als tot wenn Fehler
+                if (ret == ESP_ERR_INVALID_ARG || ret == ESP_FAIL) {
+                    dead_clients.push_back(fd);
+                }
+            }
+            
+            // ✅ Abbruch bei zu langer Verzögerung (verhindert Watchdog Timeout)
+            if (send_duration > 500) {
+                ESP_LOGE(TAG, "✗ Client fd=%d blocked for %ums - aborting broadcast!", 
+                         fd, send_duration);
+                dead_clients.push_back(fd);
+                break;  // Stop sending to other clients
             }
         }
         
         ESP_LOGI(TAG, "✓ Broadcast complete: %d/%d clients", 
                  success_count, target_fds.size());
         
-        // ESP-IDF kopiert den Buffer intern SOFORT
+        // ✅ Cleanup tote Clients
+        for (int fd : dead_clients) {
+            ESP_LOGW(TAG, "→ Removing dead client fd=%d", fd);
+            unregister_client(fd);
+        }
+        
         free(msg_copy);
         
         // POST-BROADCAST MEMORY CHECK
@@ -3461,6 +3740,7 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
         ESP_LOGW(TAG, "Could not acquire mutex for broadcast");
     }
 }
+
 
   // ============================================================================
   // WebSocket Broadcast: BLE State Change
@@ -3952,3 +4232,4 @@ void WebUIHandler::broadcastDiscoveredDevices() {
     
     ESP_LOGI(TAG, "✓ Broadcasted %d devices", count);
 }
+

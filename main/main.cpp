@@ -48,6 +48,9 @@ static ShellyBLEManager* bleManager = nullptr;
 DeviceNaming* deviceNaming = nullptr;
 static Preferences matterPref;
 
+bool matter_node_created = false;  // extern zugänglich
+bool matter_stack_started = false; // extern zugänglich
+
 static char device_ip_str[DEVICE_IP_MAX_LENGTH] = "0.0.0.0";
 
 static bool hardware_initialized = false;
@@ -83,6 +86,9 @@ static void removePowerSourceEndpoint();
 void enableContactSensorMatter();
 void disableContactSensorMatter();
 void performCompleteFactoryReset();
+
+struct MatterStartResult;
+extern MatterStartResult initializeAndStartMatter();
 
 // ============================================================================
 // Subscription Handlers (Vereinfacht - ohne private Methoden)
@@ -177,8 +183,9 @@ static SubscriptionHandler subscriptionHandler;
 // ============================================================================
 
 void onShutterStateChanged(RollerShutter::State state) {
-    if (window_covering_endpoint_id == 0) {
-        return;  // Endpoint noch nicht initialisiert
+    // ⚠️ NUR Matter updaten, wenn Stack läuft!
+    if (!matter_stack_started || window_covering_endpoint_id == 0) {
+        return;
     }
     
     uint8_t opStateValue;
@@ -201,7 +208,6 @@ void onShutterStateChanged(RollerShutter::State state) {
             break;
     }
     
-    // Direkt als uint8 übergeben (Matter SDK erwartet Bitmap8)
     esp_matter_attr_val_t opstate_val = esp_matter_uint8(opStateValue);
     attribute::update(window_covering_endpoint_id, 
                      chip::app::Clusters::WindowCovering::Id,
@@ -211,6 +217,7 @@ void onShutterStateChanged(RollerShutter::State state) {
     ESP_LOGD(TAG, "Operational State updated: %d → Matter: 0x%02X", 
              (int)state, opStateValue);
 }
+
 
 // ============================================================================
 // BLE Sensor Data Callback
@@ -224,7 +231,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
              data.illuminance,
              data.rotation,
              data.rssi);
-     ESP_LOGI(TAG, "  lastUpdate: %u (millis: %u)", data.lastUpdate, millis());
+    ESP_LOGI(TAG, "  lastUpdate: %u (millis: %u)", data.lastUpdate, millis());
     
     if (data.hasButtonEvent) {
         const char* eventName = (data.buttonEvent == BUTTON_SINGLE_PRESS) ? "SINGLE PRESS" : 
@@ -232,16 +239,17 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
         ESP_LOGI(TAG, "  Button Event: %s", eventName);
     }
 
-    // WebUI Update
+    // WebUI Update (IMMER aktiv)
     if (webUI) {
         ESP_LOGI(TAG, "→ Sending sensor data to WebUI...");
         webUI->broadcastSensorDataUpdate(address, data);
-    } else {
-        ESP_LOGW(TAG, "⚠ webUI is NULL, cannot broadcast!");
     }
 
-    // Matter Update (nur wenn commissioned)
-    if (contact_sensor_matter_enabled) {
+        // ════════════════════════════════════════════════════════════════
+    // Matter Update (nur wenn commissioned UND Matter läuft!)
+    // ════════════════════════════════════════════════════════════════
+    
+    if (contact_sensor_matter_enabled && matter_stack_started) {
         bool is_commissioned = Matter.isDeviceCommissioned() && 
                               (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
         
@@ -256,7 +264,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
             }
             
             // Power Source Endpoint erstellen (NUR EINMAL!)
-            if (!power_source_endpoint_active) {  // ← WICHTIGE PRÜFUNG!
+            if (!power_source_endpoint_active) {
                 ESP_LOGI(TAG, "→ Creating Power Source endpoint...");
                 node_t* node = node::get();
                 if (node) {
@@ -264,7 +272,10 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                 }
             }
             
-            // Attribute updaten (NUR wenn Endpoints aktiv sind)
+            // ────────────────────────────────────────────────────────
+            // Contact Sensor Attribute updaten
+            // ────────────────────────────────────────────────────────
+            
             if (contact_sensor_endpoint_active && contact_sensor_endpoint_id != 0) {
                 ESP_LOGD(TAG, "→ Updating Contact Sensor attributes...");
                 
@@ -276,7 +287,10 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                                  &contact_val);
             }
             
-            // Power Source Attribute updaten (NUR wenn Endpoint aktiv ist)
+            // ────────────────────────────────────────────────────────
+            // Power Source Attribute updaten
+            // ────────────────────────────────────────────────────────
+            
             if (power_source_endpoint_active && power_source_endpoint_id != 0) {
                 ESP_LOGD(TAG, "→ Updating Power Source attributes...");
                 
@@ -326,7 +340,10 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
         }
     }
     
-    // Rolladen-Logik (IMMER aktiv)
+    // ════════════════════════════════════════════════════════════════
+    // Rolladen-Logik (IMMER aktiv, unabhängig von Matter!)
+    // ════════════════════════════════════════════════════════════════
+    
     shutter_driver_set_window_state(shutter_handle, data.windowOpen);
 }
 
@@ -588,8 +605,8 @@ void enableContactSensorMatter() {
         ESP_LOGW(TAG, "⚠ No BLE sensor paired - endpoints will be created on first data");
     }
     
-    if (!Matter.isDeviceCommissioned()) {
-        ESP_LOGW(TAG, "⚠ Matter not commissioned - endpoints will be created after commissioning");
+    if (!matter_stack_started) {
+        ESP_LOGW(TAG, "⚠ Matter not started yet - endpoints will be created after Matter starts");
     }
     
     contact_sensor_matter_enabled = true;
@@ -599,8 +616,8 @@ void enableContactSensorMatter() {
     matterPref.putBool("cs_matter_en", true);
     matterPref.end();
     
-    // Endpoints erstellen wenn möglich
-    if (Matter.isDeviceCommissioned() && bleManager && bleManager->isPaired()) {
+    // ⚠️ Endpoints NUR erstellen, wenn Matter läuft!
+    if (matter_stack_started && Matter.isDeviceCommissioned() && bleManager && bleManager->isPaired()) {
         node_t* node = node::get();
         if (node) {
             // Contact Sensor Endpoint
@@ -693,6 +710,604 @@ void disableContactSensorMatter() {
         ESP_LOGI(TAG, "");
     }
 
+
+// ════════════════════════════════════════════════════════════════════════
+// Global State für verzögerte Matter Initialization
+// ════════════════════════════════════════════════════════════════════════
+
+static node_t* matter_node = nullptr;
+
+// ════════════════════════════════════════════════════════════════════════
+// STEP 1: Create Matter Node & Endpoints
+// ════════════════════════════════════════════════════════════════════════
+
+bool createMatterNode() {
+    if (matter_node_created) {
+        ESP_LOGW(TAG, "Matter node already created");
+        return true;
+    }
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "║         CREATING MATTER NODE & ENDPOINTS                  ║");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Matter Node erstellen
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Creating Matter node...");
+    
+    node::config_t node_config;
+    matter_node = node::create(&node_config, app_attribute_update_cb, nullptr);
+    
+    if (!matter_node) {
+        ESP_LOGE(TAG, "✗ Failed to create Matter node");
+        return false;
+    }
+    
+    ESP_LOGI(TAG, "✓ Matter node created");
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Window Covering Endpoint
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Creating Window Covering endpoint...");
+    
+    window_covering_device::config_t wc_config;
+    wc_config.window_covering.type = 0;  // Rollershutter
+    wc_config.window_covering.feature_flags = 
+        (uint32_t)chip::app::Clusters::WindowCovering::Feature::kLift |
+        (uint32_t)chip::app::Clusters::WindowCovering::Feature::kPositionAwareLift |
+        (uint32_t)chip::app::Clusters::WindowCovering::Feature::kAbsolutePosition;
+    
+    endpoint_t *ep = window_covering_device::create(matter_node, &wc_config, 
+                                                     ENDPOINT_FLAG_NONE, NULL);
+    
+    if (!ep) {
+        ESP_LOGE(TAG, "✗ Failed to create Window Covering endpoint");
+        return false;
+    }
+    
+    window_covering_endpoint_id = endpoint::get_id(ep);
+    
+    ESP_LOGI(TAG, "✓ Window Covering endpoint created (ID: %d)", window_covering_endpoint_id);
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Mode Attribute konfigurieren
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Configuring Mode attribute...");
+    
+    cluster_t* wc_cluster = cluster::get(ep, chip::app::Clusters::WindowCovering::Id);
+    
+    if (wc_cluster) {
+        bool inverted = shutter_driver_get_direction_inverted(shutter_handle);
+        uint8_t mode_value = inverted ? 0x01 : 0x00;
+        
+        esp_matter_attr_val_t mode_val = esp_matter_bitmap8(mode_value);
+        attribute_t* mode_attr = attribute::create(wc_cluster, 
+                                    chip::app::Clusters::WindowCovering::Attributes::Mode::Id,
+                                    ATTRIBUTE_FLAG_WRITABLE,
+                                    mode_val);
+        
+        if (mode_attr) {
+            ESP_LOGI(TAG, "✓ Mode attribute configured: 0x%02X (inverted=%s)", 
+                    mode_value, inverted ? "YES" : "NO");
+        }
+    }
+    
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Position aus KVS wiederherstellen
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Restoring saved position...");
+    
+    if (wc_cluster) {
+        uint8_t saved_percent = shutter_driver_get_current_percent(shutter_handle);
+        bool is_calibrated = shutter_driver_is_calibrated(shutter_handle);
+        
+        if (is_calibrated) {
+            uint16_t pos_100ths = saved_percent * 100;
+            
+            // Current Position
+            attribute_t* current_attr = attribute::get(wc_cluster, 
+                chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id);
+            
+            if (current_attr) {
+                esp_matter_attr_val_t current_val = esp_matter_uint16(pos_100ths);
+                attribute::set_val(current_attr, &current_val);
+                ESP_LOGI(TAG, "✓ Current Position restored: %d%%", saved_percent);
+            }
+            
+            // Target Position
+            attribute_t* target_attr = attribute::get(wc_cluster, 
+                chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id);
+            
+            if (target_attr) {
+                esp_matter_attr_val_t target_val = esp_matter_uint16(pos_100ths);
+                attribute::set_val(target_attr, &target_val);
+                ESP_LOGI(TAG, "✓ Target Position restored: %d%%", saved_percent);
+            }
+            
+            // Operational Status (Stopped)
+            attribute_t* opstate_attr = attribute::get(wc_cluster, 
+                chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id);
+            
+            if (opstate_attr) {
+                esp_matter_attr_val_t opstate_val = esp_matter_uint8(0x00);
+                attribute::set_val(opstate_attr, &opstate_val);
+                ESP_LOGI(TAG, "✓ Operational Status: Stopped");
+            }
+            
+        } else {
+            ESP_LOGW(TAG, "⚠ Shutter not calibrated - using default position (0%)");
+        }
+    }
+    
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Covering Delegate registrieren
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Registering Covering Delegate...");
+    
+    shutter_driver_set_covering_delegate_endpoint(window_covering_endpoint_id);
+    
+    chip::app::Clusters::WindowCovering::Delegate* delegate = 
+        shutter_driver_get_covering_delegate();
+    
+    chip::app::Clusters::WindowCovering::SetDefaultDelegate(
+        (chip::EndpointId)window_covering_endpoint_id, 
+        delegate
+    );
+    
+    ESP_LOGI(TAG, "✓ Covering Delegate registered");
+    ESP_LOGI(TAG, "");
+    
+    // Endpoint aktivieren
+    esp_matter::endpoint::enable(ep);
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Optional: Custom Cluster (Device IP)
+    // ════════════════════════════════════════════════════════════════════
+    
+    #ifdef CONFIG_ENABLE_CUSTOM_CLUSTER_DEVICE_IP
+    
+    ESP_LOGI(TAG, "→ Creating Custom Cluster (Device IP)...");
+    
+    cluster_t *custom_cluster = cluster::create(ep, CLUSTER_ID_ROLLERSHUTTER_CONFIG, 
+                                                CLUSTER_FLAG_SERVER);
+    if (custom_cluster) {
+        esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
+        
+        attribute_t* ip_attr = attribute::create(
+            custom_cluster, 
+            ATTR_ID_DEVICE_IP, 
+            ATTRIBUTE_FLAG_NONE,
+            ip_val
+        );
+        
+        command::create(custom_cluster, CMD_ID_START_CALIBRATION, 
+                    COMMAND_FLAG_ACCEPTED, app_command_cb);
+        
+        ESP_LOGI(TAG, "✓ Custom cluster created (0x%04X)", CLUSTER_ID_ROLLERSHUTTER_CONFIG);
+    }
+    
+    #endif
+    
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Optional: Scene Cluster
+    // ════════════════════════════════════════════════════════════════════
+    
+    #ifdef CONFIG_ENABLE_SCENE_CLUSTER
+    
+    ESP_LOGI(TAG, "→ Creating Scene Cluster...");
+    
+    cluster_t* scene_cluster = cluster::create(ep, CLUSTER_ID_SCENES, 
+                                            CLUSTER_FLAG_SERVER);
+    if (scene_cluster) {
+        attribute::create(scene_cluster, ATTR_ID_SCENE_COUNT, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_uint8(SCENE_MAPPING_COUNT));
+        
+        attribute::create(scene_cluster, ATTR_ID_CURRENT_SCENE, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_uint8(0));
+        
+        attribute::create(scene_cluster, ATTR_ID_CURRENT_GROUP, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_uint16(0));
+        
+        attribute::create(scene_cluster, ATTR_ID_SCENE_VALID, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_bool(false));
+        
+        attribute::create(scene_cluster, ATTR_ID_NAME_SUPPORT, 
+                        ATTRIBUTE_FLAG_NONE, 
+                        esp_matter_bitmap8(0x80));
+        
+        command::create(scene_cluster, CMD_ID_RECALL_SCENE, 
+                    COMMAND_FLAG_ACCEPTED, app_command_cb);
+        
+        command::create(scene_cluster, CMD_ID_GET_SCENE_MEMBERSHIP, 
+                    COMMAND_FLAG_ACCEPTED, app_command_cb);
+        
+        ESP_LOGI(TAG, "✓ Scene Cluster created (%d scenes)", SCENE_MAPPING_COUNT);
+    }
+    
+    #endif
+    
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Contact Sensor & Power Source (falls aktiviert)
+    // ════════════════════════════════════════════════════════════════════
+    
+    matterPref.begin("matter", true);
+    contact_sensor_matter_enabled = matterPref.getBool("cs_matter_en", false);
+    bool cs_was_active = matterPref.getBool("cs_active", false);
+    bool ps_was_active = matterPref.getBool("ps_active", false);
+    matterPref.end();
+    
+    if (contact_sensor_matter_enabled && (cs_was_active || ps_was_active)) {
+        ESP_LOGI(TAG, "→ Creating Contact Sensor endpoints...");
+        
+        if (cs_was_active) {
+            createContactSensorEndpoint(matter_node);
+        }
+        if (cs_was_active || ps_was_active) {
+            createPowerSourceEndpoint(matter_node);
+        }
+    }
+    
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Node Creation Complete
+    // ════════════════════════════════════════════════════════════════════
+    
+    matter_node_created = true;
+    
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "║         ✓ MATTER NODE CREATION COMPLETE                  ║");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    return true;
+}
+
+// ════════════════════════════════════════════════════════════════════════
+// STEP 2: Start Matter Stack
+// ════════════════════════════════════════════════════════════════════════
+
+bool startMatterStack() {
+    if (!matter_node_created) {
+        ESP_LOGE(TAG, "✗ Matter node not created yet!");
+        ESP_LOGE(TAG, "  Call createMatterNode() first");
+        return false;
+    }
+    
+    if (matter_stack_started) {
+                ESP_LOGW(TAG, "Matter stack already started");
+        return true;
+    }
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "║            STARTING MATTER STACK (ON-DEMAND)             ║");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Matter Stack starten
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Starting Matter stack...");
+    
+    esp_err_t err = esp_matter::start(nullptr);
+    
+    if (err != ESP_OK) {
+        ESP_LOGE(TAG, "✗ Failed to start Matter stack: %s", esp_err_to_name(err));
+        return false;
+    }
+    
+    matter_stack_started = true;
+    
+    ESP_LOGI(TAG, "✓ Matter stack started successfully");
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Subscription Handler aktivieren
+    // ════════════════════════════════════════════════════════════════════
+    
+    chip::app::InteractionModelEngine* imEngine = chip::app::InteractionModelEngine::GetInstance();
+    if (imEngine) {
+        ESP_LOGI(TAG, "✓ Subscription monitoring active");
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Device Naming anwenden
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (deviceNaming) {
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        deviceNaming->apply();
+        
+        DeviceNaming::DeviceName names = deviceNaming->getNames();
+        
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Device Identification:");
+        ESP_LOGI(TAG, "  Network Hostname: %s.local", names.hostname.c_str());
+        ESP_LOGI(TAG, "  Matter Name: %s", names.matterName.c_str());
+    }
+    
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Hardware initialisieren (falls noch nicht)
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (!hardware_initialized) {
+        ESP_LOGI(TAG, "→ Initializing hardware...");
+        ((RollerShutter*)shutter_handle)->initHardware();
+        hardware_initialized = true;
+        ESP_LOGI(TAG, "✓ Hardware initialized");
+    }
+    
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Commissioning Status prüfen
+    // ════════════════════════════════════════════════════════════════════
+    
+    bool commissioned = Matter.isDeviceCommissioned();
+    uint8_t fabric_count = chip::Server::GetInstance().GetFabricTable().FabricCount();
+    
+    ESP_LOGI(TAG, "Matter Status:");
+    ESP_LOGI(TAG, "  Commissioned: %s", commissioned ? "YES" : "NO");
+    ESP_LOGI(TAG, "  Fabrics: %d", fabric_count);
+    ESP_LOGI(TAG, "");
+    
+    if (!commissioned || fabric_count == 0) {
+        // ════════════════════════════════════════════════════════════════
+        // Pairing Information generieren
+        // ════════════════════════════════════════════════════════════════
+        
+        String qrUrl = Matter.getOnboardingQRCodeUrl();
+        String pairingCode = Matter.getManualPairingCode();
+        
+        ESP_LOGI(TAG, "═══════════════════════════════════════════════════════════");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "   📱  MATTER COMMISSIONING READY");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "═══════════════════════════════════════════════════════════");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "QR Code URL:");
+        ESP_LOGI(TAG, "  %s", qrUrl.c_str());
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Manual Pairing Code:");
+        ESP_LOGI(TAG, "  %s", pairingCode.c_str());
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Steps to commission:");
+        ESP_LOGI(TAG, "  1. Open your Matter controller app (Home Assistant, Apple Home, etc.)");
+        ESP_LOGI(TAG, "  2. Select 'Add Device' or 'Add Matter Device'");
+        ESP_LOGI(TAG, "  3. Scan the QR code shown in the WebUI");
+        ESP_LOGI(TAG, "  4. Follow the on-screen instructions");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "═══════════════════════════════════════════════════════════");
+        ESP_LOGI(TAG, "");
+        
+    } else {
+        ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+        ESP_LOGI(TAG, "║                                                           ║");
+        ESP_LOGI(TAG, "║           ✓ ALREADY COMMISSIONED                         ║");
+        ESP_LOGI(TAG, "║                                                           ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Device is operational with %d fabric(s)", fabric_count);
+        ESP_LOGI(TAG, "");
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Complete
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "║         ✓ MATTER STACK FULLY OPERATIONAL                 ║");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    return true;
+}
+
+bool isMatterBusy() {
+    using namespace chip::DeviceLayer;
+    
+    // Prüfe ob Commissioning läuft
+    if (!ConnectivityMgr().IsBLEAdvertisingEnabled()) {
+        return false;  // Kein BLE-Advertising = Matter nicht beschäftigt
+    }
+    
+    // Prüfe ob Fabric existiert (= bereits commissioned)
+    if (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0) {
+        return false;  // Commissioned = BLE frei
+    }
+    
+    return true;  // Matter nutzt BLE aktiv
+}
+
+MatterStartResult initializeAndStartMatter() {
+    MatterStartResult result;
+    result.success = false;
+    result.already_commissioned = false;
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "║         USER REQUESTED MATTER INITIALIZATION             ║");
+    ESP_LOGI(TAG, "║              (via WebUI Button Click)                     ║");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Step 1: Create Matter Node
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (!matter_node_created) {
+        ESP_LOGI(TAG, "→ Creating Matter node and endpoints...");
+        
+        if (!createMatterNode()) {
+            result.error_message = "Failed to create Matter node";
+            ESP_LOGE(TAG, "✗ %s", result.error_message.c_str());
+            return result;
+        }
+        
+        ESP_LOGI(TAG, "✓ Matter node created");
+        ESP_LOGI(TAG, "");
+        vTaskDelay(pdMS_TO_TICKS(500));
+    } else {
+                ESP_LOGI(TAG, "✓ Matter node already exists");
+        ESP_LOGI(TAG, "");
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Step 2: Start Matter Stack
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (!matter_stack_started) {
+        ESP_LOGI(TAG, "→ Starting Matter stack...");
+        
+        if (!startMatterStack()) {
+            result.error_message = "Failed to start Matter stack";
+            ESP_LOGE(TAG, "✗ %s", result.error_message.c_str());
+            return result;
+        }
+        
+        ESP_LOGI(TAG, "✓ Matter stack started");
+        ESP_LOGI(TAG, "");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+    } else {
+        ESP_LOGI(TAG, "✓ Matter stack already running");
+        ESP_LOGI(TAG, "");
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Step 3: SET NVS FLAG (Matter erfolgreich gestartet!)
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+    ESP_LOGI(TAG, "║  ENABLING MATTER PERSISTENCE      ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    matterPref.begin("matter", false);  // Write mode
+    matterPref.putBool("matter_enabled", true);
+    matterPref.end();
+    
+    ESP_LOGI(TAG, "✓ NVS Flag 'matter_enabled' set to TRUE");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "║         ⚠️  REBOOT REQUIRED FOR MATTER START             ║");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "Reason:");
+    ESP_LOGI(TAG, "  • Matter requires exclusive BT Controller access");
+    ESP_LOGI(TAG, "  • Clean initialization ensures no conflicts");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "After reboot:");
+    ESP_LOGI(TAG, "  ✓ Matter will auto-start");
+    ESP_LOGI(TAG, "  ✓ BLE will scan for paired sensor");
+    ESP_LOGI(TAG, "  ✓ WebUI remains accessible");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "→ Rebooting in 3 seconds...");
+    ESP_LOGI(TAG, "");
+
+    vTaskDelay(pdMS_TO_TICKS(3000));
+
+    // ⚠️ WICHTIG: Return-Wert anpassen!
+    result.success = true;
+    result.reboot_triggered = true;  // Neues Feld im Struct!
+
+    return result;  // Code nach restart() wird nicht ausgeführt
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Step 4: Generate Pairing Info
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "→ Generating pairing information...");
+    
+    bool commissioned = Matter.isDeviceCommissioned();
+    uint8_t fabric_count = chip::Server::GetInstance().GetFabricTable().FabricCount();
+    
+    result.already_commissioned = (commissioned && fabric_count > 0);
+    
+    if (result.already_commissioned) {
+        ESP_LOGW(TAG, "");
+        ESP_LOGW(TAG, "⚠ Device is already commissioned!");
+        ESP_LOGW(TAG, "  Fabrics: %d", fabric_count);
+        ESP_LOGW(TAG, "");
+        
+        result.success = true;
+        result.error_message = "Device is already commissioned with " + String(fabric_count) + " fabric(s)";
+        
+    } else {
+        result.qr_url = Matter.getOnboardingQRCodeUrl();
+        result.pairing_code = Matter.getManualPairingCode();
+        
+        if (result.qr_url.length() == 0 || result.pairing_code.length() == 0) {
+            result.error_message = "Failed to generate pairing information";
+            ESP_LOGE(TAG, "✗ %s", result.error_message.c_str());
+            ESP_LOGE(TAG, "  QR URL length: %d", result.qr_url.length());
+            ESP_LOGE(TAG, "  Pairing code length: %d", result.pairing_code.length());
+            return result;
+        }
+        
+        ESP_LOGI(TAG, "✓ Pairing information generated");
+        ESP_LOGI(TAG, "  QR URL: %s", result.qr_url.c_str());
+        ESP_LOGI(TAG, "  Pairing Code: %s", result.pairing_code.c_str());
+        ESP_LOGI(TAG, "");
+        
+        result.success = true;
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // Complete
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "║         ✓ MATTER INITIALIZATION COMPLETE                 ║");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    return result;
+}
+
+
 // ============================================================================
 // Setup
 // ============================================================================
@@ -717,15 +1332,59 @@ void setup() {
     esp_log_level_set("Shutter", ESP_LOG_DEBUG);        // Shutter: DEBUG
     esp_log_level_set("ShutterDriver", ESP_LOG_DEBUG);  // ShutterDriver: DEBUG
     esp_log_level_set("Main", ESP_LOG_INFO);            // Main: INFO
-    esp_log_level_set("WebUI", ESP_LOG_NONE);           // WebUI: DEBUG
+    esp_log_level_set("WebUI", ESP_LOG_DEBUG);           // WebUI: DEBUG
 
-    ESP_LOGI(TAG, "=== BeltWinder Matter - Starting ===");
 
-    #ifdef CONFIG_BT_ENABLED
-        ESP_ERROR_CHECK(esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT));
-        ESP_LOGI(TAG, "Classic BT memory released for BLE");
-    #endif
-
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                  BELTWINDER - STARTUP                    ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // PHASE 0: Check Matter Enable Flag
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "  PHASE 0: Matter Boot Decision");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "");
+    
+    bool matter_enabled = false;
+    
+    matterPref.begin("matter", true);  // Read-only
+    matter_enabled = matterPref.getBool("matter_enabled", false);
+    matterPref.end();
+    
+    ESP_LOGI(TAG, "NVS Flag 'matter_enabled': %s", matter_enabled ? "TRUE" : "FALSE");
+    ESP_LOGI(TAG, "");
+    
+    if (matter_enabled) {
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║  MATTER AUTO-START MODE           ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Matter will be initialized during boot");
+    } else {
+        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+        ESP_LOGI(TAG, "║  BLE-ONLY MODE (First Boot)      ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
+        ESP_LOGI(TAG, "Matter will NOT be started automatically");
+        ESP_LOGI(TAG, "User can enable via WebUI → 'Start Matter Commissioning'");
+    }
+    
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // PHASE 1: GPIO & Hardware Basics
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "  PHASE 1: Hardware Initialization");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "");
+    
     pinMode(CONFIG_PULSE_COUNTER_PIN, INPUT_PULLUP);
     pinMode(CONFIG_MOTOR_UP_PIN, INPUT_PULLUP);
     pinMode(CONFIG_MOTOR_DOWN_PIN, INPUT_PULLUP);
@@ -733,21 +1392,84 @@ void setup() {
     digitalWrite(CONFIG_BUTTON_UP_PIN, HIGH);
     pinMode(CONFIG_BUTTON_DOWN_PIN, OUTPUT);
     digitalWrite(CONFIG_BUTTON_DOWN_PIN, HIGH);
-    ESP_LOGI(TAG, "GPIOs configured");
-
+    
+    ESP_LOGI(TAG, "✓ GPIOs configured");
+    ESP_LOGI(TAG, "");
+    
+    // Watchdog
     loop_task_handle = xTaskGetCurrentTaskHandle();
     esp_task_wdt_add(loop_task_handle);
 
-    // ════════════════════════════════════════════════════════════════
-    // WiFi Manager - NUR wenn KEINE credentials.h UND KEINE NVS!
-    // ════════════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════
+    // ✓ Initialize NimBLE Stack
+    // ═══════════════════════════════════════════════════════════
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "  PHASE 1: NimBLE Initialization");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "");
     
+    #ifdef CONFIG_BT_ENABLED
+        esp_err_t ret = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✓ Classic BT memory released");
+        }
+    #endif
+    
+    ESP_LOGI(TAG, "→ Initializing NimBLE...");
+    
+    if (!NimBLEDevice::isInitialized()) {
+        NimBLEDevice::init("BeltWinder");
+        
+        if (NimBLEDevice::isInitialized()) {
+            ESP_LOGI(TAG, "✓ NimBLE initialized successfully");
+            ESP_LOGI(TAG, "  MTU: %d", NimBLEDevice::getMTU());
+        } else {
+            ESP_LOGE(TAG, "✗ CRITICAL: NimBLE failed!");
+        }
+    }
+    
+    ESP_LOGI(TAG, "");
+    
+    /*
+    // ════════════════════════════════════════════════════════════════════
+    // BT CONTROLLER INIT (MANUELL!)
+    // ════════════════════════════════════════════════════════════════════
+    
+    // ✅ WICHTIG: BT Memory freigeben (aber NICHT Controller starten!)
+    #ifdef CONFIG_BT_ENABLED
+        esp_err_t ret = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
+        if (ret == ESP_OK) {
+            ESP_LOGI(TAG, "✓ Classic BT memory released for BLE");
+        } else if (ret == ESP_ERR_INVALID_STATE) {
+            ESP_LOGD(TAG, "  (Classic BT memory already released)");
+        }
+        ESP_LOGI(TAG, "");
+    #endif
+    
+    // ✅ NEU: Log BT Controller Status (sollte IDLE sein)
+    esp_bt_controller_status_t bt_status = esp_bt_controller_get_status();
+    ESP_LOGI(TAG, "BT Controller Status: %d (%s)", bt_status,
+             bt_status == ESP_BT_CONTROLLER_STATUS_ENABLED ? "ENABLED" :
+             bt_status == ESP_BT_CONTROLLER_STATUS_INITED ? "INITED" : "IDLE");
+    ESP_LOGI(TAG, "  → Will be started by NimBLE when needed");
+    ESP_LOGI(TAG, "");
+    */
+    
+    // ════════════════════════════════════════════════════════════════════
+    // PHASE 2: WiFi Connection
+    // ════════════════════════════════════════════════════════════════════
+
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "  PHASE 2: WiFi Connection");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "");
+
     #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
-    
+
     // ────────────────────────────────────────────────────────────
     // 1. Prüfe credentials.h
     // ────────────────────────────────────────────────────────────
-    
+
     #ifdef DEVELOP_BUILD
         const char* credentials_h_ssid = WIFI_SSID;
         const char* credentials_h_password = WIFI_PASSWORD;
@@ -757,17 +1479,17 @@ void setup() {
         const char* credentials_h_password = "";
         bool has_credentials_h = false;
     #endif
-    
+
     // ────────────────────────────────────────────────────────────
     // 2. Prüfe NVS Credentials
     // ────────────────────────────────────────────────────────────
-    
+
     bool has_nvs_credentials = WiFiCredentials::exists();
-    
+
     // ────────────────────────────────────────────────────────────
     // 3. Entscheide: WiFi Manager nötig?
     // ────────────────────────────────────────────────────────────
-    
+
     if (!has_credentials_h && !has_nvs_credentials) {
         // Weder credentials.h noch NVS → WiFi Setup NÖTIG!
         
@@ -804,7 +1526,7 @@ void setup() {
         }
         
     } else {
-        // Credentials vorhanden → WiFi Setup ÜBERSPRINGEN!
+        // Credentials vorhanden → WiFi Setup ÜBERSPRUNGEN
         
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
@@ -825,594 +1547,174 @@ void setup() {
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "→ WiFi Setup Portal SKIPPED");
         ESP_LOGI(TAG, "");
+        
+        // WiFi EXPLIZIT STARTEN!
+        ESP_LOGI(TAG, "→ Starting WiFi connection...");
+        
+        if (has_credentials_h) {
+            // Use credentials.h
+            WiFi.begin(credentials_h_ssid, credentials_h_password);
+            ESP_LOGI(TAG, "  Using: credentials.h (SSID: %s)", credentials_h_ssid);
+        } else {
+            
+            if (has_nvs_credentials) {              
+                Preferences prefs;
+                prefs.begin("wifi_creds", true);
+                String ssid = prefs.getString("ssid", "");
+                String password = prefs.getString("password", "");
+                prefs.end();
+                
+                WiFi.begin(ssid.c_str(), password.c_str());
+                ESP_LOGI(TAG, "  Using: NVS (SSID: %s)", ssid.c_str());
+            }
+        }
+        
+        ESP_LOGI(TAG, "");
     }
-    
+
     #endif
 
-    // ════════════════════════════════════════════════════════════════
-    // Shutter Driver Init
-    // ════════════════════════════════════════════════════════════════
+    ESP_LOGI(TAG, "");
+
+
+    // ════════════════════════════════════════════════════════════════════
+    // PHASE 3: Shutter Driver
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "  PHASE 3: Shutter Driver");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "");
     
     shutter_handle = shutter_driver_init();
     if (!shutter_handle) {
-        ESP_LOGE(TAG, "Failed to initialize shutter driver");
+        ESP_LOGE(TAG, "✗ Failed to initialize shutter driver");
         return;
     }
     
     ((RollerShutter*)shutter_handle)->loadStateFromKVS();
-
     ((RollerShutter*)shutter_handle)->setCalibrationCompleteCallback(onCalibrationComplete);
-    ESP_LOGI(TAG, "✓ Calibration callback registered");
-    
     shutter_driver_set_operational_state_callback(shutter_handle, onShutterStateChanged);
-    ESP_LOGI(TAG, "✓ Operational State callback registered");
-
-    if (Matter.isDeviceCommissioned()) {
-        ESP_LOGI(TAG, "Already commissioned. Initializing hardware NOW...");
-        ((RollerShutter*)shutter_handle)->initHardware();
-        hardware_initialized = true;
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "→ Matter commissioned - BLE is free for our use");
-        ESP_LOGI(TAG, "");
-    } else {
-        ESP_LOGI(TAG, "Not commissioned. Hardware will init after pairing.");
-    }
     
-    ESP_LOGI(TAG, "Shutter initialized");
-
-    // ════════════════════════════════════════════════════════════════
-    // Matter Node erstellen
-    // ════════════════════════════════════════════════════════════════
-    
-    node::config_t node_config;
-    node_t *node = node::create(&node_config, app_attribute_update_cb, nullptr);
-    if (!node) {
-        ESP_LOGE(TAG, "Failed to create Matter node");
-        return;
-    }
-    
-    ESP_LOGI(TAG, "Matter node created");
-
-    // ════════════════════════════════════════════════════════════════
-    // Window Covering Config
-    // ════════════════════════════════════════════════════════════════
-    
-    window_covering_device::config_t wc_config;
-    wc_config.window_covering.type = 0;  // Rollershutter
-    wc_config.window_covering.feature_flags = 
-        (uint32_t)chip::app::Clusters::WindowCovering::Feature::kLift |
-        (uint32_t)chip::app::Clusters::WindowCovering::Feature::kPositionAwareLift |
-        (uint32_t)chip::app::Clusters::WindowCovering::Feature::kAbsolutePosition;
-    
-    ESP_LOGI(TAG, "Window Covering config prepared");
-
-    // ════════════════════════════════════════════════════════════════
-    // Window Covering Endpoint erstellen
-    // ════════════════════════════════════════════════════════════════
-    
-    endpoint_t *ep = window_covering_device::create(node, &wc_config, 
-                                                     ENDPOINT_FLAG_NONE, NULL);
-    if (!ep) {
-        ESP_LOGE(TAG, "Failed to create Window Covering endpoint");
-        return;
-    }
-
-    window_covering_endpoint_id = endpoint::get_id(ep);
-
-    ESP_LOGI(TAG, "Window Covering endpoint created (ID: %d)", window_covering_endpoint_id);
-
-    // ════════════════════════════════════════════════════════════════
-    // Configure Window Covering Mode (Standard Attribut!)
-    // ════════════════════════════════════════════════════════════════
-
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   CONFIGURING MODE ATTRIBUTE      ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
-
-    cluster_t* wc_cluster = cluster::get(ep, chip::app::Clusters::WindowCovering::Id);
-
-    if (wc_cluster) {
-        // Lade gespeicherte Richtung
-        bool inverted = shutter_driver_get_direction_inverted(shutter_handle);
-        
-        // Mode Bitmap erstellen
-        // Bit 0 = MotorDirectionReversed
-        uint8_t mode_value = inverted ? 0x01 : 0x00;
-        
-        // Mode Attribut erstellen/updaten
-        attribute_t* mode_attr = attribute::get(wc_cluster, 
-                                            chip::app::Clusters::WindowCovering::Attributes::Mode::Id);
-        
-        if (mode_attr) {
-            // Attribut existiert bereits → Update
-            esp_matter_attr_val_t mode_val = esp_matter_bitmap8(mode_value);
-            attribute::set_val(mode_attr, &mode_val);
-            ESP_LOGI(TAG, "✓ Mode attribute updated: 0x%02X (inverted=%s)", 
-                    mode_value, inverted ? "YES" : "NO");
-        } else {
-            // Attribut existiert nicht → Create
-            esp_matter_attr_val_t mode_val = esp_matter_bitmap8(mode_value);
-            mode_attr = attribute::create(wc_cluster, 
-                                        chip::app::Clusters::WindowCovering::Attributes::Mode::Id,
-                                        ATTRIBUTE_FLAG_WRITABLE,  // ← WICHTIG: Writable!
-                                        mode_val);
-            
-            if (mode_attr) {
-                ESP_LOGI(TAG, "✓ Mode attribute created: 0x%02X (inverted=%s)", 
-                        mode_value, inverted ? "YES" : "NO");
-            } else {
-                ESP_LOGE(TAG, "✗ Failed to create Mode attribute!");
-            }
-        }
-        
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "Mode Bitmap Explanation:");
-        ESP_LOGI(TAG, "  Bit 0 (MotorDirectionReversed): %s", (mode_value & 0x01) ? "SET" : "CLEAR");
-        ESP_LOGI(TAG, "  Bit 1 (CalibrationMode):        %s", (mode_value & 0x02) ? "SET" : "CLEAR");
-        ESP_LOGI(TAG, "  Bit 2 (MaintenanceMode):        %s", (mode_value & 0x04) ? "SET" : "CLEAR");
-        ESP_LOGI(TAG, "  Bit 3 (LEDFeedback):            %s", (mode_value & 0x08) ? "SET" : "CLEAR");
-        ESP_LOGI(TAG, "");
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // RESTORE POSITION FROM NVS
-    // ════════════════════════════════════════════════════════════════
-
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   RESTORING SAVED POSITION        ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
-
-    if (wc_cluster) {
-        // ────────────────────────────────────────────────────────────
-        // 1. Position aus Driver holen (wurde bereits aus NVS geladen!)
-        // ────────────────────────────────────────────────────────────
-        
-        uint8_t saved_percent = shutter_driver_get_current_percent(shutter_handle);
-        bool is_calibrated = shutter_driver_is_calibrated(shutter_handle);
-        
-        ESP_LOGI(TAG, "Saved State:");
-        ESP_LOGI(TAG, "  Position: %d%%", saved_percent);
-        ESP_LOGI(TAG, "  Calibrated: %s", is_calibrated ? "YES" : "NO");
-        ESP_LOGI(TAG, "");
-        
-        if (is_calibrated) {
-            // ────────────────────────────────────────────────────────────
-            // 2. Position in Matter Attribute schreiben
-            // ────────────────────────────────────────────────────────────
-            
-            uint16_t pos_100ths = saved_percent * 100;
-            
-            // Current Position
-            attribute_t* current_attr = attribute::get(wc_cluster, 
-                chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id);
-            
-            if (current_attr) {
-                esp_matter_attr_val_t current_val = esp_matter_uint16(pos_100ths);
-                esp_err_t err = attribute::set_val(current_attr, &current_val);
-                
-                if (err == ESP_OK) {
-                    ESP_LOGI(TAG, "✓ Current Position restored: %d%% (%d/100ths)", 
-                            saved_percent, pos_100ths);
-                } else {
-                    ESP_LOGE(TAG, "✗ Failed to restore Current Position: %s", 
-                            esp_err_to_name(err));
-                }
-            } else {
-                ESP_LOGE(TAG, "✗ Current Position attribute not found!");
-            }
-            
-            // Target Position (WICHTIG: Muss gleich sein wie Current!)
-            attribute_t* target_attr = attribute::get(wc_cluster, 
-                chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id);
-            
-            if (target_attr) {
-                esp_matter_attr_val_t target_val = esp_matter_uint16(pos_100ths);
-                esp_err_t err = attribute::set_val(target_attr, &target_val);
-                
-                if (err == ESP_OK) {
-                    ESP_LOGI(TAG, "✓ Target Position restored: %d%% (%d/100ths)", 
-                            saved_percent, pos_100ths);
-                } else {
-                    ESP_LOGE(TAG, "✗ Failed to restore Target Position: %s", 
-                            esp_err_to_name(err));
-                }
-            } else {
-                ESP_LOGE(TAG, "✗ Target Position attribute not found!");
-            }
-            
-            // ────────────────────────────────────────────────────────────
-            // 3. Operational Status (Stopped)
-            // ────────────────────────────────────────────────────────────
-            
-            attribute_t* opstate_attr = attribute::get(wc_cluster, 
-                chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id);
-            
-            if (opstate_attr) {
-                esp_matter_attr_val_t opstate_val = esp_matter_uint8(0x00);  // Stopped
-                attribute::set_val(opstate_attr, &opstate_val);
-                ESP_LOGI(TAG, "✓ Operational Status set to: Stopped");
-            }
-            
-            ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "✓ Position successfully restored from NVS");
-            
-        } else {
-            ESP_LOGW(TAG, "⚠ Shutter not calibrated - using default position (0%)");
-            ESP_LOGI(TAG, "  Please run calibration first!");
-        }
-        
-        ESP_LOGI(TAG, "");
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // Register Covering Delegate
-    // ════════════════════════════════════════════════════════════════
-
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   REGISTERING COVERING DELEGATE   ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
-
-    // Delegate registrieren (OHNE explizite Feature-Konfiguration)
-    shutter_driver_set_covering_delegate_endpoint(window_covering_endpoint_id);
-
-    chip::app::Clusters::WindowCovering::Delegate* delegate = 
-        shutter_driver_get_covering_delegate();
-
-    chip::app::Clusters::WindowCovering::SetDefaultDelegate(
-        (chip::EndpointId)window_covering_endpoint_id, 
-        delegate
-    );
-
-    ESP_LOGI(TAG, "✓ Covering Delegate registered for endpoint %d", 
-            window_covering_endpoint_id);
-    ESP_LOGI(TAG, "");
-
-    // Endpoint aktivieren
-    esp_matter::endpoint::enable(ep);
-
-    #ifdef CONFIG_ENABLE_SCENE_CLUSTER
-    // ========================================================================
-    // Scene Cluster (Minimal - Controller-Managed)
-    // ========================================================================
-
-    cluster_t* scene_cluster = cluster::create(ep, CLUSTER_ID_SCENES, 
-                                            CLUSTER_FLAG_SERVER);
-    if (scene_cluster) {
-        // Mandatory Attributes
-        
-        // Scene Count (wir unterstützen 6 vordefinierte Scenes)
-        attribute::create(scene_cluster, ATTR_ID_SCENE_COUNT, 
-                        ATTRIBUTE_FLAG_NONE, 
-                        esp_matter_uint8(SCENE_MAPPING_COUNT));
-        
-        // Current Scene (initial 0 = keine Scene aktiv)
-        attribute::create(scene_cluster, ATTR_ID_CURRENT_SCENE, 
-                        ATTRIBUTE_FLAG_NONE, 
-                        esp_matter_uint8(0));
-        
-        // Current Group (0 = keine Gruppe)
-        attribute::create(scene_cluster, ATTR_ID_CURRENT_GROUP, 
-                        ATTRIBUTE_FLAG_NONE, 
-                        esp_matter_uint16(0));
-        
-        // Scene Valid (false initial)
-        attribute::create(scene_cluster, ATTR_ID_SCENE_VALID, 
-                        ATTRIBUTE_FLAG_NONE, 
-                        esp_matter_bool(false));
-        
-        // Name Support (bit 7 = Scene Names supported)
-        attribute::create(scene_cluster, ATTR_ID_NAME_SUPPORT, 
-                        ATTRIBUTE_FLAG_NONE, 
-                        esp_matter_bitmap8(0x80));
-        
-        // Commands
-        command::create(scene_cluster, CMD_ID_RECALL_SCENE, 
-                    COMMAND_FLAG_ACCEPTED, app_command_cb);
-        
-        command::create(scene_cluster, CMD_ID_GET_SCENE_MEMBERSHIP, 
-                    COMMAND_FLAG_ACCEPTED, app_command_cb);
-        
-        ESP_LOGI(TAG, "Scene Cluster created (minimal mode, %d scenes)", 
-                SCENE_MAPPING_COUNT);
-        ESP_LOGI(TAG, "Scene Mappings:");
-        for (int i = 0; i < SCENE_MAPPING_COUNT; i++) {
-            ESP_LOGI(TAG, "  Scene %d → %d%% (%s)", 
-                    SCENE_MAPPINGS[i].sceneId,
-                    SCENE_MAPPINGS[i].shutterPosition,
-                    SCENE_MAPPINGS[i].description);
-        }
-    }
-    #endif // CONFIG_ENABLE_SCENE_CLUSTER
-
-    // ========================================================================
-    // Custom Cluster - Device IP
-    // ========================================================================
-
-    #ifdef CONFIG_ENABLE_CUSTOM_CLUSTER_DEVICE_IP
-
-    cluster_t *custom_cluster = cluster::create(ep, CLUSTER_ID_ROLLERSHUTTER_CONFIG, 
-                                                CLUSTER_FLAG_SERVER);
-    if (custom_cluster) {
-        // String vorbereiten
-        esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
-
-        attribute_t* ip_attr = attribute::create(
-            custom_cluster, 
-            ATTR_ID_DEVICE_IP, 
-            ATTRIBUTE_FLAG_NONE,
-            ip_val
-        );
-
-        if (ip_attr) {
-            ESP_LOGI(TAG, "✓ Device IP attribute initialized: %s (buffer: %d bytes)", 
-                     device_ip_str, DEVICE_IP_MAX_LENGTH);
-            
-            esp_matter_attr_val_t stored_val;
-            esp_err_t err = attribute::get_val(ip_attr, &stored_val);
-            
-            if (err == ESP_OK) {
-                ESP_LOGI(TAG, "  → Stored type: %d", stored_val.type);
-                if (stored_val.type == ESP_MATTER_VAL_TYPE_CHAR_STRING) {
-                    ESP_LOGI(TAG, "  → Buffer size: %zu bytes", stored_val.val.a.s);
-                    ESP_LOGI(TAG, "  → String: %s", (char*)stored_val.val.a.b);
-                }
-            }
-        }
-
-        command::create(custom_cluster, CMD_ID_START_CALIBRATION, 
-                    COMMAND_FLAG_ACCEPTED, app_command_cb);
-        
-        ESP_LOGI(TAG, "Custom cluster 0x%04X created", CLUSTER_ID_ROLLERSHUTTER_CONFIG);
-    }
-
-    #endif // CONFIG_ENABLE_CUSTOM_CLUSTER_DEVICE_IP
-
-    // ========================================================================
-    // Contact Sensor & Power Source
-    // ========================================================================
-    
-    // Contact Sensor Status laden
-    matterPref.begin("matter", true);
-    contact_sensor_matter_enabled = matterPref.getBool("cs_matter_en", false);
-    bool cs_was_active = matterPref.getBool("cs_active", false);
-    bool ps_was_active = matterPref.getBool("ps_active", false);
-    matterPref.end();
-
-    ESP_LOGI(TAG, "Contact Sensor Matter Status:");
-    ESP_LOGI(TAG, "  User Enabled: %s", contact_sensor_matter_enabled ? "YES" : "NO");
-    ESP_LOGI(TAG, "  Contact Sensor was active: %s", cs_was_active ? "YES" : "NO");
-    ESP_LOGI(TAG, "  Power Source was active: %s", ps_was_active ? "YES" : "NO");
-
-    // Endpoints JETZT erstellen wenn User enabled (unabhängig von BLE Pairing!)
-    if (contact_sensor_matter_enabled && (cs_was_active || ps_was_active)) {
-        ESP_LOGI(TAG, "→ Creating Contact Sensor endpoints NOW (before Matter start)...");
-        
-        if (cs_was_active) {
-            createContactSensorEndpoint(node);
-        }
-        if (cs_was_active || ps_was_active) {
-            createPowerSourceEndpoint(node);
-        }
-    }
-
-    // ════════════════════════════════════════════════════════════════
-    // WiFi Connection (SPÄT - nach Matter Endpoints!)
-    // ════════════════════════════════════════════════════════════════
-    
-    #if defined(CONFIG_IDF_TARGET_ESP32) || defined(CONFIG_IDF_TARGET_ESP32S2)
-    
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   WiFi CONNECTION                 ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    ESP_LOGI(TAG, "✓ Shutter driver initialized");
+    ESP_LOGI(TAG, "  Position: %d%%", shutter_driver_get_current_percent(shutter_handle));
+    ESP_LOGI(TAG, "  Calibrated: %s", shutter_driver_is_calibrated(shutter_handle) ? "YES" : "NO");
     ESP_LOGI(TAG, "");
     
-    // Sicherheits-Delay (falls WiFi Manager gerade gelaufen ist)
-    // WiFi.mode(WIFI_OFF) braucht Zeit!
-    delay(500);
+    // ════════════════════════════════════════════════════════════════════
+    // PHASE 4: Device Naming
+    // ════════════════════════════════════════════════════════════════════
     
-    // ────────────────────────────────────────────────────────────
-    // Priority 1: credentials.h (Entwicklung)
-    // ────────────────────────────────────────────────────────────
-    
-    if (has_credentials_h) {
-        ESP_LOGI(TAG, "Using credentials.h (development mode)");
-        ESP_LOGI(TAG, "  SSID: %s", WIFI_SSID);
-        ESP_LOGI(TAG, "");
-        
-        WiFi.mode(WIFI_STA);
-        delay(100);  // ← Kurze Pause nach mode()
-        WiFi.begin(WIFI_SSID, WIFI_PASSWORD);
-        
-    } else {
-        // ────────────────────────────────────────────────────────
-        // Priority 2: NVS Credentials (Produktion)
-        // ────────────────────────────────────────────────────────
-        
-        char wifi_ssid[64];
-        char wifi_password[64];
-        bool has_stored_wifi = WiFiCredentials::load(wifi_ssid, sizeof(wifi_ssid), 
-                                                      wifi_password, sizeof(wifi_password));
-        
-        if (has_stored_wifi) {
-            ESP_LOGI(TAG, "Using NVS credentials (production mode)");
-            ESP_LOGI(TAG, "  SSID: %s", wifi_ssid);
-            ESP_LOGI(TAG, "");
-            
-            WiFi.mode(WIFI_STA);
-            delay(100);  // ← Kurze Pause nach mode()
-            WiFi.begin(wifi_ssid, wifi_password);
-            
-        } else {
-            ESP_LOGE(TAG, "✗ No WiFi credentials available!");
-        }
-    }
-    
-    // ────────────────────────────────────────────────────────────
-    // Wait for connection
-    // ────────────────────────────────────────────────────────────
-    
-    Serial.print("Connecting to WiFi");
-    uint8_t wifi_timeout = 0;
-    while (WiFi.status() != WL_CONNECTED && wifi_timeout < 60) {
-        delay(500);
-        Serial.print(".");
-        wifi_timeout++;
-        esp_task_wdt_reset();
-    }
-    
-    if (WiFi.status() == WL_CONNECTED) {
-        Serial.println("\nWiFi connected");
-
-       #ifdef CONFIG_ENABLE_CUSTOM_CLUSTER_IP
-        
-        // Update Device IP in Custom Cluster
-        snprintf(device_ip_str, sizeof(device_ip_str), "%s", 
-                 WiFi.localIP().toString().c_str());
-
-        cluster_t* custom_cluster_local = cluster::get(window_covering_endpoint_id, 
-                                                        CLUSTER_ID_ROLLERSHUTTER_CONFIG);
-        
-        if (custom_cluster_local) {
-            attribute_t* ip_attr = attribute::get(custom_cluster_local, ATTR_ID_DEVICE_IP);
-            
-            if (ip_attr) {
-                esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
-                attribute::set_val(ip_attr, &ip_val);
-                
-                ESP_LOGI(TAG, "✓ Device IP updated: %s", device_ip_str);
-            }
-        }
-        
-        ESP_LOGI(TAG, "");
-
-        #endif // CONFIG_ENABLE_CUSTOM_CLUSTER_IP
-        
-    } else {
-        ESP_LOGE(TAG, "\n✗ WiFi connection failed!");
-        ESP_LOGE(TAG, "  Device will continue WITHOUT WiFi");
-        ESP_LOGE(TAG, "  Matter commissioning may not work!");
-        ESP_LOGI(TAG, "");
-    }
-    
-    #endif
-
-    // ========================================================================
-    // Device Naming System
-    // ========================================================================
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "  PHASE 4: Device Naming");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "");
     
     deviceNaming = new DeviceNaming();
     deviceNaming->load();
     
-    ESP_LOGI(TAG, "Device Naming initialized");
-
-    // ========================================================================
-    // Matter Stack
-    // ========================================================================
+    DeviceNaming::DeviceName names = deviceNaming->getNames();
     
-    ESP_ERROR_CHECK(esp_matter::start(nullptr));
-    ESP_LOGI(TAG, "Matter stack started");
-
-    chip::app::InteractionModelEngine* imEngine = chip::app::InteractionModelEngine::GetInstance();
-    if (imEngine) {
-        ESP_LOGI(TAG, "✓ Subscription monitoring active");
-    } else {
-        ESP_LOGW(TAG, "⚠ Could not access InteractionModelEngine");
-    }
-
-
-    bool commissioned = Matter.isDeviceCommissioned();
-    bool hasFabrics = (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
-
-    ESP_LOGI(TAG, "=== Matter Status Debug ===");
-    ESP_LOGI(TAG, "Matter.isDeviceCommissioned() = %s", commissioned ? "true" : "false");
-    ESP_LOGI(TAG, "Fabric Count = %d", chip::Server::GetInstance().GetFabricTable().FabricCount());
-
-    String qrUrl = Matter.getOnboardingQRCodeUrl();
-    String pairingCode = Matter.getManualPairingCode();
-
-    ESP_LOGI(TAG, "QR URL length: %d", qrUrl.length());
-    ESP_LOGI(TAG, "Pairing Code length: %d", pairingCode.length());
-
-    if (qrUrl.length() > 0) {
-        Serial.printf("\n=== Matter Pairing Information ===\n");
-        Serial.printf("QR Code URL: %s\n", qrUrl.c_str());
-        Serial.printf("Manual Pairing Code: %s\n", pairingCode.c_str());
-        Serial.println("===================================\n");
-    } else {
-        ESP_LOGE(TAG, "QR Code and Pairing Code are EMPTY!");
-        ESP_LOGE(TAG, "This should not happen. Checking Matter configuration...");
-    }
-
-    if (!hasFabrics) {
-        commissioned = false;
-    }
-
-    if (!commissioned) {
-        Serial.println("\n=== Matter Device NOT Commissioned ===");
-        Serial.printf("Manual pairing code: %s\n", Matter.getManualPairingCode().c_str());
-        Serial.printf("QR code URL: %s\n", Matter.getOnboardingQRCodeUrl().c_str());
-        Serial.println("=====================================\n");
-    } else {
-        Serial.printf("\n=== Matter Device Commissioned (%d Fabrics) ===\n", 
-                    chip::Server::GetInstance().GetFabricTable().FabricCount());
-    }
-
-    if (commissioned) {
-        ESP_LOGI(TAG, "Already commissioned. Initializing hardware...");
-        ((RollerShutter*)shutter_handle)->initHardware();
-        hardware_initialized = true;
-    }
-
-    // Warte kurz, damit Matter sich stabilisiert
-    vTaskDelay(pdMS_TO_TICKS(1000));
-
-    // Arduino OTA und deviceNaming NUR starten wenn commissioned
-    if (Matter.isDeviceCommissioned()) {
-
-    // ========================================================================
-    // Apply Device Name to Matter
-    // ========================================================================
+    ESP_LOGI(TAG, "✓ Device naming initialized");
+    ESP_LOGI(TAG, "  Hostname: %s.local", names.hostname.c_str());
+    ESP_LOGI(TAG, "  Matter Name: %s", names.matterName.c_str());
+    ESP_LOGI(TAG, "");
     
-        if (deviceNaming) {
-            // Warte kurz bis Matter Stack bereit ist
-            vTaskDelay(pdMS_TO_TICKS(1000));
+    // ════════════════════════════════════════════════════════════════════
+    // PHASE 5: BLE Manager (LAZY - nur Struktur, kein Start)
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "  PHASE 5: BLE Manager (Lazy)");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "");
+    
+    bleManager = new ShellyBLEManager();
+    bleManager->setSensorDataCallback(onBLESensorData);
+    
+    if (!bleManager->begin()) {
+        ESP_LOGE(TAG, "✗ Shelly BLE Manager init failed");
+        delete bleManager;
+        bleManager = nullptr;
+    } else {
+        ESP_LOGI(TAG, "✓ Shelly BLE Manager initialized (lazy mode)");
+        ESP_LOGI(TAG, "  BLE scanner will start on-demand");
+    }
+    
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // PHASE 6: Web UI (NUR NACH WIFI!)
+    // ════════════════════════════════════════════════════════════════════
+
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "  PHASE 6: Web UI");
+    ESP_LOGI(TAG, "═══════════════════════════════════");
+    ESP_LOGI(TAG, "");
+
+    // ✅ Warte auf WiFi-Verbindung (mit Watchdog-Reset!)
+    if (WiFi.status() != WL_CONNECTED) {
+        ESP_LOGW(TAG, "⏳ Waiting for WiFi connection...");
+        
+        uint8_t retries = 0;
+        while (WiFi.status() != WL_CONNECTED && retries < 20) {
+            // ✅ WICHTIG: Watchdog zurücksetzen!
+            esp_task_wdt_reset();
             
-            // Apply name to Matter endpoint
-            deviceNaming->apply();
-            
+            delay(500);
+            retries++;
+            ESP_LOGI(TAG, "  Attempt %d/20... (Status: %d)", retries, WiFi.status());
+        }
+        
+        if (WiFi.status() != WL_CONNECTED) {
+            ESP_LOGE(TAG, "");
+            ESP_LOGE(TAG, "✗ WiFi connection FAILED!");
+            ESP_LOGE(TAG, "  Status: %d", WiFi.status());
+            ESP_LOGE(TAG, "  SSID: %s", WiFi.SSID().c_str());
+            ESP_LOGE(TAG, "");
+            ESP_LOGE(TAG, "⚠️  WebUI may be unstable without WiFi!");
+            ESP_LOGE(TAG, "");
+        } else {
             ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-            ESP_LOGI(TAG, "║   DEVICE IDENTIFICATION           ║");
-            ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-            
-            DeviceNaming::DeviceName names = deviceNaming->getNames();
-            
-            ESP_LOGI(TAG, "Network Hostname: %s.local", names.hostname.c_str());
-            ESP_LOGI(TAG, "Matter Name: %s", names.matterName.c_str());
-            ESP_LOGI(TAG, "");
-            ESP_LOGI(TAG, "Access Web-UI via:");
-            ESP_LOGI(TAG, "  http://%s.local", names.hostname.c_str());
-            ESP_LOGI(TAG, "  http://%s", device_ip_str);
+            ESP_LOGI(TAG, "✓ WiFi connected successfully!");
+            ESP_LOGI(TAG, "  SSID: %s", WiFi.SSID().c_str());
+            ESP_LOGI(TAG, "  IP:   %s", WiFi.localIP().toString().c_str());
+            ESP_LOGI(TAG, "  RSSI: %d dBm", WiFi.RSSI());
             ESP_LOGI(TAG, "");
         }
+    }
 
-    // ========================================================================
-    // Arduino OTA initialisieren
-    // ========================================================================
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-        ESP_LOGI(TAG, "║   INITIALIZING ARDUINO OTA        ║");
-        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+    // Memory Check VOR WebUI-Start
+    uint32_t free_heap = esp_get_free_heap_size();
+    ESP_LOGI(TAG, "📊 Free Heap before WebUI: %u bytes (%.1f KB)", 
+            free_heap, free_heap / 1024.0f);
+
+    if (free_heap < 50000) {
+        ESP_LOGE(TAG, "");
+        ESP_LOGE(TAG, "⚠️⚠️⚠️ CRITICAL: Low Memory! ⚠️⚠️⚠️");
+        ESP_LOGE(TAG, "  Free Heap: %u bytes (< 50KB)", free_heap);
+        ESP_LOGE(TAG, "  WebUI may fail to start!");
+        ESP_LOGE(TAG, "");
+    }
+
+    webUI = new WebUIHandler(shutter_handle, bleManager);
+    webUI->begin();
+
+    ESP_LOGI(TAG, "✓ Web UI started");
+    ESP_LOGI(TAG, "  Access: http://%s.local", names.hostname.c_str());
+    ESP_LOGI(TAG, "       or http://%s", WiFi.localIP().toString().c_str());
+    ESP_LOGI(TAG, "");
+    
+    // ════════════════════════════════════════════════════════════════════
+    // PHASE 7: OTA (falls WiFi vorhanden)
+    // ════════════════════════════════════════════════════════════════════
+    
+    if (WiFi.status() == WL_CONNECTED) {
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "  PHASE 7: Arduino OTA");
+        ESP_LOGI(TAG, "═══════════════════════════════════");
         ESP_LOGI(TAG, "");
         
-        DeviceNaming::DeviceName names = deviceNaming->getNames();
         ArduinoOTA.setHostname(names.hostname.c_str());
         ArduinoOTA.setPassword(OTA_PASSWORD);
         
@@ -1420,19 +1722,14 @@ void setup() {
             String type = (ArduinoOTA.getCommand() == U_FLASH) ? "sketch" : "filesystem";
             Serial.println("Start updating " + type);
             
-            // Stop alle Services
             if (webUI) webUI->cleanup_idle_clients();
             if (bleManager) bleManager->stopScan(true);
         });
         
-        ArduinoOTA.onEnd([]() {
-            Serial.println("\nEnd");
-        });
-        
+        ArduinoOTA.onEnd([]() { Serial.println("\nEnd"); });
         ArduinoOTA.onProgress([](unsigned int progress, unsigned int total) {
             Serial.printf("Progress: %u%%\r", (progress / (total / 100)));
         });
-        
         ArduinoOTA.onError([](ota_error_t error) {
             Serial.printf("Error[%u]: ", error);
             if (error == OTA_AUTH_ERROR) Serial.println("Auth Failed");
@@ -1445,260 +1742,183 @@ void setup() {
         ArduinoOTA.begin();
         
         ESP_LOGI(TAG, "✓ Arduino OTA enabled");
-        ESP_LOGI(TAG, "  Hostname: beltwinder.local");
-        ESP_LOGI(TAG, "  Port: 3232");
-        ESP_LOGI(TAG, "");
-    } else {
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "ℹ Arduino OTA NOT started (device not commissioned)");
-        ESP_LOGI(TAG, "  OTA will be available after commissioning + reboot");
+        ESP_LOGI(TAG, "  Hostname: %s.local", names.hostname.c_str());
         ESP_LOGI(TAG, "");
     }
-
+    
     // ════════════════════════════════════════════════════════════════════
-    // OTA Partition Check
+    // PHASE 8: CONDITIONAL MATTER INITIALIZATION
     // ════════════════════════════════════════════════════════════════════
     
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   OTA PARTITION INFO              ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
-    
-    const esp_partition_t* running = esp_ota_get_running_partition();
-    const esp_partition_t* boot = esp_ota_get_boot_partition();
-    const esp_partition_t* update = esp_ota_get_next_update_partition(NULL);
-    
-    ESP_LOGI(TAG, "Running Partition:");
-    ESP_LOGI(TAG, "  Label:   %s", running->label);
-    ESP_LOGI(TAG, "  Address: 0x%06X", running->address);
-    ESP_LOGI(TAG, "  Size:    %u KB", running->size / 1024);
-    ESP_LOGI(TAG, "  Type:    %d (subtype: %d)", running->type, running->subtype);
-    ESP_LOGI(TAG, "");
-    
-    ESP_LOGI(TAG, "Boot Partition:");
-    ESP_LOGI(TAG, "  Label:   %s", boot->label);
-    ESP_LOGI(TAG, "  Address: 0x%06X", boot->address);
-    ESP_LOGI(TAG, "");
-    
-    if (update) {
-        ESP_LOGI(TAG, "Update Target Partition:");
-        ESP_LOGI(TAG, "  Label:   %s", update->label);
-        ESP_LOGI(TAG, "  Address: 0x%06X", update->address);
-        ESP_LOGI(TAG, "  Size:    %u KB", update->size / 1024);
+        if (matter_enabled) {
         ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "✓ Dual-OTA Partition available");
-        ESP_LOGI(TAG, "✓ Safe rollback possible");
-    } else {
-        ESP_LOGW(TAG, "⚠️ NO Update Partition found!");
-        ESP_LOGW(TAG, "⚠️ OTA will overwrite running partition");
-        ESP_LOGW(TAG, "⚠️ Rollback NOT possible!");
-    }
-    
-    ESP_LOGI(TAG, "");
-
-    // ════════════════════════════════════════════════════════════════════
-    // Shelly BLE Manager (LAZY INIT - BLE bleibt aus!)
-    // ════════════════════════════════════════════════════════════════════
-    
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║  INITIALIZING SHELLY BLE MANAGER  ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
-    
-    bleManager = new ShellyBLEManager();
-    bleManager->setSensorDataCallback(onBLESensorData);
-    
-    if (!bleManager->begin()) {
-        ESP_LOGE(TAG, "✗ Shelly BLE Manager init failed");
-        delete bleManager;
-        bleManager = nullptr;
-    } else {
-        ESP_LOGI(TAG, "✓ Shelly BLE Manager initialized (lazy mode)");
-        ESP_LOGI(TAG, "  BLE is NOT started yet");
-        ESP_LOGI(TAG, "  Will start after boot if needed");
-    }
-    
-    ESP_LOGI(TAG, "");
-    
-    // ══════════════════════════════════════════════════════════════════════
-    // DELAYED BLE AUTO-START TASK (with manual init fallback)
-    // ══════════════════════════════════════════════════════════════════════
-
-    struct AutoStartParams {
-        ShellyBLEManager** bleManagerPtr;
-    };
-
-    AutoStartParams* params = new AutoStartParams{&bleManager};
-
-    xTaskCreate([](void* param) {
-        const char* TASK_TAG = "BLEAutoStart";
-        AutoStartParams* p = (AutoStartParams*)param;
+        ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+        ESP_LOGI(TAG, "║                                                           ║");
+        ESP_LOGI(TAG, "║         MATTER AUTO-START (FLAG ENABLED)                  ║");
+        ESP_LOGI(TAG, "║                                                           ║");
+        ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+        ESP_LOGI(TAG, "");
         
-        ESP_LOGI(TASK_TAG, "");
-        ESP_LOGI(TASK_TAG, "╔═══════════════════════════════════╗");
-        ESP_LOGI(TASK_TAG, "║  DELAYED BLE AUTO-START CHECK     ║");
-        ESP_LOGI(TASK_TAG, "╚═══════════════════════════════════╝");
-        ESP_LOGI(TASK_TAG, "");
+        // ────────────────────────────────────────────────────────────────
+        // Create Matter Node
+        // ────────────────────────────────────────────────────────────────
         
-        // STRATEGY: Wait for Matter, then try manual init if needed
-        ESP_LOGI(TASK_TAG, "→ Waiting 8 seconds for Matter to settle...");
-        ESP_LOGI(TASK_TAG, "");
-        
-        vTaskDelay(pdMS_TO_TICKS(8000));
-        
-        // ══════════════════════════════════════════════════════════════════
-        // CHECK & INITIALIZE NIMBLE
-        // ══════════════════════════════════════════════════════════════════
-        
-        ESP_LOGI(TASK_TAG, "→ Checking NimBLE status...");
-        
-        bool nimble_ready = NimBLEDevice::isInitialized();
-        
-        if (nimble_ready) {
-            ESP_LOGI(TASK_TAG, "✓ NimBLE was initialized by Matter");
+        if (!createMatterNode()) {
+            ESP_LOGE(TAG, "✗ Failed to create Matter node!");
+            ESP_LOGE(TAG, "  Continuing without Matter...");
         } else {
-            ESP_LOGW(TASK_TAG, "⚠ NimBLE NOT initialized by Matter!");
-            ESP_LOGI(TASK_TAG, "  → This is expected - Matter uses isolated BLE");
-            ESP_LOGI(TASK_TAG, "  → We will initialize NimBLE ourselves");
-        }
-
-        ESP_LOGI(TASK_TAG, "");
-        
-        // ══════════════════════════════════════════════════════════════════
-        // CHECK: Should we start BLE?
-        // ══════════════════════════════════════════════════════════════════
-        
-        bool matter_commissioned = Matter.isDeviceCommissioned();
-        uint8_t fabric_count = chip::Server::GetInstance().GetFabricTable().FabricCount();
-        bool has_shelly = ShellyBLEManager::hasAnyPairedDevice();
-        
-        ESP_LOGI(TASK_TAG, "System Status:");
-        ESP_LOGI(TASK_TAG, "  Matter Commissioned: %s", matter_commissioned ? "YES" : "NO");
-        ESP_LOGI(TASK_TAG, "  Fabrics: %d", fabric_count);
-        ESP_LOGI(TASK_TAG, "  Shelly Paired: %s", has_shelly ? "YES" : "NO");
-        ESP_LOGI(TASK_TAG, "");
-        
-        ShellyBLEManager* ble = *(p->bleManagerPtr);
-        
-        if (!ble) {
-            ESP_LOGE(TASK_TAG, "✗ BLE Manager is NULL - cannot start");
-            delete p;
-            vTaskDelete(NULL);
-            return;
-        }
-        
-        // ══════════════════════════════════════════════════════════════════
-        // DECISION: Start BLE?
-        // ══════════════════════════════════════════════════════════════════
-        
-        if (has_shelly) {
-            ESP_LOGI(TASK_TAG, "╔═══════════════════════════════════╗");
-            ESP_LOGI(TASK_TAG, "║  AUTO-START BLE                ║");
-            ESP_LOGI(TASK_TAG, "╚═══════════════════════════════════╝");
-            ESP_LOGI(TASK_TAG, "");
-            ESP_LOGI(TASK_TAG, "Reason: Paired Shelly device found");
-            ESP_LOGI(TASK_TAG, "");
+            ESP_LOGI(TAG, "✓ Matter node created");
             
-            // Start BLE (will do manual init if needed)
-            if (ble->ensureBLEStarted()) {
-                ESP_LOGI(TASK_TAG, "✓ BLE started successfully");
-                ESP_LOGI(TASK_TAG, "");
-
-                if (bleManager->isPaired()) {
-                    ShellyBLESensorData data;
-                    if (bleManager->getSensorData(data) && data.dataValid) {
-                        if (webUI) {
-                            webUI->broadcastSensorDataUpdate(
-                                bleManager->getPairedDevice().address, 
-                                data
-                            );
-                        }
-                    }
-                }
-                
-                // Check Continuous Scan Preference
-                Preferences prefs;
-                prefs.begin("ShellyBLE", true);
-                bool should_scan = prefs.getBool("continuous_scan", true);
-                prefs.end();
-                
-                if (should_scan) {
-                    ESP_LOGI(TASK_TAG, "→ Starting Continuous Scan...");
-                    ble->startContinuousScan();
-                    ESP_LOGI(TASK_TAG, "✓ Continuous Scan active");
-                } else {
-                    ESP_LOGI(TASK_TAG, "ℹ Continuous Scan was disabled");
-                    ESP_LOGI(TASK_TAG, "  NOT starting automatically");
-                }
-                
+            // Kurze Pause für Node-Stabilisierung
+            vTaskDelay(pdMS_TO_TICKS(500));
+            
+            // ────────────────────────────────────────────────────────────
+            // Start Matter Stack
+            // ────────────────────────────────────────────────────────────
+            
+            if (!startMatterStack()) {
+                ESP_LOGE(TAG, "✗ Failed to start Matter stack!");
+                ESP_LOGE(TAG, "  Continuing without Matter...");
             } else {
-                ESP_LOGE(TASK_TAG, "✗ Failed to start BLE");
-                ESP_LOGE(TASK_TAG, "  Device will work WITHOUT BLE sensor");
+                ESP_LOGI(TAG, "✓ Matter stack started successfully");
+                
+                // Hardware initialisieren (falls commissioned)
+                bool is_commissioned = Matter.isDeviceCommissioned() && 
+                                    (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
+                
+                if (is_commissioned && !hardware_initialized) {
+                    ESP_LOGI(TAG, "");
+                    ESP_LOGI(TAG, "→ Device is commissioned - initializing hardware...");
+                    ((RollerShutter*)shutter_handle)->initHardware();
+                    hardware_initialized = true;
+                    ESP_LOGI(TAG, "✓ Hardware initialized");
+                }
+                
+                // ════════════════════════════════════════════════════════════════
+                // CRITICAL: WAIT FOR MATTER TO STABILIZE BEFORE STARTING BLE!
+                // ════════════════════════════════════════════════════════════════
+                
+                ESP_LOGI(TAG, "");
+                ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+                ESP_LOGI(TAG, "║  MATTER STABILIZATION PERIOD      ║");
+                ESP_LOGI(TAG, "╚═══════════════════════════════════╗");
+                ESP_LOGI(TAG, "");
+                ESP_LOGI(TAG, "→ Waiting 5 seconds for Matter to stabilize...");
+                ESP_LOGI(TAG, "  This ensures NimBLE is fully initialized");
+                ESP_LOGI(TAG, "  and Matter's BLE operations are complete");
+                ESP_LOGI(TAG, "");
+                
+                for (int i = 0; i < 5; i++) {
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    ESP_LOGI(TAG, "  ⏱️ %d/5 seconds...", i + 1);
+                }
+                
+                ESP_LOGI(TAG, "");
+                ESP_LOGI(TAG, "✓ Matter stabilization complete");
+                ESP_LOGI(TAG, "");
+                
+                // ════════════════════════════════════════════════════════════════
+                // AUTO-START BLE CONTINUOUS SCAN (falls Sensor gepairt)
+                // ════════════════════════════════════════════════════════════════
+                
+                if (bleManager && bleManager->isPaired()) {
+                    ESP_LOGI(TAG, "");
+                    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
+                    ESP_LOGI(TAG, "║  AUTO-START BLE SCAN              ║");
+                    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
+                    ESP_LOGI(TAG, "");
+                    ESP_LOGI(TAG, "Paired sensor detected:");
+                    
+                    auto pairedDev = bleManager->getPairedDevice();
+                    ESP_LOGI(TAG, "  Name: %s", pairedDev.name.c_str());
+                    ESP_LOGI(TAG, "  Address: %s", pairedDev.address.c_str());
+                    ESP_LOGI(TAG, "");
+                    
+                    // Prüfe ob Continuous Scan gewünscht
+                    Preferences prefs;
+                    prefs.begin("ShellyBLE", true);  // Read-only
+                    bool shouldScan = prefs.getBool("continuous_scan", true);
+                    prefs.end();
+                    
+                    if (shouldScan) {
+                        ESP_LOGI(TAG, "→ Starting Continuous BLE Scan...");
+                        ESP_LOGI(TAG, "  (Monitoring for sensor events)");
+                        ESP_LOGI(TAG, "");
+                        
+                        // ⚠️ WICHTIG: Noch 2 Sekunden warten für zusätzliche Sicherheit
+                        ESP_LOGI(TAG, "→ Additional 2 second safety delay...");
+                        vTaskDelay(pdMS_TO_TICKS(2000));
+                        
+                        bleManager->startContinuousScan();
+                        
+                        ESP_LOGI(TAG, "✓ BLE Continuous Scan started");
+                        ESP_LOGI(TAG, "  → Sensor data will be reported automatically");
+                        ESP_LOGI(TAG, "");
+                    } else {
+                        ESP_LOGI(TAG, "ℹ️ Continuous Scan disabled in NVS");
+                        ESP_LOGI(TAG, "   User can enable via WebUI");
+                        ESP_LOGI(TAG, "");
+                    }
+                } else {
+                    ESP_LOGI(TAG, "");
+                    ESP_LOGI(TAG, "ℹ️ No BLE sensor paired");
+                    ESP_LOGI(TAG, "   Continuous Scan will NOT start");
+                    ESP_LOGI(TAG, "");
+                }
             }
-            
+        }
+        
+        ESP_LOGI(TAG, "");
+    }
+    
+    // ════════════════════════════════════════════════════════════════════
+    // SETUP COMPLETE
+    // ════════════════════════════════════════════════════════════════════
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "║               ✓ DEVICE READY FOR USE                     ║");
+    ESP_LOGI(TAG, "║                                                           ║");
+    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "Device Status:");
+    ESP_LOGI(TAG, "  ✓ WiFi:        %s", WiFi.status() == WL_CONNECTED ? "Connected" : "Disconnected");
+    ESP_LOGI(TAG, "  ✓ Shutter:     %s", shutter_driver_is_calibrated(shutter_handle) ? "Calibrated" : "Not calibrated");
+    ESP_LOGI(TAG, "  ✓ BLE Manager: Initialized (lazy)");
+    ESP_LOGI(TAG, "  ✓ Web UI:      Running");
+    
+    if (matter_enabled) {
+        if (matter_stack_started) {
+            bool commissioned = Matter.isDeviceCommissioned();
+            ESP_LOGI(TAG, "  ✓ Matter:      Running (%s)", commissioned ? "Commissioned" : "Ready for commissioning");
         } else {
-            ESP_LOGI(TASK_TAG, "╔═══════════════════════════════════╗");
-            ESP_LOGI(TASK_TAG, "║  ℹ BLE STAYS IDLE                 ║");
-            ESP_LOGI(TASK_TAG, "╚═══════════════════════════════════╝");
-            ESP_LOGI(TASK_TAG, "");
-            ESP_LOGI(TASK_TAG, "Reason: No paired Shelly device");
-            ESP_LOGI(TASK_TAG, "BLE scanner not started (saves resources)");
-            ESP_LOGI(TASK_TAG, "");
-        }
-        
-        ESP_LOGI(TASK_TAG, "");
-        ESP_LOGI(TASK_TAG, "✓ Auto-start check complete");
-        ESP_LOGI(TASK_TAG, "");
-        
-        UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
-        ESP_LOGI(TAG, "Task -ble_autostart- Stack High Water Mark: %u bytes", highWater * sizeof(StackType_t));
-
-        if (highWater < 256) {  // < 1KB frei
-            ESP_LOGW(TAG, "⚠️ Stack critically low!");
-        }
-        AutoStartParams* p_copy = p;
-        esp_task_wdt_delete(NULL);
-
-        delete p_copy;
-        vTaskDelete(NULL);
-        
-    }, "ble_autostart", 6144, params, 1, NULL);
-
-    // Endpoints wiederherstellen wenn möglich
-    if (contact_sensor_matter_enabled && 
-        bleManager->isPaired() && 
-        Matter.isDeviceCommissioned()) {
-        
-        ESP_LOGI(TAG, "→ Restoring Contact Sensor endpoints...");
-        node_t* node = node::get();
-        if (node) {
-            if (cs_was_active) {
-                createContactSensorEndpoint(node);
-            }
-            // Power Source IMMER wenn Contact Sensor aktiv ist
-            if (cs_was_active || ps_was_active) {
-                createPowerSourceEndpoint(node);
-            }
+            ESP_LOGI(TAG, "  ✗ Matter:      Failed to start");
         }
     } else {
-        ESP_LOGI(TAG, "ℹ Contact Sensor endpoints will be created when:");
-        ESP_LOGI(TAG, "  • Device is commissioned: %s", 
-                Matter.isDeviceCommissioned() ? "✓" : "✗");
-        ESP_LOGI(TAG, "  • BLE sensor paired: %s", 
-                (bleManager && bleManager->isPaired()) ? "✓" : "✗");
+        ESP_LOGI(TAG, "  ○ Matter:      Disabled (enable via WebUI)");
     }
-
-    // ========================================================================
-    // Web UI
-    // ========================================================================
-
-    webUI = new WebUIHandler(shutter_handle, bleManager);
-    webUI->setRemoveContactSensorCallback(removeContactSensorEndpoint);
-    webUI->begin();
-    ESP_LOGI(TAG, "Web UI started");
-
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "Next Steps:");
+    ESP_LOGI(TAG, "  1. Access Web UI:    http://%s.local", names.hostname.c_str());
+    ESP_LOGI(TAG, "                      or http://%s", WiFi.localIP().toString().c_str());
+    
+    if (!matter_enabled) {
+        ESP_LOGI(TAG, "  2. Configure device (optional: pair BLE sensor)");
+        ESP_LOGI(TAG, "  3. Click 'Start Matter Commissioning' to enable Matter");
+    } else {
+        bool commissioned = matter_stack_started && Matter.isDeviceCommissioned();
+        if (!commissioned) {
+            ESP_LOGI(TAG, "  2. Scan QR code with Matter controller app");
+        } else {
+            ESP_LOGI(TAG, "  2. Control via Matter controller or WebUI");
+        }
+    }
+    
+    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "═══════════════════════════════════════════════════════════");
+    ESP_LOGI(TAG, "");
 }
 
     // ============================================================================
@@ -1708,176 +1928,185 @@ void setup() {
 void loop() {
     esp_task_wdt_reset();
 
-    // ════════════════════════════════════════════════════════════════
-    // Subscription Handler Update (falls neuer Subscribe)
-    // ════════════════════════════════════════════════════════════════
-    subscriptionHandler.sendInitialUpdateIfNeeded();
+     if (matter_stack_started) {
+        // ────────────────────────────────────────────────────────────
+        // Subscription Handler Update
+        // ────────────────────────────────────────────────────────────
+        subscriptionHandler.sendInitialUpdateIfNeeded();
 
-    // Commissioning Check
-    static bool was_commissioned = false;
-    bool has_fabrics = (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
-    bool is_commissioned = Matter.isDeviceCommissioned() && has_fabrics;
-    
-    if (!was_commissioned && is_commissioned && !hardware_initialized) {
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "█████████████████████████████████████████████████████████");
-        ESP_LOGI(TAG, "█                                                       █");
-        ESP_LOGI(TAG, "█           ✓ COMMISSIONING COMPLETE!                  █");
-        ESP_LOGI(TAG, "█                                                       █");
-        ESP_LOGI(TAG, "█████████████████████████████████████████████████████████");
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "Matter Status:");
-        ESP_LOGI(TAG, "  • Fabrics: %d", has_fabrics);
-        ESP_LOGI(TAG, "  • Commissioned: YES ✓");
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "Initializing hardware...");
+        // ────────────────────────────────────────────────────────────
+        // Commissioning Check
+        // ────────────────────────────────────────────────────────────
+        static bool was_commissioned = false;
+        bool has_fabrics = (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
+        bool is_commissioned = Matter.isDeviceCommissioned() && has_fabrics;
         
-        ((RollerShutter*)shutter_handle)->initHardware();
-        hardware_initialized = true;
-        
-        ESP_LOGI(TAG, "✓ Hardware initialized");
-        ESP_LOGI(TAG, "✓ Device is now fully operational");
-        ESP_LOGI(TAG, "");
-    }
-    was_commissioned = is_commissioned;
-
-    // Shutter Control Loop
-    if (is_commissioned && hardware_initialized) {
-    shutter_driver_loop(shutter_handle);
-
-        // ════════════════════════════════════════════════════════════════
-        // Smart Matter Update Strategy
-        // ════════════════════════════════════════════════════════════════
-        
-        if (shutter_driver_should_send_matter_update(shutter_handle)) {
-            uint8_t percent = shutter_driver_get_current_percent(shutter_handle);
-            uint16_t pos_100ths = percent * 100;
+        if (!was_commissioned && is_commissioned && !hardware_initialized) {
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "█████████████████████████████████████████████████████████");
+            ESP_LOGI(TAG, "█                                                       █");
+            ESP_LOGI(TAG, "█           ✓ COMMISSIONING COMPLETE                  █");
+            ESP_LOGI(TAG, "█                                                       █");
+            ESP_LOGI(TAG, "█████████████████████████████████████████████████████████");
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Matter Status:");
+            ESP_LOGI(TAG, "  • Fabrics: %d", has_fabrics);
+            ESP_LOGI(TAG, "  • Commissioned: YES ✓");
+            ESP_LOGI(TAG, "");
+            ESP_LOGI(TAG, "Initializing hardware...");
             
-            RollerShutter::State state = shutter_driver_get_current_state(shutter_handle);
+            ((RollerShutter*)shutter_handle)->initHardware();
+            hardware_initialized = true;
             
-            esp_matter_attr_val_t val = esp_matter_uint16(pos_100ths);
-            
-            if (state == RollerShutter::State::MOVING_UP || 
-                state == RollerShutter::State::MOVING_DOWN) {
-                
-                // WÄHREND Bewegung: Nur CURRENT updaten (Live-Update)
-                ESP_LOGI(TAG, "Matter Update (live): %d%%", percent);
-                
-                attribute::update(window_covering_endpoint_id, 
-                                chip::app::Clusters::WindowCovering::Id,
-                                chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
-                                &val);
-                
-            } else if (state == RollerShutter::State::STOPPED) {
-                
-                // BEI Stillstand: BEIDE updaten (Subscription Trigger!)
-                ESP_LOGI(TAG, "Matter Update (stopped): %d%%", percent);
-                
-                attribute::update(window_covering_endpoint_id, 
-                                chip::app::Clusters::WindowCovering::Id,
-                                chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
-                                &val);
-                
-                attribute::update(window_covering_endpoint_id, 
-                                chip::app::Clusters::WindowCovering::Id,
-                                chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id, 
-                                &val);  // ← Subscription Trigger!
-            }
-            
-            // Operational Status (immer)
-            uint8_t opStateValue = (state == RollerShutter::State::MOVING_UP) ? 0x05 :
-                                (state == RollerShutter::State::MOVING_DOWN) ? 0x06 : 0x00;
-            
-            esp_matter_attr_val_t opstate_val = esp_matter_uint8(opStateValue);
-            attribute::update(window_covering_endpoint_id, 
-                            chip::app::Clusters::WindowCovering::Id,
-                            chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id, 
-                            &opstate_val);
-            
-            shutter_driver_mark_matter_update_sent(shutter_handle);
+            ESP_LOGI(TAG, "✓ Hardware initialized");
+            ESP_LOGI(TAG, "✓ Device is now fully operational");
+            ESP_LOGI(TAG, "");
         }
-    }
+        was_commissioned = is_commissioned;
 
-    // ════════════════════════════════════════════════════════════════
-    // Periodic Sync: Mode Attribut → WebUI
-    // ════════════════════════════════════════════════════════════════
-    
-    static uint32_t last_mode_sync = 0;
-    static uint8_t last_mode_value = 0xFF;  // Ungültiger Initialwert
-    
-    if (millis() - last_mode_sync >= 2000) {  // Alle 2 Sekunden prüfen
-        last_mode_sync = millis();
-        
-        // Mode Attribut lesen
-        cluster_t* wc_cluster = cluster::get(window_covering_endpoint_id, 
-                                            chip::app::Clusters::WindowCovering::Id);
-        if (wc_cluster) {
-            attribute_t* mode_attr = attribute::get(wc_cluster, 
-                                                   chip::app::Clusters::WindowCovering::Attributes::Mode::Id);
-            if (mode_attr) {
-                esp_matter_attr_val_t mode_val;
-                if (attribute::get_val(mode_attr, &mode_val) == ESP_OK) {
-                    uint8_t current_mode = mode_val.val.u8;
+        // ────────────────────────────────────────────────────────────
+        // Shutter Control Loop (nur wenn commissioned)
+        // ────────────────────────────────────────────────────────────
+        if (is_commissioned && hardware_initialized) {
+            shutter_driver_loop(shutter_handle);
+
+            // Matter Update Strategy
+            if (shutter_driver_should_send_matter_update(shutter_handle)) {
+                uint8_t percent = shutter_driver_get_current_percent(shutter_handle);
+                uint16_t pos_100ths = percent * 100;
+                
+                RollerShutter::State state = shutter_driver_get_current_state(shutter_handle);
+                
+                esp_matter_attr_val_t val = esp_matter_uint16(pos_100ths);
+                
+                if (state == RollerShutter::State::MOVING_UP || 
+                    state == RollerShutter::State::MOVING_DOWN) {
                     
-                    // Hat sich geändert?
-                    if (current_mode != last_mode_value) {
-                        bool inverted = (current_mode & 0x01) != 0;
+                    ESP_LOGI(TAG, "Matter Update (live): %d%%", percent);
+                    
+                    attribute::update(window_covering_endpoint_id, 
+                                    chip::app::Clusters::WindowCovering::Id,
+                                    chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
+                                    &val);
+                    
+                } else if (state == RollerShutter::State::STOPPED) {
+                    
+                    ESP_LOGI(TAG, "Matter Update (stopped): %d%%", percent);
+                    
+                    attribute::update(window_covering_endpoint_id, 
+                                    chip::app::Clusters::WindowCovering::Id,
+                                    chip::app::Clusters::WindowCovering::Attributes::CurrentPositionLiftPercent100ths::Id, 
+                                    &val);
+                    
+                    attribute::update(window_covering_endpoint_id, 
+                                    chip::app::Clusters::WindowCovering::Id,
+                                    chip::app::Clusters::WindowCovering::Attributes::TargetPositionLiftPercent100ths::Id, 
+                                    &val);
+                }
+                
+                // Operational Status
+                uint8_t opStateValue = (state == RollerShutter::State::MOVING_UP) ? 0x05 :
+                                    (state == RollerShutter::State::MOVING_DOWN) ? 0x06 : 0x00;
+                
+                esp_matter_attr_val_t opstate_val = esp_matter_uint8(opStateValue);
+                attribute::update(window_covering_endpoint_id, 
+                                chip::app::Clusters::WindowCovering::Id,
+                                chip::app::Clusters::WindowCovering::Attributes::OperationalStatus::Id, 
+                                &opstate_val);
+                
+                shutter_driver_mark_matter_update_sent(shutter_handle);
+            }
+        }
+
+        // ────────────────────────────────────────────────────────────
+        // Mode Sync (nur wenn Matter läuft!)
+        // ────────────────────────────────────────────────────────────
+        static uint32_t last_mode_sync = 0;
+        static uint8_t last_mode_value = 0xFF;
+        
+        if (millis() - last_mode_sync >= 2000 && window_covering_endpoint_id != 0) {
+            last_mode_sync = millis();
+            
+            cluster_t* wc_cluster = cluster::get(window_covering_endpoint_id, 
+                                                chip::app::Clusters::WindowCovering::Id);
+            if (wc_cluster) {
+                attribute_t* mode_attr = attribute::get(wc_cluster, 
+                                                    chip::app::Clusters::WindowCovering::Attributes::Mode::Id);
+                if (mode_attr) {
+                    esp_matter_attr_val_t mode_val;
+                    if (attribute::get_val(mode_attr, &mode_val) == ESP_OK) {
+                        uint8_t current_mode = mode_val.val.u8;
                         
-                        ESP_LOGI(TAG, "Mode changed: 0x%02X → 0x%02X (inverted=%s)", 
-                                 last_mode_value, current_mode, inverted ? "YES" : "NO");
-                        
-                        // WebUI Broadcast
-                        if (webUI) {
-                            char broadcast_msg[128];
-                            snprintf(broadcast_msg, sizeof(broadcast_msg),
-                                     "{\"type\":\"direction\",\"inverted\":%s}",
-                                     inverted ? "true" : "false");
+                        if (current_mode != last_mode_value) {
+                            bool inverted = (current_mode & 0x01) != 0;
                             
-                            webUI->broadcast_to_all_clients(broadcast_msg);
+                            ESP_LOGI(TAG, "Mode changed: 0x%02X → 0x%02X (inverted=%s)", 
+                                    last_mode_value, current_mode, inverted ? "YES" : "NO");
+                            
+                            if (webUI) {
+                                char broadcast_msg[128];
+                                snprintf(broadcast_msg, sizeof(broadcast_msg),
+                                        "{\"type\":\"direction\",\"inverted\":%s}",
+                                        inverted ? "true" : "false");
+                                
+                                webUI->broadcast_to_all_clients(broadcast_msg);
+                            }
+                            
+                            last_mode_value = current_mode;
                         }
-                        
-                        last_mode_value = current_mode;
                     }
                 }
             }
         }
-    }
 
-    #ifdef CONFIG_ENABLE_CUSTOM_CLUSTER_IP
-
-    // IP Address Update
-    static uint32_t last_ip_check = 0;
-    if (WiFi.status() == WL_CONNECTED && millis() - last_ip_check >= 30000) {
-        last_ip_check = millis();
-        String new_ip = WiFi.localIP().toString();
-        
-        if (strcmp(device_ip_str, new_ip.c_str()) != 0) {
-            ESP_LOGI(TAG, "IP changed: %s → %s", device_ip_str, new_ip.c_str());
-            snprintf(device_ip_str, sizeof(device_ip_str), "%s", new_ip.c_str());
+        #ifdef CONFIG_ENABLE_CUSTOM_CLUSTER_IP
+        // IP Address Update
+        static uint32_t last_ip_check = 0;
+        if (WiFi.status() == WL_CONNECTED && millis() - last_ip_check >= 30000) {
+            last_ip_check = millis();
+            String new_ip = WiFi.localIP().toString();
             
-            cluster_t* custom_cluster = cluster::get(window_covering_endpoint_id, 
-                                                    CLUSTER_ID_ROLLERSHUTTER_CONFIG);
-            
-            if (custom_cluster) {
-                attribute_t* ip_attr = attribute::get(custom_cluster, ATTR_ID_DEVICE_IP);
+            if (strcmp(device_ip_str, new_ip.c_str()) != 0) {
+                ESP_LOGI(TAG, "IP changed: %s → %s", device_ip_str, new_ip.c_str());
+                snprintf(device_ip_str, sizeof(device_ip_str), "%s", new_ip.c_str());
                 
-                if (ip_attr) {
-                    esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
-                    esp_err_t ret = attribute::set_val(ip_attr, &ip_val);
+                cluster_t* custom_cluster = cluster::get(window_covering_endpoint_id, 
+                                                        CLUSTER_ID_ROLLERSHUTTER_CONFIG);
+                
+                if (custom_cluster) {
+                    attribute_t* ip_attr = attribute::get(custom_cluster, ATTR_ID_DEVICE_IP);
                     
-                    if (ret != ESP_OK) {
-                        ESP_LOGE(TAG, "✗ Failed to update Device IP: %s", esp_err_to_name(ret));
+                    if (ip_attr) {
+                        esp_matter_attr_val_t ip_val = esp_matter_char_str(device_ip_str, DEVICE_IP_MAX_LENGTH);
+                        esp_err_t ret = attribute::set_val(ip_attr, &ip_val);
+                        
+                        if (ret != ESP_OK) {
+                            ESP_LOGE(TAG, "✗ Failed to update Device IP: %s", esp_err_to_name(ret));
+                        }
                     }
                 }
             }
         }
+        #endif
+
+    } else {
+        // ════════════════════════════════════════════════════════════════
+        // Matter nicht gestartet → NUR Hardware-Basics
+        // ════════════════════════════════════════════════════════════════
+        
+        // Shutter kann OHNE Matter laufen (z.B. bei Kalibrierung)
+        if (hardware_initialized) {
+            shutter_driver_loop(shutter_handle);
+        }
     }
 
-    #endif // CONFIG_ENABLE_CUSTOM_CLUSTER_IP
+    // ════════════════════════════════════════════════════════════════
+    // IMMER aktiv (unabhängig von Matter):
+    // ════════════════════════════════════════════════════════════════
 
     // Web UI Updates
     static uint32_t last_web = 0;
-    if (millis() - last_web >= 500) {
+    if (millis() - last_web >= 2000) {
         last_web = millis();
         if (webUI) {
             char status_msg[128];
@@ -1896,24 +2125,21 @@ void loop() {
         esp_task_wdt_reset();
     }
 
-    // WebSocket Cleanup every 3 Seconds
+    // WebSocket Cleanup
     static uint32_t last_ws_cleanup = 0;
-    if (millis() - last_ws_cleanup >= 3000) {
+    if (millis() - last_ws_cleanup >= 10000) {
         last_ws_cleanup = millis();
         if (webUI) {
             webUI->cleanup_idle_clients();
         }
     }
 
-    // ====================================================================
-    // Arduino OTA Handler
-    // ====================================================================
-    
+    // Arduino OTA
     ArduinoOTA.handle();
    
-    // Memory-Status every 30 Seconds
+    // Memory Status
     static uint32_t last_mem_check = 0;
-    if (millis() - last_mem_check >= 300000) {  // ← 2 Minuten
+    if (millis() - last_mem_check >= 300000) {
         last_mem_check = millis();
         
         uint32_t free_heap = esp_get_free_heap_size();
@@ -1937,78 +2163,6 @@ void loop() {
         }
         ESP_LOGI(TAG, "");
     }
-
-    /*
-    // Periodic Status Report (every 5 minutes)
-    static uint32_t last_status_report = 0;
-    if (millis() - last_status_report >= 300000) {  // 5 minutes
-        last_status_report = millis();
-        
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "═══════════════════════════════════");
-        ESP_LOGI(TAG, "PERIODIC STATUS REPORT");
-        ESP_LOGI(TAG, "═══════════════════════════════════");
-        ESP_LOGI(TAG, "Uptime: %llu seconds", esp_timer_get_time() / 1000000);
-        ESP_LOGI(TAG, "Free heap: %u bytes (%.1f KB)", 
-                 esp_get_free_heap_size(), esp_get_free_heap_size() / 1024.0f);
-        ESP_LOGI(TAG, "Min free heap: %u bytes (%.1f KB)", 
-                 esp_get_minimum_free_heap_size(), esp_get_minimum_free_heap_size() / 1024.0f);
-        
-        if (WiFi.status() == WL_CONNECTED) {
-            ESP_LOGI(TAG, "WiFi: Connected (%d dBm)", WiFi.RSSI());
-                        ESP_LOGI(TAG, "IP: %s", device_ip_str);
-        } else {
-            ESP_LOGW(TAG, "WiFi: Disconnected");
-        }
-        
-        ESP_LOGI(TAG, "Matter: %s (%d fabrics)", 
-                 is_commissioned ? "Commissioned" : "Not commissioned",
-                 chip::Server::GetInstance().GetFabricTable().FabricCount());
-        
-        ESP_LOGI(TAG, "Shutter:");
-        ESP_LOGI(TAG, "  Position: %d%%", shutter_driver_get_current_percent(shutter_handle));
-        ESP_LOGI(TAG, "  Calibrated: %s", shutter_driver_is_calibrated(shutter_handle) ? "Yes" : "No");
-        ESP_LOGI(TAG, "  Direction: %s", 
-                 shutter_driver_get_direction_inverted(shutter_handle) ? "Inverted" : "Normal");
-        ESP_LOGI(TAG, "  State: %s", 
-                 shutter_driver_get_current_state(shutter_handle) == RollerShutter::State::MOVING_UP ? "Moving UP" :
-                 shutter_driver_get_current_state(shutter_handle) == RollerShutter::State::MOVING_DOWN ? "Moving DOWN" :
-                 shutter_driver_get_current_state(shutter_handle) == RollerShutter::State::CALIBRATING_UP ? "Calibrating UP" :
-                 shutter_driver_get_current_state(shutter_handle) == RollerShutter::State::CALIBRATING_DOWN ? "Calibrating DOWN" :
-                 "Stopped");
-        
-        if (bleManager) {
-            if (bleManager->isPaired()) {
-                PairedShellyDevice paired = bleManager->getPairedDevice();
-                ESP_LOGI(TAG, "BLE Sensor: Paired");
-                ESP_LOGI(TAG, "  Device: %s (%s)", paired.name.c_str(), paired.address.c_str());
-                
-                ShellyBLESensorData data;
-                if (bleManager->getSensorData(data)) {
-                    uint32_t seconds_ago = (millis() - data.lastUpdate) / 1000;
-                    ESP_LOGI(TAG, "  Contact: %s", data.windowOpen ? "OPEN" : "CLOSED");
-                    ESP_LOGI(TAG, "  Battery: %d%%", data.battery);
-                    ESP_LOGI(TAG, "  Illuminance: %u lux", data.illuminance);
-                    ESP_LOGI(TAG, "  RSSI: %d dBm", data.rssi);
-                    ESP_LOGI(TAG, "  Last update: %u seconds ago", seconds_ago);
-                } else {
-                    ESP_LOGW(TAG, "  No sensor data available yet");
-                }
-            } else {
-                ESP_LOGI(TAG, "BLE Sensor: Not paired");
-            }
-        } else {
-            ESP_LOGW(TAG, "BLE Manager: Not initialized");
-        }
-        
-        if (webUI) {
-            ESP_LOGI(TAG, "Web UI: Active (clients: %d)", webUI->get_client_count());
-        }
-        
-        ESP_LOGI(TAG, "═══════════════════════════════════");
-        ESP_LOGI(TAG, "");   
-    }
-        */
 
     delay(1);
 }
@@ -2334,7 +2488,7 @@ void performCompleteFactoryReset() {
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
     ESP_LOGI(TAG, "║                                                           ║");
-    ESP_LOGI(TAG, "║           ⚠️  FACTORY RESET IN PROGRESS  ⚠️              ║");
+    ESP_LOGI(TAG, "║           ⚠️  FACTORY RESET IN PROGRESS ⚠️              ║");
     ESP_LOGI(TAG, "║                                                           ║");
     ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
     ESP_LOGI(TAG, "");
@@ -2385,7 +2539,7 @@ void performCompleteFactoryReset() {
     }
     
     // ════════════════════════════════════════════════════════════════════
-    // 4. MATTER SETTINGS
+    // 4. MATTER SETTINGS (inkl. matter_enabled Flag!)
     // ════════════════════════════════════════════════════════════════════
     
     ESP_LOGI(TAG, "→ Clearing Matter Settings...");
@@ -2393,9 +2547,17 @@ void performCompleteFactoryReset() {
     {
         Preferences prefs;
         if (prefs.begin("matter", false)) {
+            // ✅ WICHTIG: matter_enabled Flag explizit löschen!
+            bool had_flag = prefs.getBool("matter_enabled", false);
+            
             prefs.clear();
             prefs.end();
+            
             ESP_LOGI(TAG, "  ✓ Matter NVS cleared");
+            if (had_flag) {
+                ESP_LOGI(TAG, "  ✓ 'matter_enabled' flag REMOVED");
+                ESP_LOGI(TAG, "    → Matter will NOT auto-start after reboot");
+            }
         }
     }
     
@@ -2430,12 +2592,38 @@ void performCompleteFactoryReset() {
     }
     
     // ════════════════════════════════════════════════════════════════════
-    // 7. MATTER STACK (WICHTIG!)
+    // 7. BLE SCAN STOPPEN (falls aktiv)
     // ════════════════════════════════════════════════════════════════════
-    
+
+    ESP_LOGI(TAG, "→ Stopping BLE Scan...");
+
+    if (bleManager) {
+        if (bleManager->isScanActive()) {
+            ESP_LOGI(TAG, "  → BLE Scan is active, stopping...");
+            bleManager->stopScan(true);  // Manual stop
+            
+            // Warte bis Scanner wirklich gestoppt ist
+            vTaskDelay(pdMS_TO_TICKS(1000));
+        }
+        
+        // Unpair device (löscht auch NVS)
+        if (bleManager->isPaired()) {
+            ESP_LOGI(TAG, "  → Unpairing BLE device...");
+            bleManager->unpairDevice();
+        }
+        
+        ESP_LOGI(TAG, "  ✓ BLE cleaned up");
+    }
+
+    ESP_LOGI(TAG, "");
+
+    // ════════════════════════════════════════════════════════════════════
+    // 8. MATTER STACK (WICHTIG!)
+    // ════════════════════════════════════════════════════════════════════
+
     ESP_LOGI(TAG, "→ Performing Matter Factory Reset...");
-    
-    esp_matter::factory_reset();  // ← Löscht alle Matter-Daten
+
+    esp_matter::factory_reset();  // ← Löscht alle Matter-Daten & rebootet
     
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "✓✓✓ FACTORY RESET COMPLETE ✓✓✓");
@@ -2445,17 +2633,18 @@ void performCompleteFactoryReset() {
     ESP_LOGI(TAG, "  • BLE sensor pairing");
     ESP_LOGI(TAG, "  • WebUI credentials");
     ESP_LOGI(TAG, "  • Matter commissioning");
+    ESP_LOGI(TAG, "  • Matter auto-start flag");
     ESP_LOGI(TAG, "  • Device naming");
     ESP_LOGI(TAG, "  • WiFi credentials");
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "Device will restart in 3 seconds...");
+    ESP_LOGI(TAG, "Device will boot in BLE-ONLY mode (no Matter)");
     ESP_LOGI(TAG, "");
     
     // Wait before restart
     vTaskDelay(pdMS_TO_TICKS(3000));
     
-    // This is called by factory_reset(), but explicit for clarity
-    // esp_restart();  // ← factory_reset() already does this
+    // esp_restart() wird durch factory_reset() automatisch aufgerufen
 }
 
 

@@ -18,19 +18,38 @@
 typedef void (*endpoint_callback_t)();
 
 // ════════════════════════════════════════════════════════════════════════
-// DEVICE DISCOVERY (HEAP-FREE)
+// MATTER START RESULT STRUCTURE
+// ════════════════════════════════════════════════════════════════════════
+
+struct MatterStartResult {
+    bool success;
+    bool already_commissioned;
+    bool reboot_triggered;
+    String qr_url;
+    String pairing_code;
+    String error_message;
+};
+
+MatterStartResult initializeAndStartMatter();
+
+// ════════════════════════════════════════════════════════════════════════
+// DEVICE DISCOVERY
 // ════════════════════════════════════════════════════════════════════════
 
 #define MAX_DISCOVERED_DEVICES 10
 
 struct DiscoveredDevice {
-    char hostname[64];     // z.B. "BW-Wohnzimmer-Fenster-Links"
-    char ip[16];          // z.B. "192.168.1.100"
-    char room[32];        // z.B. "Wohnzimmer" (aus TXT record)
-    char type[16];        // z.B. "Fenster" (aus TXT record)
-    int8_t rssi;          // WiFi Signal Strength (-100 bis 0)
-    bool valid;           // Slot belegt?
+    char hostname[64];
+    char ip[16];
+    char room[32];
+    char type[16];
+    int8_t rssi;
+    bool valid;
 };
+
+// ════════════════════════════════════════════════════════════════════════
+// WEB UI HANDLER CLASS
+// ════════════════════════════════════════════════════════════════════════
 
 class WebUIHandler {
 public:
@@ -39,8 +58,10 @@ public:
     
     void begin();
     void broadcast_to_all_clients(const char* message);
+    static esp_err_t handle_start_matter(httpd_req_t *req);
+    static esp_err_t handle_matter_status(httpd_req_t *req);
     
-    // ✓ Client Management
+    // Client Management
     void disconnect_all_clients();
     void cleanup_idle_clients();
     void remove_client(int fd);
@@ -61,7 +82,6 @@ public:
     static esp_err_t drift_stats_handler(httpd_req_t *req);
     static esp_err_t drift_reset_handler(httpd_req_t *req);
     
-    // Device Discovery (Heap-Free, nutzt existierende mDNS Registration)
     static int discoverDevices(DiscoveredDevice* devices, int max_devices);
     void broadcastDiscoveredDevices();
 
@@ -71,7 +91,6 @@ private:
     httpd_handle_t server;
     SemaphoreHandle_t client_mutex;
     
-    // Client mit Timestamp
     struct ClientInfo {
         int fd;
         uint32_t last_activity;
@@ -82,15 +101,16 @@ private:
     std::vector<ClientInfo> active_clients;
     
     static const int MAX_CLIENTS = 3;
-    static const uint32_t WS_TIMEOUT_MS = 60000;  // 60 Sekunden
+    static const uint32_t WS_TIMEOUT_MS = 60000;
     
     void register_client(int fd);
     void unregister_client(int fd);
+
+    bool check_basic_auth(httpd_req_t *req);
     
     static esp_err_t root_handler(httpd_req_t *req);
     static esp_err_t ws_handler(httpd_req_t *req);
 
-    // RAII Helper für WebSocket Messages
     struct WSMessageBuffer {
         char* buffer;
         size_t size;
@@ -109,7 +129,6 @@ private:
             }
         }
         
-        // Non-copyable
         WSMessageBuffer(const WSMessageBuffer&) = delete;
         WSMessageBuffer& operator=(const WSMessageBuffer&) = delete;
     };

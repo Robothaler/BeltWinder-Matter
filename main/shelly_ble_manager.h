@@ -281,7 +281,7 @@ public:
     
 private:
     // BLE Components
-    esp32_ble_simple::SimpleBLEScanner* bleScanner;
+    std::unique_ptr<esp32_ble_simple::SimpleBLEScanner> bleScanner;
     
     NimBLEClient* activeClient;
     uint32_t activeClientTimestamp;

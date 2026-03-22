@@ -777,6 +777,74 @@
       transform: translateY(-2px);
       box-shadow: 0 6px 20px rgba(244, 67, 54, 0.4);
     }
+
+    /* ════════════════════════════════════════════════════════════════════════
+      Matter Section Styles
+      ════════════════════════════════════════════════════════════════════════ */
+
+    .info-box {
+      background: rgba(33, 150, 243, 0.1);
+      border: 1px solid rgba(33, 150, 243, 0.3);
+      border-radius: 12px;
+      padding: 18px;
+      margin: 15px 0;
+    }
+
+    .success-box {
+      background: rgba(76, 175, 80, 0.1);
+      border: 1px solid rgba(76, 175, 80, 0.3);
+      border-radius: 12px;
+      padding: 18px;
+      margin: 15px 0;
+    }
+
+    .warning-box {
+      background: rgba(255, 152, 0, 0.1);
+      border: 1px solid rgba(255, 152, 0, 0.3);
+      border-radius: 12px;
+      padding: 18px;
+      margin: 15px 0;
+    }
+
+    /* QR Code Container Animation */
+    #qr-code-container {
+      animation: fadeInScale 0.5s ease;
+    }
+
+    @keyframes fadeInScale {
+      from {
+        opacity: 0;
+        transform: scale(0.9);
+      }
+      to {
+        opacity: 1;
+        transform: scale(1);
+      }
+    }
+
+    /* Pairing Code Input Styling */
+    #matter-pairing-code-input {
+      user-select: all;
+      cursor: pointer;
+    }
+
+    #matter-pairing-code-input:focus {
+      outline: 2px solid var(--primary-color);
+      outline-offset: 2px;
+    }
+
+    /* Responsive QR Code */
+    @media (max-width: 480px) {
+      #qr-code-container {
+        padding: 15px;
+      }
+      
+      #qr-code-container canvas,
+      #qr-code-container img {
+        max-width: 100% !important;
+        height: auto !important;
+      }
+    }
     
     /* ============================================================================
        QR Code Styling
@@ -1070,6 +1138,12 @@
       color: var(--text-primary);
     }
   </style>
+
+  <!-- QRCode.js Library for Matter QR Codes -->
+    <script src="https://cdnjs.cloudflare.com/ajax/libs/qrcodejs/1.0.0/qrcode.min.js" 
+            integrity="sha512-CNgIRecGo7nphbeZ04Sc13ka07paqdeTu0WR1IM4kNcpmBAUSHSQX0FslNhTDadL4O5SAGapGt4FodqL8My0mA==" 
+            crossorigin="anonymous" 
+            referrerpolicy="no-referrer"></script>
 </head>
 <body>
   <!-- ============================================================================
@@ -1166,15 +1240,267 @@
     </div>
 
     <!-- ============================================================================
-         Matter Tab
-         ============================================================================ -->
-    
+     Matter Tab - COMPLETE IMPLEMENTATION
+     ============================================================================ -->
+
     <div id="matter" class="hidden" role="tabpanel" aria-labelledby="nav-matter">
-      <div class="card">
-        <h2>Matter Pairing Information</h2>
-        <div id="matter-status-detail" aria-live="polite"></div>
-        <div id="matter-pairing-info"></div>
+      
+      <!-- ════════════════════════════════════════════════════════════════════ -->
+      <!-- STATE 1: Matter NOT Started -->
+      <!-- ════════════════════════════════════════════════════════════════════ -->
+      
+      <div id="matter-not-started" class="card">
+        <h2>🏠 Matter Smart Home Integration</h2>
+        
+        <div class="info-box">
+          <p><strong>ℹ️ Matter is not initialized yet</strong></p>
+          <p style="margin-top:10px;line-height:1.8">
+            Matter allows you to control this device with:
+          </p>
+          <ul style="margin:10px 0 0 25px;line-height:1.8">
+            <li><strong>Apple Home</strong> (iPhone, iPad, HomePod)</li>
+            <li><strong>Google Home</strong> (Android, Google Nest)</li>
+            <li><strong>Amazon Alexa</strong> (Echo devices)</li>
+            <li><strong>Home Assistant</strong> (Open source)</li>
+            <li><strong>Samsung SmartThings</strong></li>
+          </ul>
+        </div>
+        
+        <div class="alert" style="margin-top:20px">
+          <strong>📋 Before Starting</strong>
+          <p style="margin-top:10px;line-height:1.8">
+            Make sure you have:
+          </p>
+          <ul style="margin:10px 0 0 20px;line-height:1.8">
+            <li>Your Matter controller app ready (e.g., Apple Home App)</li>
+            <li>This device and controller on the same WiFi network</li>
+            <li>Bluetooth enabled on your controller device</li>
+          </ul>
+        </div>
+        
+        <button id="btn-start-matter" 
+                class="btn primary" 
+                onclick="startMatterCommissioning()" 
+                style="width:100%;margin-top:25px;padding:20px">
+          <span style="font-size:1.2em">🚀 Start Matter Commissioning</span>
+        </button>
       </div>
+      
+      <!-- ════════════════════════════════════════════════════════════════════ -->
+      <!-- STATE 2: Matter Starting (Loading) -->
+      <!-- ════════════════════════════════════════════════════════════════════ -->
+      
+      <div id="matter-starting" class="card hidden">
+        <h2>⏳ Initializing Matter...</h2>
+        
+        <div class="info-box">
+          <div class="spinner" style="margin:20px auto"></div>
+          <p style="text-align:center;margin-top:15px"><strong>Starting Matter stack...</strong></p>
+          <p style="text-align:center;color:#888;margin-top:10px">
+            This may take up to 30 seconds. Please wait.
+          </p>
+        </div>
+        
+        <div class="alert" style="margin-top:20px">
+          <strong>ℹ️ What's happening?</strong>
+          <ol style="margin:10px 0 0 20px;line-height:1.8">
+            <li>Creating Matter node and endpoints</li>
+            <li>Initializing cryptographic keys</li>
+            <li>Starting Matter protocol stack</li>
+            <li>Generating QR code and pairing information</li>
+          </ol>
+        </div>
+      </div>
+      
+      <!-- ════════════════════════════════════════════════════════════════════ -->
+      <!-- STATE 3: Matter Ready - Show QR Code -->
+      <!-- ════════════════════════════════════════════════════════════════════ -->
+      
+      <div id="matter-qr-section" class="card hidden">
+        <h2>✓ Matter Commissioning Ready!</h2>
+        
+        <div class="success-box">
+          <p><strong>🎉 Your device is ready to pair!</strong></p>
+          <p style="margin-top:10px">
+            Scan the QR code below with your Matter controller app.
+          </p>
+        </div>
+        
+        <!-- QR Code Display -->
+        <div style="text-align:center;margin:30px 0">
+          <div id="qr-code-container" 
+              style="display:inline-block;
+                      padding:25px;
+                      background:white;
+                      border-radius:16px;
+                      box-shadow:0 8px 32px rgba(0,0,0,0.3)">
+            <!-- QRCode.js will insert the QR code here -->
+          </div>
+          
+          <div style="margin-top:15px;color:#888;font-size:0.95em">
+            Scan with your Matter controller app
+          </div>
+        </div>
+        
+        <!-- Manual Pairing Code -->
+        <div style="margin-top:30px">
+          <h3 style="margin-bottom:15px;color:#888;font-size:1.1em">
+            📋 Manual Pairing Code
+          </h3>
+          
+          <div style="display:flex;gap:10px;align-items:center">
+            <input type="text" 
+                  id="matter-pairing-code-input" 
+                  readonly
+                  style="flex:1;
+                          font-family:monospace;
+                          font-size:1.2em;
+                          padding:15px;
+                          background:rgba(255,255,255,0.05);
+                          border:1px solid rgba(255,255,255,0.1);
+                          border-radius:12px;
+                          color:#4CAF50;
+                          text-align:center;
+                          letter-spacing:2px">
+            
+            <button onclick="copyPairingCode()" 
+                    class="btn secondary" 
+                    style="padding:15px 20px">
+              <span>📋 Copy</span>
+            </button>
+          </div>
+          
+          <div style="color:#888;font-size:0.85em;text-align:center;margin-top:10px">
+            Enter this code if your controller doesn't support QR scanning
+          </div>
+        </div>
+        
+        <!-- Instructions -->
+        <div class="info-box" style="margin-top:30px">
+          <p><strong>📱 How to pair:</strong></p>
+          <ol style="margin:10px 0 0 20px;line-height:1.8">
+            <li>Open your Matter controller app</li>
+            <li>Select <strong>"Add Device"</strong> or <strong>"Add Matter Device"</strong></li>
+            <li>Scan the QR code above</li>
+            <li>Follow the on-screen instructions</li>
+            <li>Wait for pairing to complete</li>
+          </ol>
+        </div>
+        
+        <!-- App-specific instructions -->
+        <div style="display:grid;
+                    grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
+                    gap:15px;
+                    margin-top:20px">
+          
+          <div style="background:rgba(255,255,255,0.04);
+                      padding:15px;
+                      border-radius:12px;
+                      border:1px solid rgba(255,255,255,0.08)">
+            <div style="font-weight:bold;margin-bottom:8px">🍎 Apple Home</div>
+            <div style="font-size:0.85em;color:#888;line-height:1.6">
+              Settings → Add Accessory → Scan QR Code
+            </div>
+          </div>
+          
+          <div style="background:rgba(255,255,255,0.04);
+                      padding:15px;
+                      border-radius:12px;
+                      border:1px solid rgba(255,255,255,0.08)">
+            <div style="font-weight:bold;margin-bottom:8px">📱 Google Home</div>
+            <div style="font-size:0.85em;color:#888;line-height:1.6">
+              + → Set up device → Matter device
+            </div>
+          </div>
+          
+          <div style="background:rgba(255,255,255,0.04);
+                      padding:15px;
+                      border-radius:12px;
+                      border:1px solid rgba(255,255,255,0.08)">
+            <div style="font-weight:bold;margin-bottom:8px">🏠 Home Assistant</div>
+            <div style="font-size:0.85em;color:#888;line-height:1.6">
+              Settings → Devices → Add Integration → Matter
+            </div>
+          </div>
+          
+        </div>
+      </div>
+      
+      <!-- ════════════════════════════════════════════════════════════════════ -->
+      <!-- STATE 4: Already Commissioned -->
+      <!-- ════════════════════════════════════════════════════════════════════ -->
+      
+      <div id="matter-already-commissioned" class="card hidden">
+        <h2>✓ Device is Commissioned</h2>
+        
+        <div class="success-box">
+          <p><strong>✓ Your device is already paired with Matter!</strong></p>
+          <p style="margin-top:10px">
+            Connected to <span id="matter-fabric-count" style="font-weight:bold;color:#4CAF50">0</span> fabric(s)
+          </p>
+        </div>
+        
+        <!-- Device Info -->
+        <div style="background:rgba(255,255,255,0.04);
+                    padding:20px;
+                    border-radius:14px;
+                    margin:20px 0;
+                    border:1px solid rgba(255,255,255,0.08)">
+          
+          <h3 style="margin:0 0 15px 0;color:#888;font-size:1.1em">
+            📊 Connection Status
+          </h3>
+          
+          <table style="width:100%;border-collapse:collapse">
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+                <strong>Status:</strong>
+              </td>
+              <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);text-align:right;color:#4CAF50">
+                ✓ Commissioned
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05)">
+                <strong>Fabrics:</strong>
+              </td>
+              <td style="padding:10px 0;border-bottom:1px solid rgba(255,255,255,0.05);text-align:right">
+                <span id="matter-fabric-count-table">0</span>
+              </td>
+            </tr>
+            <tr>
+              <td style="padding:10px 0">
+                <strong>Device Type:</strong>
+              </td>
+              <td style="padding:10px 0;text-align:right">
+                Window Covering
+              </td>
+            </tr>
+          </table>
+        </div>
+        
+        <!-- Info -->
+        <div class="alert" style="margin-top:20px">
+          <strong>ℹ️ Managing your device</strong>
+          <p style="margin-top:10px;line-height:1.8">
+            You can now control this shutter through your Matter controller app.
+            The device will appear as a <strong>"Window Covering"</strong> or <strong>"Rollershutter"</strong>.
+          </p>
+        </div>
+        
+        <!-- Remove Device -->
+        <div class="warning-box" style="margin-top:20px">
+          <p><strong>⚠️ Remove from Matter Network</strong></p>
+          <p style="margin-top:10px;line-height:1.8">
+            To remove this device from your Matter network:
+          </p>
+          <ol style="margin:10px 0 0 20px;line-height:1.8">
+            <li>Remove it from your controller app first</li>
+            <li>Then perform a <strong>Factory Reset</strong> in Settings</li>
+          </ol>
+        </div>
+      </div>
+      
     </div>
 
     <!-- ============================================================================
@@ -2785,6 +3111,21 @@
           connectWebSocket();
       }, delay);
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Handle Matter Status Updates from WebSocket
+    // ════════════════════════════════════════════════════════════════════════
+
+    // Add this to your existing handleWebSocketMessage function:
+    function handleMatterStatusUpdate(data) {
+      console.log('📡 Matter Status Update:', data);
+      
+      if (data.commissioned && data.fabric_count > 0) {
+        showMatterCommissioned(data.fabric_count);
+      } else if (data.stack_started && data.qr_url) {
+        showMatterQRCode(data.qr_url, data.pairing_code);
+      }
+    }
     
     // ============================================================================
     // WebSocket Message Handler
@@ -2812,6 +3153,31 @@
         hideLoading();
         return;
       }
+/*
+      if (data.type === 'matter_start_result') {
+        hideLoading();
+        
+        if (data.success) {
+          if (data.already_commissioned) {
+            showMatterCommissioned(data.fabric_count || 0);
+          } else {
+            showMatterQRCode(data.qr_url, data.pairing_code);
+          }
+        } else {
+          showErrorBanner('Matter Start Failed', 
+                        data.error || 'Unknown error', 
+                        'error');
+          
+          // Reset UI
+          document.getElementById('matter-starting').classList.add('hidden');
+          document.getElementById('matter-not-started').classList.remove('hidden');
+          
+          const btn = document.getElementById('btn-start-matter');
+          btn.disabled = false;
+          btn.innerHTML = '<span style="font-size:1.2em">🚀 Start Matter Commissioning</span>';
+        }
+      }
+        */
       
       // Handle info messages
       if (data.type === 'info') {
@@ -5738,6 +6104,362 @@
         // You can adjust UI based on theme preference
       });
     }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // MATTER COMMISSIONING FUNCTIONS
+    // ════════════════════════════════════════════════════════════════════════
+
+    let matterQRCode = null;  // QRCode.js Instance
+
+    /**
+     * Start Matter Commissioning Process
+     */
+    async function startMatterCommissioning() {
+      const btn = document.getElementById('btn-start-matter');
+      
+      // Disable button
+      btn.disabled = true;
+      btn.innerHTML = '<span class="spinner"></span> <span>Starting...</span>';
+      
+      // Show loading state
+      document.getElementById('matter-not-started').classList.add('hidden');
+      document.getElementById('matter-starting').classList.remove('hidden');
+      
+      try {
+        const response = await fetch('/api/matter/start', {
+          method: 'POST',
+          headers: {
+            'Authorization': 'Basic ' + btoa('admin:' + getCurrentPassword())
+          }
+        });
+        
+        const data = await response.json();
+        
+        // Hide loading
+        document.getElementById('matter-starting').classList.add('hidden');
+        
+        if (data.success) {
+          // ════════════════════════════════════════════════════════════════
+          // CASE 1: Reboot wird ausgelöst
+          // ════════════════════════════════════════════════════════════════
+          
+          if (data.reboot_triggered) {
+            console.log('🔄 Matter enabled - Device will reboot');
+            
+            // Keep loading screen visible
+            document.getElementById('matter-starting').classList.remove('hidden');
+            
+            // Update loading message
+            document.querySelector('#matter-starting .info-box p').innerHTML = 
+              '<strong>⚠️ Device will reboot to enable Matter</strong><br>' +
+              'The device needs to restart for Matter to initialize properly.<br>' +
+              'This takes about 30 seconds.';
+            
+            // Show countdown
+            let countdown = data.reboot_countdown || 3;
+            const countdownEl = document.createElement('div');
+            countdownEl.style.cssText = 
+              'text-align:center;' +
+              'margin-top:20px;' +
+              'font-size:1.5em;' +
+              'font-weight:bold;' +
+              'color:#2196F3';
+            countdownEl.id = 'reboot-countdown';
+            
+            document.querySelector('#matter-starting .info-box').appendChild(countdownEl);
+            
+            const countdownInterval = setInterval(() => {
+              if (countdown > 0) {
+                countdownEl.innerHTML = `Rebooting in ${countdown} seconds...`;
+                countdown--;
+              } else {
+                clearInterval(countdownInterval);
+                
+                // Show reconnecting message
+                countdownEl.innerHTML = '⏳ Device is rebooting...<br>' +
+                                      '<span style="font-size:0.7em;color:#888">Reconnecting in 30 seconds</span>';
+                
+                // Wait 30 seconds for reboot
+                setTimeout(() => {
+                  console.log('🔄 Attempting to reconnect after reboot...');
+                  
+                  // Show reload message
+                  countdownEl.innerHTML = '🔄 Reconnecting...';
+                  
+                  // ════════════════════════════════════════════════════════════════
+                  // OPTIONAL: Ping-based reconnect (eleganter als fester Delay)
+                  // ════════════════════════════════════════════════════════════════
+                  
+                  let pingAttempts = 0;
+                  const maxPingAttempts = 20;  // 20 Versuche = ~40 Sekunden
+                  
+                  const pingInterval = setInterval(() => {
+                    pingAttempts++;
+                    
+                    console.log(`🔍 Ping attempt ${pingAttempts}/${maxPingAttempts}...`);
+                    
+                    // Versuche WebSocket-Verbindung
+                    fetch('/ws', { method: 'HEAD' })
+                      .then(response => {
+                        if (response.ok || response.status < 500) {
+                          // Device ist wieder erreichbar!
+                          clearInterval(pingInterval);
+                          
+                          console.log('✓ Device is back online!');
+                          countdownEl.innerHTML = '✓ Connected! Reloading...';
+                          
+                          setTimeout(() => {
+                            location.reload();
+                          }, 1000);
+                        }
+                      })
+                      .catch(() => {
+                        // Noch nicht erreichbar
+                        if (pingAttempts >= maxPingAttempts) {
+                          // Timeout
+                          clearInterval(pingInterval);
+                          
+                          console.error('✗ Reconnect timeout');
+                          countdownEl.innerHTML = '✗ Reconnect failed<br>' +
+                                                '<button onclick="location.reload()" ' +
+                                                'style="margin-top:15px;padding:12px 24px;' +
+                                                'background:#2196F3;color:white;border:none;' +
+                                                'border-radius:8px;cursor:pointer">' +
+                                                'Reload Manually</button>';
+                        }
+                      });
+                    
+                  }, 2000);  // Ping alle 2 Sekunden
+                  
+                }, 5000);  // Warte 5 Sekunden bevor Ping startet (Zeit für Reboot-Init)
+              }
+            }, 1000);
+            
+            return;  // ← WICHTIG: Funktion hier beenden!
+          }
+          
+          // ════════════════════════════════════════════════════════════════
+          // CASE 2: Already commissioned
+          // ════════════════════════════════════════════════════════════════
+          
+          if (data.already_commissioned) {
+            showMatterCommissioned(data.fabric_count || 0);
+            showErrorBanner('Already Commissioned', 
+                          `Device is already paired with ${data.fabric_count} fabric(s)`, 
+                          'info');
+            return;
+          }
+          
+          // ════════════════════════════════════════════════════════════════
+          // CASE 3: Matter Live-Start (sollte nach Änderung nicht vorkommen)
+          // ════════════════════════════════════════════════════════════════
+          
+          if (data.qr_url && data.pairing_code) {
+            showMatterQRCode(data.qr_url, data.pairing_code);
+            showErrorBanner('Matter Started!', 
+                          'Scan the QR code to pair your device', 
+                          'success');
+          }
+          
+        } else {
+          // ════════════════════════════════════════════════════════════════
+          // CASE 4: Fehler
+          // ════════════════════════════════════════════════════════════════
+          
+          throw new Error(data.error || 'Unknown error');
+        }
+        
+      } catch (error) {
+        console.error('Failed to start Matter:', error);
+        
+        // Show error
+        document.getElementById('matter-starting').classList.add('hidden');
+        document.getElementById('matter-not-started').classList.remove('hidden');
+        
+        btn.disabled = false;
+        btn.innerHTML = '<span style="font-size:1.2em">🚀 Start Matter Commissioning</span>';
+        
+        showErrorBanner('Failed to Start Matter', 
+                      error.message || 'Unknown error occurred', 
+                      'error');
+      }
+    }
+
+    /**
+     * Show QR Code Section
+     */
+    function showMatterQRCode(qrUrl, pairingCode) {
+      console.log('📱 Showing Matter QR Code');
+      console.log('  QR URL:', qrUrl);
+      console.log('  Pairing Code:', pairingCode);
+      
+      // Hide other sections
+      document.getElementById('matter-not-started').classList.add('hidden');
+      document.getElementById('matter-starting').classList.add('hidden');
+      document.getElementById('matter-already-commissioned').classList.add('hidden');
+      
+      // Show QR section
+      document.getElementById('matter-qr-section').classList.remove('hidden');
+      
+      // Set pairing code
+      document.getElementById('matter-pairing-code-input').value = pairingCode;
+      
+      // Generate QR Code
+      const container = document.getElementById('qr-code-container');
+      container.innerHTML = '';  // Clear existing QR code
+      
+      // Create QR Code with QRCode.js
+      matterQRCode = new QRCode(container, {
+        text: qrUrl,
+        width: 300,
+        height: 300,
+        colorDark: "#000000",
+        colorLight: "#ffffff",
+        correctLevel: QRCode.CorrectLevel.M
+      });
+      
+      console.log('✓ QR Code generated successfully');
+    }
+
+    /**
+     * Show Already Commissioned Section
+     */
+    function showMatterCommissioned(fabricCount) {
+      console.log('✓ Device is already commissioned');
+      console.log('  Fabrics:', fabricCount);
+      
+      // Hide other sections
+      document.getElementById('matter-not-started').classList.add('hidden');
+      document.getElementById('matter-starting').classList.add('hidden');
+      document.getElementById('matter-qr-section').classList.add('hidden');
+      
+      // Show commissioned section
+      document.getElementById('matter-already-commissioned').classList.remove('hidden');
+      
+      // Update fabric count
+      document.getElementById('matter-fabric-count').textContent = fabricCount;
+      document.getElementById('matter-fabric-count-table').textContent = fabricCount;
+    }
+
+    /**
+     * Copy Pairing Code to Clipboard
+     */
+    function copyPairingCode() {
+      const input = document.getElementById('matter-pairing-code-input');
+      
+      // Select text
+      input.select();
+      input.setSelectionRange(0, 99999); // For mobile
+      
+      try {
+        // Try modern API first
+        if (navigator.clipboard && navigator.clipboard.writeText) {
+          navigator.clipboard.writeText(input.value).then(() => {
+            showErrorBanner('Copied!', 
+                          'Pairing code copied to clipboard', 
+                          'success');
+          }).catch(() => {
+            // Fallback to execCommand
+            fallbackCopy();
+          });
+        } else {
+          // Fallback for older browsers
+          fallbackCopy();
+        }
+      } catch (err) {
+        console.error('Copy failed:', err);
+        showErrorBanner('Copy Failed', 
+                      'Please copy manually', 
+                      'error');
+      }
+      
+      function fallbackCopy() {
+        try {
+          document.execCommand('copy');
+          showErrorBanner('Copied!', 
+                        'Pairing code copied to clipboard', 
+                        'success');
+        } catch (err) {
+          showErrorBanner('Copy Failed', 
+                        'Please copy manually', 
+                        'error');
+        }
+      }
+    }
+
+    /**
+     * Check Matter Status on Page Load
+     */
+    async function checkMatterStatusOnLoad() {
+      try {
+        const response = await fetch('/api/matter/status', {
+          headers: {
+            'Authorization': 'Basic ' + btoa('admin:' + getCurrentPassword())
+          }
+        });
+        
+        const data = await response.json();
+        
+        console.log('📊 Matter Status:', data);
+        
+        if (data.commissioned && data.fabric_count > 0) {
+          // Already commissioned
+          showMatterCommissioned(data.fabric_count);
+          
+        } else if (data.stack_started && data.qr_url) {
+          // Started but not commissioned yet
+          showMatterQRCode(data.qr_url, data.pairing_code);
+          
+        } else {
+          // Not started
+          document.getElementById('matter-not-started').classList.remove('hidden');
+        }
+        
+      } catch (error) {
+        console.error('Failed to check Matter status:', error);
+        
+        // Assume not started on error
+        document.getElementById('matter-not-started').classList.remove('hidden');
+      }
+    }
+
+    /**
+     * Get Current Password (from session or prompt)
+     */
+    function getCurrentPassword() {
+      // Try to get from session storage first
+      let password = sessionStorage.getItem('webui_password');
+      
+      if (!password) {
+        // Fallback: prompt user
+        password = prompt('Enter WebUI password:');
+        if (password) {
+          sessionStorage.setItem('webui_password', password);
+        }
+      }
+      
+      return password || '';
+    }
+
+    // ════════════════════════════════════════════════════════════════════════
+    // Initialize Matter Status Check on Page Load
+    // ════════════════════════════════════════════════════════════════════════
+
+    document.addEventListener('DOMContentLoaded', () => {
+      // Check Matter status when Matter tab is opened
+      const matterNavBtn = document.getElementById('nav-matter');
+      if (matterNavBtn) {
+        matterNavBtn.addEventListener('click', () => {
+          // Only check once per session
+          if (!window.matterStatusChecked) {
+            checkMatterStatusOnLoad();
+            window.matterStatusChecked = true;
+          }
+        });
+      }
+      
+      console.log('✓ Matter UI initialized');
+    });
 
     // ════════════════════════════════════════════════════════════════════════
     // LIVE-UPDATE TIMER

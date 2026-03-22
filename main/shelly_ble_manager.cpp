@@ -76,54 +76,38 @@ bool ShellyBLEManager::begin() {
 // ════════════════════════════════════════════════════════════════════════
 
 bool ShellyBLEManager::ensureBLEStarted() {
-    if (bleScanner != nullptr) {
+    if (bleScanner) {
         ESP_LOGV(TAG, "BLE already started");
         return true;
     }
     
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║   BLE STARTUP (ON-DEMAND)        ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
+    ESP_LOGI(TAG, "→ Creating scanner...");
     
-    // Matter hat NimBLE bereits gestartet!
-    // Wir erstellen einfach den Scanner - er nutzt Matter's NimBLE!
+    // RAII: Automatisches Cleanup bei Scope-Exit!
+    auto scanner = std::make_unique<esp32_ble_simple::SimpleBLEScanner>();
     
-    ESP_LOGI(TAG, "→ Creating scanner (using Matter's NimBLE)...");
-    
-    bleScanner = new esp32_ble_simple::SimpleBLEScanner();
-    
-    if (!bleScanner) {
+    if (!scanner) {
         ESP_LOGE(TAG, "✗ Scanner allocation failed");
         return false;
     }
     
-    // Scanner konfigurieren
-    bleScanner->set_scan_active(true);
-    bleScanner->set_scan_continuous(false);
-    bleScanner->set_scan_interval_ms(500);
-    bleScanner->set_scan_window_ms(100);
-    bleScanner->register_listener(this);
+    // Konfiguration
+    scanner->set_scan_active(true);
+    scanner->set_scan_continuous(false);
+    scanner->register_listener(this);
     
-    // Setup (prüft intern ob NimBLE bereit ist)
-    if (!bleScanner->setup()) {
+    // Setup (kann fehlschlagen)
+    if (!scanner->setup()) {
         ESP_LOGE(TAG, "✗ Scanner setup failed");
-        delete bleScanner;
-        bleScanner = nullptr;
-        return false;
+        return false;  // ← scanner wird automatisch freigegeben!
     }
     
-    ESP_LOGI(TAG, "✓ Scanner ready");
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-    ESP_LOGI(TAG, "║  ✓ BLE FULLY OPERATIONAL        ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
+    // Erfolg: Übernehme Ownership
+    bleScanner = std::move(scanner);
     
+    ESP_LOGI(TAG, "✓ Scanner ready");
     return true;
 }
-
 
 void ShellyBLEManager::end() {
     if (!initialized) return;
