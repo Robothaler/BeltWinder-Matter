@@ -1159,7 +1159,10 @@ MatterStartResult initializeAndStartMatter() {
 
     if (bleManager && bleManager->isScanActive()) {
         ESP_LOGI(TAG, "→ Stopping BLE scan before reboot...");
-        bleManager->stopScan(true);
+        // Use manualStop=false to preserve NVS continuous_scan flag.
+        // This is an automatic stop for reboot preparation, not a user request.
+        // On next boot, continuous scan will auto-start if it was enabled.
+        bleManager->stopScan(false);
         vTaskDelay(pdMS_TO_TICKS(300));
     }
 

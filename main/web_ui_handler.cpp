@@ -3375,7 +3375,7 @@ void WebUIHandler::begin() {
     
     cfg.max_open_sockets = 5;
     cfg.lru_purge_enable = true;
-    cfg.max_uri_handlers = 8;
+    cfg.max_uri_handlers = 12;  // 11 handlers registered: root, 3x icons, ws, 2x update, 2x matter, 2x drift
     cfg.stack_size = 8192;
     cfg.ctrl_port = 32768;
     cfg.close_fn = ws_close_callback;
