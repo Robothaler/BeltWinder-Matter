@@ -162,6 +162,7 @@ void ShellyBLEManager::loadPairedDevice() {
         ESP_LOGI(TAG, "Bindkey: %s", pairedDevice.bindkey.length() > 0 ? "SET (32 chars)" : "EMPTY");
         
         bool shouldScan = prefs.getBool("continuous_scan", true);
+        continuousScan = shouldScan;  // Apply NVS flag to member variable
         ESP_LOGI(TAG, "Continuous Scan: %s", shouldScan ? "ENABLED" : "DISABLED");
         ESP_LOGI(TAG, "═══════════════════════════════════");
     }

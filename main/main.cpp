@@ -1699,7 +1699,26 @@ void setup() {
 
         ESP_LOGI(TAG, "");
     }  // end matter_enabled
-    
+
+    // ════════════════════════════════════════════════════════════════════
+    // AUTO-START BLE CONTINUOUS SCAN (if paired and was enabled before)
+    // ════════════════════════════════════════════════════════════════════
+    // loadPairedDevice() restores continuousScan from NVS.
+    // startContinuousScan() is only called if user had it enabled before
+    // reboot (i.e. not explicitly stopped via stopScan(manualStop=true)).
+    // ════════════════════════════════════════════════════════════════════
+    if (bleManager && bleManager->isPaired() && bleManager->isContinuousScanEnabled()) {
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "  AUTO-START: Continuous BLE Scan");
+        ESP_LOGI(TAG, "═══════════════════════════════════");
+        ESP_LOGI(TAG, "  Paired device found, continuous scan was enabled.");
+        ESP_LOGI(TAG, "  Starting scan after 1s BLE stabilization delay...");
+        vTaskDelay(pdMS_TO_TICKS(1000));
+        bleManager->startContinuousScan();
+        ESP_LOGI(TAG, "✓ Continuous scan started");
+        ESP_LOGI(TAG, "");
+    }
+
     // ════════════════════════════════════════════════════════════════════
     // SETUP COMPLETE
     // ════════════════════════════════════════════════════════════════════

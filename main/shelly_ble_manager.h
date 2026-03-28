@@ -235,6 +235,7 @@ public:
     void startContinuousScan();
     bool isScanActive() const { return scanning; }
     bool isContinuousScanActive() const { return continuousScan && scanning; }
+    bool isContinuousScanEnabled() const { return continuousScan; }
     bool isBLEStarted() const { return bleScanner != nullptr; }
     static bool hasAnyPairedDevice();
     bool ensureBLEStarted();

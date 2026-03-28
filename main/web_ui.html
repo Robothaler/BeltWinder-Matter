@@ -3119,11 +3119,15 @@
     // Add this to your existing handleWebSocketMessage function:
     function handleMatterStatusUpdate(data) {
       console.log('📡 Matter Status Update:', data);
-      
-      if (data.commissioned && data.fabric_count > 0) {
-        showMatterCommissioned(data.fabric_count);
-      } else if (data.stack_started && data.qr_url) {
-        showMatterQRCode(data.qr_url, data.pairing_code);
+
+      // HTTP response uses "fabric_count", WS response uses "fabrics"
+      const fabricCount = data.fabric_count || data.fabrics || 0;
+
+      if (data.commissioned && fabricCount > 0) {
+        showMatterCommissioned(fabricCount);
+      } else if (data.qr_url) {
+        // HTTP: stack_started + qr_url; WS: qr_url directly (stack is running)
+        showMatterQRCode(data.qr_url, data.pairing_code || '');
       }
     }
     
@@ -3433,17 +3437,20 @@
     
     function handleMatterStatus(data) {
       AppState.matterCommissioned = data.commissioned;
-      
+
       const statusEl = document.getElementById('matter-status');
-      if (data.commissioned) {
-        statusEl.innerHTML = 'Paired <span class="badge commissioned">✓</span>';
-        statusEl.className = 'status-value commissioned';
-      } else {
-        statusEl.innerHTML = 'Not Paired <span class="badge not-commissioned">!</span>';
-        statusEl.className = 'status-value not-commissioned';
+      if (statusEl) {
+        if (data.commissioned) {
+          statusEl.innerHTML = 'Paired <span class="badge commissioned">✓</span>';
+          statusEl.className = 'status-value commissioned';
+        } else {
+          statusEl.innerHTML = 'Not Paired <span class="badge not-commissioned">!</span>';
+          statusEl.className = 'status-value not-commissioned';
+        }
       }
-      
-      updateMatterInfo(data);
+
+      // Route to state-machine UI (showMatterQRCode / showMatterCommissioned)
+      handleMatterStatusUpdate(data);
     }
 
     function handleModalClose(data) {
