@@ -1138,21 +1138,6 @@ bool startMatterStack() {
     return true;
 }
 
-bool isMatterBusy() {
-    using namespace chip::DeviceLayer;
-    
-    // Prüfe ob Commissioning läuft
-    if (!ConnectivityMgr().IsBLEAdvertisingEnabled()) {
-        return false;  // Kein BLE-Advertising = Matter nicht beschäftigt
-    }
-    
-    // Prüfe ob Fabric existiert (= bereits commissioned)
-    if (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0) {
-        return false;  // Commissioned = BLE frei
-    }
-    
-    return true;  // Matter nutzt BLE aktiv
-}
 
 MatterStartResult initializeAndStartMatter() {
     MatterStartResult result;
@@ -1169,142 +1154,49 @@ MatterStartResult initializeAndStartMatter() {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // Step 1: Create Matter Node
+    // Step 1: Stop BLE scanning so we don't hold resources across reboot
     // ════════════════════════════════════════════════════════════════════
-    
-    if (!matter_node_created) {
-        ESP_LOGI(TAG, "→ Creating Matter node and endpoints...");
-        
-        if (!createMatterNode()) {
-            result.error_message = "Failed to create Matter node";
-            ESP_LOGE(TAG, "✗ %s", result.error_message.c_str());
-            return result;
-        }
-        
-        ESP_LOGI(TAG, "✓ Matter node created");
-        ESP_LOGI(TAG, "");
-        vTaskDelay(pdMS_TO_TICKS(500));
-    } else {
-                ESP_LOGI(TAG, "✓ Matter node already exists");
-        ESP_LOGI(TAG, "");
+
+    if (bleManager && bleManager->isScanActive()) {
+        ESP_LOGI(TAG, "→ Stopping BLE scan before reboot...");
+        bleManager->stopScan(true);
+        vTaskDelay(pdMS_TO_TICKS(300));
     }
-    
+
     // ════════════════════════════════════════════════════════════════════
-    // Step 2: Start Matter Stack
+    // Step 2: SET NVS FLAG — Matter will auto-start on next boot
+    //
+    // We do NOT call createMatterNode() or startMatterStack() here.
+    // Calling them while NimBLE owns the BT controller causes:
+    //   BLEManagerImpl::InitESPBleLayer() → nimble_port_init() → FAIL
+    //   (NimBLEDevice ignores the error, spawns second host task → deadlock)
+    //
+    // Instead: set flag, reboot. The boot sequence (Phase 2 then Phase 8)
+    // is already designed to handle this cleanly.
     // ════════════════════════════════════════════════════════════════════
-    
-    if (!matter_stack_started) {
-        ESP_LOGI(TAG, "→ Starting Matter stack...");
-        
-        if (!startMatterStack()) {
-            result.error_message = "Failed to start Matter stack";
-            ESP_LOGE(TAG, "✗ %s", result.error_message.c_str());
-            return result;
-        }
-        
-        ESP_LOGI(TAG, "✓ Matter stack started");
-        ESP_LOGI(TAG, "");
-        vTaskDelay(pdMS_TO_TICKS(1000));
-    } else {
-        ESP_LOGI(TAG, "✓ Matter stack already running");
-        ESP_LOGI(TAG, "");
-    }
-    
-    // ════════════════════════════════════════════════════════════════════
-    // Step 3: SET NVS FLAG (Matter erfolgreich gestartet!)
-    // ════════════════════════════════════════════════════════════════════
-    
+
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
     ESP_LOGI(TAG, "║  ENABLING MATTER PERSISTENCE      ║");
     ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
     ESP_LOGI(TAG, "");
-    
-    matterPref.begin("matter", false);  // Write mode
+
+    matterPref.begin("matter", false);
     matterPref.putBool("matter_enabled", true);
     matterPref.end();
-    
+
     ESP_LOGI(TAG, "✓ NVS Flag 'matter_enabled' set to TRUE");
     ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
-    ESP_LOGI(TAG, "║                                                           ║");
-    ESP_LOGI(TAG, "║         ⚠️  REBOOT REQUIRED FOR MATTER START             ║");
-    ESP_LOGI(TAG, "║                                                           ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "Reason:");
-    ESP_LOGI(TAG, "  • Matter requires exclusive BT Controller access");
-    ESP_LOGI(TAG, "  • Clean initialization ensures no conflicts");
-    ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "After reboot:");
-    ESP_LOGI(TAG, "  ✓ Matter will auto-start");
-    ESP_LOGI(TAG, "  ✓ BLE will scan for paired sensor");
+    ESP_LOGI(TAG, "  ✓ Matter will auto-start (Phase 8)");
+    ESP_LOGI(TAG, "  ✓ BLE sensor scanning ready (Phase 2)");
     ESP_LOGI(TAG, "  ✓ WebUI remains accessible");
     ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "→ Rebooting in 3 seconds...");
-    ESP_LOGI(TAG, "");
 
-    vTaskDelay(pdMS_TO_TICKS(3000));
-
-    // ⚠️ WICHTIG: Return-Wert anpassen!
     result.success = true;
-    result.reboot_triggered = true;  // Neues Feld im Struct!
+    result.reboot_triggered = true;
 
-    return result;  // Code nach restart() wird nicht ausgeführt
-    
-    // ════════════════════════════════════════════════════════════════════
-    // Step 4: Generate Pairing Info
-    // ════════════════════════════════════════════════════════════════════
-    
-    ESP_LOGI(TAG, "→ Generating pairing information...");
-    
-    bool commissioned = Matter.isDeviceCommissioned();
-    uint8_t fabric_count = chip::Server::GetInstance().GetFabricTable().FabricCount();
-    
-    result.already_commissioned = (commissioned && fabric_count > 0);
-    
-    if (result.already_commissioned) {
-        ESP_LOGW(TAG, "");
-        ESP_LOGW(TAG, "⚠ Device is already commissioned!");
-        ESP_LOGW(TAG, "  Fabrics: %d", fabric_count);
-        ESP_LOGW(TAG, "");
-        
-        result.success = true;
-        result.error_message = "Device is already commissioned with " + String(fabric_count) + " fabric(s)";
-        
-    } else {
-        result.qr_url = Matter.getOnboardingQRCodeUrl();
-        result.pairing_code = Matter.getManualPairingCode();
-        
-        if (result.qr_url.length() == 0 || result.pairing_code.length() == 0) {
-            result.error_message = "Failed to generate pairing information";
-            ESP_LOGE(TAG, "✗ %s", result.error_message.c_str());
-            ESP_LOGE(TAG, "  QR URL length: %d", result.qr_url.length());
-            ESP_LOGE(TAG, "  Pairing code length: %d", result.pairing_code.length());
-            return result;
-        }
-        
-        ESP_LOGI(TAG, "✓ Pairing information generated");
-        ESP_LOGI(TAG, "  QR URL: %s", result.qr_url.c_str());
-        ESP_LOGI(TAG, "  Pairing Code: %s", result.pairing_code.c_str());
-        ESP_LOGI(TAG, "");
-        
-        result.success = true;
-    }
-    
-    // ════════════════════════════════════════════════════════════════════
-    // Complete
-    // ════════════════════════════════════════════════════════════════════
-    
-    ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "╔═══════════════════════════════════════════════════════════╗");
-    ESP_LOGI(TAG, "║                                                           ║");
-    ESP_LOGI(TAG, "║         ✓ MATTER INITIALIZATION COMPLETE                 ║");
-    ESP_LOGI(TAG, "║                                                           ║");
-    ESP_LOGI(TAG, "╚═══════════════════════════════════════════════════════════╝");
-    ESP_LOGI(TAG, "");
-    
-    return result;
+    return result;  // WebUI handler calls ESP.restart() after sending response
 }
 
 
@@ -1400,67 +1292,58 @@ void setup() {
     loop_task_handle = xTaskGetCurrentTaskHandle();
     esp_task_wdt_add(loop_task_handle);
 
-    // ═══════════════════════════════════════════════════════════
-    // ✓ Initialize NimBLE Stack
-    // ═══════════════════════════════════════════════════════════
+    // ═══════════════════════════════════════════════════════════════════
+    // PHASE 2: NimBLE Initialization (ALWAYS FIRST)
+    //
+    // CRITICAL ARCHITECTURE RULE (ESP-IDF 5.x, CONFIG_NIMBLE_CPP_IDF=1):
+    //   NimBLEDevice::init() calls nimble_port_init() which calls
+    //   esp_bt_controller_init(). Matter's BLEManagerImpl::InitESPBleLayer()
+    //   calls the SAME function. Whoever runs SECOND gets
+    //   ESP_ERR_INVALID_STATE → crash (if NimBLEDevice) or graceful exit
+    //   (if Matter, which uses SuccessOrExit).
+    //
+    //   Solution: NimBLE MUST be initialized first, always.
+    //   When matter_enabled=true: Matter's BLE init then fails cleanly and
+    //   BLE advertising is skipped. Matter continues via WiFi commissioning,
+    //   which is the only path available on D1 Mini anyway.
+    // ═══════════════════════════════════════════════════════════════════
+
     ESP_LOGI(TAG, "═══════════════════════════════════");
-    ESP_LOGI(TAG, "  PHASE 1: NimBLE Initialization");
+    ESP_LOGI(TAG, "  PHASE 2: NimBLE Initialization");
     ESP_LOGI(TAG, "═══════════════════════════════════");
     ESP_LOGI(TAG, "");
-    
+
+    ESP_LOGI(TAG, "→ Initializing NimBLE (must precede Matter start)...");
+
     #ifdef CONFIG_BT_ENABLED
+    {
         esp_err_t ret = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
         if (ret == ESP_OK) {
             ESP_LOGI(TAG, "✓ Classic BT memory released");
         }
+    }
     #endif
-    
-    ESP_LOGI(TAG, "→ Initializing NimBLE...");
-    
+
     if (!NimBLEDevice::isInitialized()) {
         NimBLEDevice::init("BeltWinder");
-        
         if (NimBLEDevice::isInitialized()) {
-            ESP_LOGI(TAG, "✓ NimBLE initialized successfully");
+            ESP_LOGI(TAG, "✓ NimBLE initialized");
             ESP_LOGI(TAG, "  MTU: %d", NimBLEDevice::getMTU());
         } else {
-            ESP_LOGE(TAG, "✗ CRITICAL: NimBLE failed!");
+            ESP_LOGE(TAG, "✗ CRITICAL: NimBLE init failed!");
         }
+    } else {
+        ESP_LOGI(TAG, "✓ NimBLE already initialized");
     }
-    
+
     ESP_LOGI(TAG, "");
     
-    /*
     // ════════════════════════════════════════════════════════════════════
-    // BT CONTROLLER INIT (MANUELL!)
-    // ════════════════════════════════════════════════════════════════════
-    
-    // ✅ WICHTIG: BT Memory freigeben (aber NICHT Controller starten!)
-    #ifdef CONFIG_BT_ENABLED
-        esp_err_t ret = esp_bt_controller_mem_release(ESP_BT_MODE_CLASSIC_BT);
-        if (ret == ESP_OK) {
-            ESP_LOGI(TAG, "✓ Classic BT memory released for BLE");
-        } else if (ret == ESP_ERR_INVALID_STATE) {
-            ESP_LOGD(TAG, "  (Classic BT memory already released)");
-        }
-        ESP_LOGI(TAG, "");
-    #endif
-    
-    // ✅ NEU: Log BT Controller Status (sollte IDLE sein)
-    esp_bt_controller_status_t bt_status = esp_bt_controller_get_status();
-    ESP_LOGI(TAG, "BT Controller Status: %d (%s)", bt_status,
-             bt_status == ESP_BT_CONTROLLER_STATUS_ENABLED ? "ENABLED" :
-             bt_status == ESP_BT_CONTROLLER_STATUS_INITED ? "INITED" : "IDLE");
-    ESP_LOGI(TAG, "  → Will be started by NimBLE when needed");
-    ESP_LOGI(TAG, "");
-    */
-    
-    // ════════════════════════════════════════════════════════════════════
-    // PHASE 2: WiFi Connection
+    // PHASE 3: WiFi Connection
     // ════════════════════════════════════════════════════════════════════
 
     ESP_LOGI(TAG, "═══════════════════════════════════");
-    ESP_LOGI(TAG, "  PHASE 2: WiFi Connection");
+    ESP_LOGI(TAG, "  PHASE 3: WiFi Connection");
     ESP_LOGI(TAG, "═══════════════════════════════════");
     ESP_LOGI(TAG, "");
 
@@ -1578,11 +1461,11 @@ void setup() {
 
 
     // ════════════════════════════════════════════════════════════════════
-    // PHASE 3: Shutter Driver
+    // PHASE 4: Shutter Driver
     // ════════════════════════════════════════════════════════════════════
     
     ESP_LOGI(TAG, "═══════════════════════════════════");
-    ESP_LOGI(TAG, "  PHASE 3: Shutter Driver");
+    ESP_LOGI(TAG, "  PHASE 4: Shutter Driver");
     ESP_LOGI(TAG, "═══════════════════════════════════");
     ESP_LOGI(TAG, "");
     
@@ -1602,11 +1485,11 @@ void setup() {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // PHASE 4: Device Naming
+    // PHASE 5: Device Naming
     // ════════════════════════════════════════════════════════════════════
     
     ESP_LOGI(TAG, "═══════════════════════════════════");
-    ESP_LOGI(TAG, "  PHASE 4: Device Naming");
+    ESP_LOGI(TAG, "  PHASE 5: Device Naming");
     ESP_LOGI(TAG, "═══════════════════════════════════");
     ESP_LOGI(TAG, "");
     
@@ -1621,11 +1504,11 @@ void setup() {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // PHASE 5: BLE Manager (LAZY - nur Struktur, kein Start)
+    // PHASE 6: BLE Manager (LAZY - nur Struktur, kein Start)
     // ════════════════════════════════════════════════════════════════════
     
     ESP_LOGI(TAG, "═══════════════════════════════════");
-    ESP_LOGI(TAG, "  PHASE 5: BLE Manager (Lazy)");
+    ESP_LOGI(TAG, "  PHASE 6: BLE Manager (Lazy)");
     ESP_LOGI(TAG, "═══════════════════════════════════");
     ESP_LOGI(TAG, "");
     
@@ -1644,11 +1527,11 @@ void setup() {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // PHASE 6: Web UI (NUR NACH WIFI!)
+    // PHASE 7: Web UI (NUR NACH WIFI!)
     // ════════════════════════════════════════════════════════════════════
 
     ESP_LOGI(TAG, "═══════════════════════════════════");
-    ESP_LOGI(TAG, "  PHASE 6: Web UI");
+    ESP_LOGI(TAG, "  PHASE 7: Web UI");
     ESP_LOGI(TAG, "═══════════════════════════════════");
     ESP_LOGI(TAG, "");
 
@@ -1706,12 +1589,12 @@ void setup() {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
-    // PHASE 7: OTA (falls WiFi vorhanden)
+    // PHASE 8: OTA (falls WiFi vorhanden)
     // ════════════════════════════════════════════════════════════════════
     
     if (WiFi.status() == WL_CONNECTED) {
         ESP_LOGI(TAG, "═══════════════════════════════════");
-        ESP_LOGI(TAG, "  PHASE 7: Arduino OTA");
+        ESP_LOGI(TAG, "  PHASE 8: Arduino OTA");
         ESP_LOGI(TAG, "═══════════════════════════════════");
         ESP_LOGI(TAG, "");
         
@@ -1747,7 +1630,7 @@ void setup() {
     }
     
     // ════════════════════════════════════════════════════════════════════
-    // PHASE 8: CONDITIONAL MATTER INITIALIZATION
+    // PHASE 9: CONDITIONAL MATTER INITIALIZATION
     // ════════════════════════════════════════════════════════════════════
     
         if (matter_enabled) {
@@ -1795,81 +1678,24 @@ void setup() {
                 }
                 
                 // ════════════════════════════════════════════════════════════════
-                // CRITICAL: WAIT FOR MATTER TO STABILIZE BEFORE STARTING BLE!
+                // NimBLE was already initialized in PHASE 2 (before Matter).
+                // Matter's BLEManagerImpl::InitESPBleLayer() will fail gracefully
+                // because the controller is already owned by NimBLE. That is
+                // intentional: we need WiFi commissioning only (no CHIPoBLE).
+                // The scanner (ShellyBLEManager) uses the NimBLE stack from Phase 2.
                 // ════════════════════════════════════════════════════════════════
-                
+
                 ESP_LOGI(TAG, "");
-                ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-                ESP_LOGI(TAG, "║  MATTER STABILIZATION PERIOD      ║");
-                ESP_LOGI(TAG, "╚═══════════════════════════════════╗");
-                ESP_LOGI(TAG, "");
-                ESP_LOGI(TAG, "→ Waiting 5 seconds for Matter to stabilize...");
-                ESP_LOGI(TAG, "  This ensures NimBLE is fully initialized");
-                ESP_LOGI(TAG, "  and Matter's BLE operations are complete");
-                ESP_LOGI(TAG, "");
-                
-                for (int i = 0; i < 5; i++) {
-                    vTaskDelay(pdMS_TO_TICKS(1000));
-                    ESP_LOGI(TAG, "  ⏱️ %d/5 seconds...", i + 1);
-                }
-                
-                ESP_LOGI(TAG, "");
-                ESP_LOGI(TAG, "✓ Matter stabilization complete");
-                ESP_LOGI(TAG, "");
-                
-                // ════════════════════════════════════════════════════════════════
-                // AUTO-START BLE CONTINUOUS SCAN (falls Sensor gepairt)
-                // ════════════════════════════════════════════════════════════════
-                
-                if (bleManager && bleManager->isPaired()) {
-                    ESP_LOGI(TAG, "");
-                    ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-                    ESP_LOGI(TAG, "║  AUTO-START BLE SCAN              ║");
-                    ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-                    ESP_LOGI(TAG, "");
-                    ESP_LOGI(TAG, "Paired sensor detected:");
-                    
-                    auto pairedDev = bleManager->getPairedDevice();
-                    ESP_LOGI(TAG, "  Name: %s", pairedDev.name.c_str());
-                    ESP_LOGI(TAG, "  Address: %s", pairedDev.address.c_str());
-                    ESP_LOGI(TAG, "");
-                    
-                    // Prüfe ob Continuous Scan gewünscht
-                    Preferences prefs;
-                    prefs.begin("ShellyBLE", true);  // Read-only
-                    bool shouldScan = prefs.getBool("continuous_scan", true);
-                    prefs.end();
-                    
-                    if (shouldScan) {
-                        ESP_LOGI(TAG, "→ Starting Continuous BLE Scan...");
-                        ESP_LOGI(TAG, "  (Monitoring for sensor events)");
-                        ESP_LOGI(TAG, "");
-                        
-                        // ⚠️ WICHTIG: Noch 2 Sekunden warten für zusätzliche Sicherheit
-                        ESP_LOGI(TAG, "→ Additional 2 second safety delay...");
-                        vTaskDelay(pdMS_TO_TICKS(2000));
-                        
-                        bleManager->startContinuousScan();
-                        
-                        ESP_LOGI(TAG, "✓ BLE Continuous Scan started");
-                        ESP_LOGI(TAG, "  → Sensor data will be reported automatically");
-                        ESP_LOGI(TAG, "");
-                    } else {
-                        ESP_LOGI(TAG, "ℹ️ Continuous Scan disabled in NVS");
-                        ESP_LOGI(TAG, "   User can enable via WebUI");
-                        ESP_LOGI(TAG, "");
-                    }
+                if (NimBLEDevice::isInitialized()) {
+                    ESP_LOGI(TAG, "✓ NimBLE already initialized (Phase 2) — scanner ready");
                 } else {
-                    ESP_LOGI(TAG, "");
-                    ESP_LOGI(TAG, "ℹ️ No BLE sensor paired");
-                    ESP_LOGI(TAG, "   Continuous Scan will NOT start");
-                    ESP_LOGI(TAG, "");
+                    ESP_LOGW(TAG, "⚠ NimBLE not initialized — BLE sensor scanning unavailable");
                 }
-            }
-        }
-        
+            }  // end startMatterStack else
+        }  // end createMatterNode else
+
         ESP_LOGI(TAG, "");
-    }
+    }  // end matter_enabled
     
     // ════════════════════════════════════════════════════════════════════
     // SETUP COMPLETE

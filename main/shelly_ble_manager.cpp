@@ -114,10 +114,7 @@ void ShellyBLEManager::end() {
     
     stopScan();
     
-    if (bleScanner) {
-        delete bleScanner;
-        bleScanner = nullptr;
-    }
+    bleScanner.reset();
     
     if (activeClientCallbacks) {
         delete activeClientCallbacks;
@@ -679,7 +676,17 @@ void ShellyBLEManager::startContinuousScan() {
         ESP_LOGI(TAG, "  → All other devices ignored by BLE hardware");
         ESP_LOGI(TAG, "");
     }
-    
+
+    // ════════════════════════════════════════════════════════════════════
+    // 100% DUTY CYCLE for continuous scan (interval = window = 160ms)
+    // Default 300ms/100ms = 33% duty cycle misses ~2/3 of advertisement
+    // windows. With 160ms/160ms, every advertisement is received.
+    // ════════════════════════════════════════════════════════════════════
+    bleScanner->set_scan_interval_ms(160);
+    bleScanner->set_scan_window_ms(160);
+    ESP_LOGI(TAG, "✓ Scan duty cycle: 100%% (160ms/160ms)");
+    ESP_LOGI(TAG, "");
+
     continuousScan = true;
     
     // Speichere State in NVS
@@ -893,17 +900,37 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
     );
     
     if (parseSuccess) {
+        // ════════════════════════════════════════════════════════════════
+        // PACKET ID DEDUPLICATION
+        // Same Packet ID = same BTHome event. Update RSSI/timestamp only,
+        // skip the callback to avoid flooding WebSocket every 500ms.
+        // ════════════════════════════════════════════════════════════════
+
+        bool isNewPacket = !pairedDevice.sensorData.dataValid ||
+                           (sensorData.packetId != pairedDevice.sensorData.packetId);
+
+        sensorData.lastUpdate = millis();  // Set BEFORE storing or calling callback
+
+        pairedDevice.sensorData       = sensorData;
+        pairedDevice.sensorData.dataValid = true;
+
+        if (!isNewPacket) {
+            // Duplicate — silently update RSSI/timestamp, no callback
+            return true;  // Continue scanning
+        }
+
+        // New packet: log it and notify
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "DATA SUCCESSFULLY PARSED & DECRYPTED!");
         ESP_LOGI(TAG, "│");
         ESP_LOGI(TAG, "│ Sensor Data:");
         ESP_LOGI(TAG, "│   Packet ID:    %d", sensorData.packetId);
         ESP_LOGI(TAG, "│   Battery:      %d%%", sensorData.battery);
-        ESP_LOGI(TAG, "│   Window:       %s", 
+        ESP_LOGI(TAG, "│   Window:       %s",
                  sensorData.windowOpen ? "OPEN 🔓" : "CLOSED 🔒");
         ESP_LOGI(TAG, "│   Illuminance:  %d lux", sensorData.illuminance);
         ESP_LOGI(TAG, "│   Rotation:     %d°", sensorData.rotation);
-        
+
         if (sensorData.hasButtonEvent) {
             const char* eventName;
             switch (sensorData.buttonEvent) {
@@ -916,23 +943,15 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
             }
             ESP_LOGI(TAG, "│   Button:       %s", eventName);
         }
-        
+
         ESP_LOGI(TAG, "│");
         ESP_LOGI(TAG, "└─────────────────────────────────");
         ESP_LOGI(TAG, "");
-        
+
         // ════════════════════════════════════════════════════════════════
-        // UPDATE PAIRED DEVICE DATA
+        // TRIGGER CALLBACK → WebUI + Matter Update
         // ════════════════════════════════════════════════════════════════
-        
-        pairedDevice.sensorData = sensorData;
-        pairedDevice.sensorData.lastUpdate = millis();
-        pairedDevice.sensorData.dataValid = true;
-        
-        // ════════════════════════════════════════════════════════════════
-        // TRIGGER CALLBACK → WebUI Update!
-        // ════════════════════════════════════════════════════════════════
-        
+
         if (sensorDataCallback) {
             ESP_LOGI(TAG, "→ Triggering sensor data callback for WebUI...");
             sensorDataCallback(String(address.c_str()), sensorData);
@@ -941,7 +960,7 @@ bool ShellyBLEManager::on_device_found(const esp32_ble_simple::SimpleBLEDevice &
             ESP_LOGW(TAG, "⚠ No sensor data callback registered!");
             ESP_LOGW(TAG, "  WebUI will NOT be updated!");
         }
-        
+
         ESP_LOGI(TAG, "");
         
     } else {
@@ -1379,20 +1398,23 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     ESP_LOGI(TAG, "→ Attempt 1/2: %s address type...",
              addressType == BLE_ADDR_PUBLIC ? "PUBLIC" : "RANDOM");
     
-    if (activeClient->connect(peerAddress, false)) {
+    if (activeClient->connect(peerAddress, false) || activeClient->isConnected()) {
         connected = true;
         ESP_LOGI(TAG, "✓ Connected with %s address",
                  addressType == BLE_ADDR_PUBLIC ? "PUBLIC" : "RANDOM");
     } else {
         ESP_LOGW(TAG, "  Failed, trying alternative address type...");
-        
+
+        // Only try the alternative address type if we are truly not connected.
+        // (connect() can return false even when the link is up due to a race
+        // between the NimBLE GAP event and the connect() return path.)
         uint8_t altType = (addressType == BLE_ADDR_PUBLIC) ? BLE_ADDR_RANDOM : BLE_ADDR_PUBLIC;
         peerAddress = NimBLEAddress(address.c_str(), altType);
-        
+
         ESP_LOGI(TAG, "→ Attempt 2/2: %s address type...",
                  altType == BLE_ADDR_PUBLIC ? "PUBLIC" : "RANDOM");
-        
-        if (activeClient->connect(peerAddress, false)) {
+
+        if (activeClient->connect(peerAddress, false) || activeClient->isConnected()) {
             connected = true;
             ESP_LOGI(TAG, "✓ Connected with %s address",
                      altType == BLE_ADDR_PUBLIC ? "PUBLIC" : "RANDOM");
@@ -3421,8 +3443,10 @@ void ShellyBLEManager::PairingCallbacks::onConnect(NimBLEClient* pClient) {
     ESP_LOGI(TAG, "Peer: %s", pClient->getPeerAddress().toString().c_str());
     ESP_LOGI(TAG, "MTU: %d bytes", pClient->getMTU());
     ESP_LOGI(TAG, "");
-    
-    pClient->updateConnParams(120, 120, 0, 60);
+    // NOTE: Do NOT call updateConnParams() here.
+    // Changing connection parameters during the initial setup phase (before MTU
+    // exchange and pairing are complete) causes the Shelly device to disconnect
+    // and makes connect() return false even though the link was physically established.
 }
 
 void ShellyBLEManager::PairingCallbacks::onDisconnect(NimBLEClient* pClient, int reason) {

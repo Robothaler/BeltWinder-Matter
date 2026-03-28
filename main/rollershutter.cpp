@@ -15,14 +15,15 @@ volatile uint32_t RollerShutter::isr_rejected_count = 0;
 volatile uint32_t RollerShutter::isr_pulse_count = 0;
 
 void IRAM_ATTR RollerShutter::onPulseInterrupt() {
+    portENTER_CRITICAL_ISR(&pulseMux);
     isr_trigger_count++;
-    
+
     if (!isr_ready) {
         isr_rejected_count++;
+        portEXIT_CRITICAL_ISR(&pulseMux);
         return;
     }
-    
-    portENTER_CRITICAL_ISR(&pulseMux);
+
     pulseBuffer++;
     isr_pulse_count++;
     portEXIT_CRITICAL_ISR(&pulseMux);
