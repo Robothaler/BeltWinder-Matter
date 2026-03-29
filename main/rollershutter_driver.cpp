@@ -149,6 +149,12 @@ esp_err_t shutter_driver_start_calibration(app_driver_handle_t handle) {
     return ESP_OK;
 }
 
+esp_err_t shutter_driver_start_calibration_from_bottom(app_driver_handle_t handle) {
+    if (!handle) return ESP_FAIL;
+    ((RollerShutter*)handle)->startCalibrationFromBottom();
+    return ESP_OK;
+}
+
 void shutter_driver_set_direction(app_driver_handle_t handle, bool inverted) {
     if (!handle) return;
     ((RollerShutter*)handle)->setDirectionInverted(inverted);
@@ -204,6 +210,11 @@ const WindowLogicConfig shutter_driver_get_window_logic_config(app_driver_handle
 void shutter_driver_set_window_logic_config(app_driver_handle_t handle, const WindowLogicConfig& cfg) {
     if (!handle) return;
     ((RollerShutter*)handle)->setWindowLogicConfig(cfg);
+}
+
+bool shutter_driver_consume_window_state_changed(app_driver_handle_t handle) {
+    if (!handle) return false;
+    return ((RollerShutter*)handle)->consumeWindowStateChanged();
 }
 
 RollerShutter::State shutter_driver_get_current_state(app_driver_handle_t handle) {

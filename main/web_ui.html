@@ -1425,10 +1425,21 @@
               Settings → Devices → Add Integration → Matter
             </div>
           </div>
-          
+
         </div>
+
+        <!-- Re-open commissioning window -->
+        <div style="margin-top:25px;text-align:center">
+          <p style="color:#888;font-size:0.9em;margin-bottom:12px">
+            Commissioning window timeout? Click to re-open it (valid for 15 minutes):
+          </p>
+          <button class="btn secondary" onclick="reopenCommissioningWindow()">
+            🔄 Re-open Commissioning Window
+          </button>
+        </div>
+
       </div>
-      
+
       <!-- ════════════════════════════════════════════════════════════════════ -->
       <!-- STATE 4: Already Commissioned -->
       <!-- ════════════════════════════════════════════════════════════════════ -->
@@ -1716,86 +1727,78 @@
 
       <!-- Live Status Card -->
       <div class="card">
-        <h2>🪟 Fenster-Status (Live)</h2>
+        <h2>🪟 Window State (Live)</h2>
         <div class="status-grid">
           <div class="status-item">
-            <div class="status-label">Fensterzustand</div>
+            <div class="status-label">Window State</div>
             <div class="status-value" id="wl-window-state">—</div>
           </div>
           <div class="status-item">
-            <div class="status-label">Winkel (Rotation)</div>
+            <div class="status-label">Angle (Rotation)</div>
             <div class="status-value" id="wl-rotation">—</div>
           </div>
           <div class="status-item">
-            <div class="status-label">Logik aktiv</div>
+            <div class="status-label">Logic Status</div>
             <div class="status-value" id="wl-logic-active">—</div>
           </div>
         </div>
       </div>
 
-      <!-- Settings Card -->
+      <!-- Enable / Disable Card -->
       <div class="card">
-        <h2>⚙️ Fensterlogik Einstellungen</h2>
+        <h2>⚙️ Window Logic Settings</h2>
 
-        <!-- Master Enable -->
-        <div class="form-group" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
-          <div>
-            <strong>Fensterlogik aktivieren</strong>
-            <div style="font-size:0.85em;color:#aaa;margin-top:4px">
-              Wenn deaktiviert, werden alle Fensterzustände ignoriert
-            </div>
+        <!-- Master Enable — two-button style like Matter commissioning -->
+        <div style="margin-bottom:24px">
+          <strong>Window Logic</strong>
+          <div style="font-size:0.85em;color:#aaa;margin:6px 0 14px">
+            When disabled all window states are ignored and all shutter commands pass through.
           </div>
-          <label class="toggle-switch" style="flex-shrink:0;margin-left:16px">
-            <input type="checkbox" id="wl-enabled">
-            <span class="toggle-slider"></span>
-          </label>
+          <div id="wl-state-display"
+               style="padding:12px 16px;border-radius:8px;background:#1a1a2e;border:1px solid #444;margin-bottom:14px;font-size:0.95em">
+            Status: <span id="wl-enabled-label" style="font-weight:600">—</span>
+          </div>
+          <div style="display:flex;gap:12px">
+            <button id="btn-wl-enable"
+                    onclick="setWindowLogicEnabled(true)"
+                    class="btn secondary"
+                    style="flex:1;padding:14px">
+              <span>✅ Enable</span>
+            </button>
+            <button id="btn-wl-disable"
+                    onclick="setWindowLogicEnabled(false)"
+                    class="btn secondary"
+                    style="flex:1;padding:14px">
+              <span>❌ Disable</span>
+            </button>
+          </div>
         </div>
 
         <div id="wl-settings-body">
 
           <!-- Reed Delay -->
           <div class="form-group" style="margin-bottom:20px">
-            <label for="wl-reed-delay"><strong>Erkennungs-Verzögerung (ms)</strong></label>
+            <label for="wl-reed-delay"><strong>Detection Delay (ms)</strong></label>
             <div style="font-size:0.85em;color:#aaa;margin:4px 0 8px">
-              Nach dem Öffnen des Reedkontakts wird dieser Zeitraum gewartet, bevor der Winkel ausgewertet wird.
-              Standardwert: 3000 ms
+              Time to wait after the reed contact opens before reading the angle value.
+              Default: 300 ms
             </div>
-            <input type="number" id="wl-reed-delay" min="500" max="15000" step="500"
+            <input type="number" id="wl-reed-delay" min="0" max="5000" step="100"
                    style="width:100%;padding:10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:8px;font-size:1em">
           </div>
 
-          <!-- Tilt Angle Range -->
+          <!-- Tilt Threshold -->
           <div class="form-group" style="margin-bottom:20px">
-            <label><strong>Winkelbereich: GEKIPPT</strong></label>
+            <label for="wl-tilt-thresh"><strong>Tilt Threshold (°)</strong></label>
             <div style="font-size:0.85em;color:#aaa;margin:4px 0 8px">
-              Wenn der Winkel in diesem Bereich liegt, gilt das Fenster als <em>gekippt</em>.
-              Bei gekipptem Fenster werden alle Befehle akzeptiert. Wenn der Rolladen geschlossen
-              war (≥97%), öffnet er automatisch auf die Lüftungsstellung.
-            </div>
-            <div style="display:flex;gap:12px">
-              <div style="flex:1">
-                <label for="wl-tilt-min" style="font-size:0.85em;color:#aaa">Von (°)</label>
-                <input type="number" id="wl-tilt-min" min="0" max="180" step="1"
-                       style="width:100%;padding:10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:8px;font-size:1em">
-              </div>
-              <div style="flex:1">
-                <label for="wl-tilt-max" style="font-size:0.85em;color:#aaa">Bis (°)</label>
-                <input type="number" id="wl-tilt-max" min="0" max="180" step="1"
-                       style="width:100%;padding:10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:8px;font-size:1em">
-              </div>
-            </div>
-          </div>
-
-          <!-- Open Angle -->
-          <div class="form-group" style="margin-bottom:20px">
-            <label><strong>Winkelgrenze: GEÖFFNET</strong></label>
-            <div style="font-size:0.85em;color:#aaa;margin:4px 0 8px">
-              Ab diesem Winkel gilt das Fenster als <em>geöffnet</em>.
-              Schließ-Befehle werden dann blockiert (nur physische Tasten erlaubt).
+              Reed open + rotation <strong>&gt; threshold</strong> → <em>TILTED</em> (all commands allowed,
+              auto-opens to ventilation position if shutter was closed ≥97%).<br>
+              Reed open + rotation <strong>≤ threshold</strong> → <em>OPEN</em> (close commands blocked,
+              only physical buttons allowed).<br>
+              The sensor shows 0–1° when fully open and &gt;1° when tilted. Default: 1°
             </div>
             <div style="display:flex;align-items:center;gap:8px">
-              <span style="color:#aaa;font-size:0.9em">Ab</span>
-              <input type="number" id="wl-open-min" min="0" max="180" step="1"
+              <input type="number" id="wl-tilt-thresh" min="0" max="45" step="1"
                      style="flex:1;padding:10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:8px;font-size:1em">
               <span style="color:#aaa;font-size:0.9em">°</span>
             </div>
@@ -1803,10 +1806,10 @@
 
           <!-- Ventilation Position -->
           <div class="form-group" style="margin-bottom:24px">
-            <label for="wl-vent-pos"><strong>Lüftungsstellung (%)</strong></label>
+            <label for="wl-vent-pos"><strong>Ventilation Position (%)</strong></label>
             <div style="font-size:0.85em;color:#aaa;margin:4px 0 8px">
-              Position des Rolladens bei automatischer Öffnung durch Kippstellung.
-              0% = vollständig offen, 100% = vollständig geschlossen.
+              Target position when the shutter auto-opens on tilt.
+              0% = fully open, 100% = fully closed. Default: 15%
             </div>
             <div style="display:flex;align-items:center;gap:12px">
               <input type="range" id="wl-vent-pos-slider" min="0" max="50" step="1"
@@ -1819,16 +1822,16 @@
             </div>
           </div>
 
-          <!-- Logic Overview -->
+          <!-- Logic Summary -->
           <div class="info-box" style="margin-bottom:24px">
-            <p><strong>ℹ️ Zusammenfassung der Logik</strong></p>
+            <p><strong>ℹ️ Behaviour Summary</strong></p>
             <ul style="margin:10px 0 0 20px;line-height:2">
-              <li><strong>Fenster GESCHLOSSEN</strong> → Alle Befehle erlaubt</li>
-              <li><strong>Fenster AUSWERTUNG</strong> → Reedkontakt offen, warte auf Winkel</li>
-              <li><strong>Fenster GEKIPPT</strong> → Alle Befehle erlaubt<br>
-                  &nbsp;&nbsp;&nbsp;+ Rolladen war zu (≥97%): automatisch auf Lüftungsstellung</li>
-              <li><strong>Fenster OFFEN</strong> → Schließ-Befehle blockiert<br>
-                  &nbsp;&nbsp;&nbsp;(nur physische Tasten erlaubt)</li>
+              <li><strong>CLOSED</strong> — reed contact closed → all commands allowed</li>
+              <li><strong>PENDING</strong> — reed just opened, reading angle…</li>
+              <li><strong>TILTED</strong> — rotation &gt; threshold → all commands allowed<br>
+                  &nbsp;&nbsp;&nbsp;+ if shutter was closed (≥97%): auto-move to ventilation position</li>
+              <li><strong>OPEN</strong> — rotation ≤ threshold → close commands blocked<br>
+                  &nbsp;&nbsp;&nbsp;(physical hardware buttons always allowed)</li>
             </ul>
           </div>
 
@@ -1836,7 +1839,7 @@
 
         <button class="btn primary" onclick="saveWindowLogic()"
                 style="width:100%;padding:16px;font-size:1.05em">
-          <span>💾 Einstellungen speichern</span>
+          <span>💾 Save Settings</span>
         </button>
       </div>
 
@@ -1898,9 +1901,18 @@
         <p style="color:#888;margin-bottom:20px;line-height:1.8">
           Calibrate the shutter to learn its full travel range. The system will automatically move the shutter up and down to determine minimum and maximum positions.
         </p>
-        <button class="btn primary" onclick="send('calibrate')" style="width:100%" aria-label="Start calibration">
-          <span>🎯 START CALIBRATION</span>
-        </button>
+        <div style="display:grid;grid-template-columns:1fr 1fr;gap:12px">
+          <button class="btn primary" onclick="send('calibrate')" aria-label="Start calibration from current position (UP first)">
+            <span>⬆️ Calibrate (UP first)</span>
+          </button>
+          <button class="btn secondary" onclick="send('calibrate_from_bottom')" aria-label="Start calibration from bottom (DOWN first)">
+            <span>⬇️ Calibrate (DOWN first)</span>
+          </button>
+        </div>
+        <p style="color:#666;font-size:0.85em;margin-top:12px">
+          Use <strong>UP first</strong> when the shutter is somewhere in the middle or near the bottom.<br>
+          Use <strong>DOWN first</strong> when the shutter is already near the top.
+        </p>
       </div>
 
       <!-- Drift Statistics Section -->
@@ -4380,60 +4392,84 @@
     // Window Logic Handlers
     // ============================================================================
 
+    // Tracks the current enabled state locally so buttons can update instantly
+    AppState.wlEnabled = false;
+
     function handleWindowLogicStatus(data) {
-      document.getElementById('wl-enabled').checked         = !!data.enabled;
-      document.getElementById('wl-reed-delay').value        = data.reed_delay  ?? 3000;
-      document.getElementById('wl-tilt-min').value          = data.tilt_min    ?? 5;
-      document.getElementById('wl-tilt-max').value          = data.tilt_max    ?? 45;
-      document.getElementById('wl-open-min').value          = data.open_min    ?? 46;
-      document.getElementById('wl-vent-pos').value          = data.vent_pos    ?? 15;
-      document.getElementById('wl-vent-pos-slider').value   = data.vent_pos    ?? 15;
+      AppState.wlEnabled = !!data.enabled;
+      document.getElementById('wl-reed-delay').value       = data.reed_delay  ?? 300;
+      document.getElementById('wl-tilt-thresh').value      = data.tilt_thresh ?? 1;
+      document.getElementById('wl-vent-pos').value         = data.vent_pos    ?? 15;
+      document.getElementById('wl-vent-pos-slider').value  = data.vent_pos    ?? 15;
+      _applyWLEnabledUI(AppState.wlEnabled);
       updateWindowStateDisplay(data.window_state || 'closed');
+    }
+
+    function _applyWLEnabledUI(enabled) {
+      const label = document.getElementById('wl-enabled-label');
+      if (label) {
+        label.textContent  = enabled ? 'Enabled' : 'Disabled';
+        label.style.color  = enabled ? '#4CAF50' : '#f44336';
+      }
+      const btnEn  = document.getElementById('btn-wl-enable');
+      const btnDis = document.getElementById('btn-wl-disable');
+      if (btnEn)  btnEn.classList.toggle('primary',  enabled);
+      if (btnEn)  btnEn.classList.toggle('secondary', !enabled);
+      if (btnDis) btnDis.classList.toggle('primary',  !enabled);
+      if (btnDis) btnDis.classList.toggle('secondary', enabled);
+
+      const logicEl = document.getElementById('wl-logic-active');
+      if (logicEl) {
+        logicEl.textContent = enabled ? '✅ Active' : '❌ Disabled';
+        logicEl.className   = 'status-value ' + (enabled ? 'commissioned' : '');
+      }
+    }
+
+    function setWindowLogicEnabled(val) {
+      AppState.wlEnabled = val;
+      _applyWLEnabledUI(val);
+      // Persist immediately so the user gets instant feedback
+      _sendWindowLogicSave();
     }
 
     function updateWindowStateDisplay(state) {
       const el = document.getElementById('wl-window-state');
       if (!el) return;
       const map = {
-        closed:  { text: '🔒 Geschlossen', cls: 'commissioned' },
-        pending: { text: '⏳ Auswertung…',  cls: '' },
-        tilted:  { text: '↗️ Gekippt',       cls: '' },
-        open:    { text: '🔓 Geöffnet',      cls: 'not-commissioned' }
+        closed:  { text: '🔒 Closed',   cls: 'commissioned'     },
+        pending: { text: '⏳ Pending…',  cls: ''                 },
+        tilted:  { text: '↗️ Tilted',    cls: ''                 },
+        open:    { text: '🔓 Open',      cls: 'not-commissioned' }
       };
       const info = map[state] || { text: state, cls: '' };
-      el.textContent  = info.text;
-      el.className    = 'status-value ' + info.cls;
-
-      const logicEl = document.getElementById('wl-logic-active');
-      if (logicEl) {
-        const enabled = document.getElementById('wl-enabled')?.checked;
-        logicEl.textContent = enabled ? '✅ Aktiv' : '❌ Deaktiviert';
-        logicEl.className   = 'status-value ' + (enabled ? 'commissioned' : '');
-      }
+      el.textContent = info.text;
+      el.className   = 'status-value ' + info.cls;
     }
 
-    // Called from ble_sensor_update to keep the live status current
+    // Called from ble_sensor_update to keep live values current without a round-trip
     function updateWindowLogicLive(data) {
       if (data.window_state) updateWindowStateDisplay(data.window_state);
       const rotEl = document.getElementById('wl-rotation');
       if (rotEl && data.rotation !== undefined) rotEl.textContent = data.rotation + '°';
     }
 
-    function saveWindowLogic() {
+    function _sendWindowLogicSave() {
       if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        showErrorBanner('Fehler', 'Keine WebSocket-Verbindung', 'error');
+        showErrorBanner('Error', 'No WebSocket connection', 'error');
         return;
       }
       const payload = {
         cmd:        'window_logic_save',
-        enabled:    document.getElementById('wl-enabled').checked,
-        reed_delay: parseInt(document.getElementById('wl-reed-delay').value) || 3000,
-        tilt_min:   parseInt(document.getElementById('wl-tilt-min').value)   || 5,
-        tilt_max:   parseInt(document.getElementById('wl-tilt-max').value)   || 45,
-        open_min:   parseInt(document.getElementById('wl-open-min').value)   || 46,
-        vent_pos:   parseInt(document.getElementById('wl-vent-pos').value)   || 15
+        enabled:    AppState.wlEnabled,
+        reed_delay: parseInt(document.getElementById('wl-reed-delay').value)  || 300,
+        tilt_thresh:parseInt(document.getElementById('wl-tilt-thresh').value) || 1,
+        vent_pos:   parseInt(document.getElementById('wl-vent-pos').value)    || 15
       };
       AppState.ws.send(JSON.stringify(payload));
+    }
+
+    function saveWindowLogic() {
+      _sendWindowLogicSave();
     }
 
     // ============================================================================
@@ -4575,7 +4611,15 @@
     // ============================================================================
     // Matter Functions
     // ============================================================================
-    
+
+    function reopenCommissioningWindow() {
+      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
+        showErrorBanner('Not connected', 'WebSocket is not connected.', 'error');
+        return;
+      }
+      AppState.ws.send('matter_reopen_commissioning');
+    }
+
     function showMatterQR(qrUrl, qrImageUrl, pairingCode) {
       document.getElementById('matter-qr-img').src = qrImageUrl;
       document.getElementById('matter-pairing-code').innerText = pairingCode;

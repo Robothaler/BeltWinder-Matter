@@ -15,6 +15,7 @@
 #include <esp_task_wdt.h>
 #include <string.h>
 #include <app/server/Server.h>
+#include <app/server/CommissioningWindowManager.h>
 #include <Matter.h>
 #include <Preferences.h>
 
@@ -938,13 +939,21 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                 result == ESP_OK ? "SUCCESS" : "FAILED");
     } 
     else if (strcmp(cmd, "calibrate") == 0) {
-        ESP_LOGI(TAG, "→ Command: START CALIBRATION");
+        ESP_LOGI(TAG, "→ Command: START CALIBRATION (from top)");
         bool was_calibrated = shutter_driver_is_calibrated(self->handle);
         esp_err_t result = shutter_driver_start_calibration(self->handle);
         ESP_LOGI(TAG, "← Calibration started | Previously calibrated: %s | Result: %s",
                 was_calibrated ? "YES" : "NO",
                 result == ESP_OK ? "SUCCESS" : "FAILED");
-    } 
+    }
+    else if (strcmp(cmd, "calibrate_from_bottom") == 0) {
+        ESP_LOGI(TAG, "→ Command: START CALIBRATION (from bottom / DOWN first)");
+        bool was_calibrated = shutter_driver_is_calibrated(self->handle);
+        esp_err_t result = shutter_driver_start_calibration_from_bottom(self->handle);
+        ESP_LOGI(TAG, "← Calibration (from bottom) started | Previously calibrated: %s | Result: %s",
+                was_calibrated ? "YES" : "NO",
+                result == ESP_OK ? "SUCCESS" : "FAILED");
+    }
     else if (strcmp(cmd, "invert_on") == 0) {
             ESP_LOGI(TAG, "WebUI: Setting direction to INVERTED");
         
@@ -1191,6 +1200,40 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         esp_err_t ret = httpd_ws_send_frame_async(req->handle, fd, &matter_frame);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Failed to send matter_status: %s", esp_err_to_name(ret));
+        }
+    }
+    else if (strcmp(cmd, "matter_reopen_commissioning") == 0) {
+        extern bool matter_stack_started;
+        if (!matter_stack_started) {
+            const char* err = "{\"type\":\"error\",\"message\":\"Matter stack is not running. Enable Matter first.\"}";
+            httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)err, .len = strlen(err) };
+            httpd_ws_send_frame_async(req->handle, fd, &f);
+        } else if (Matter.isDeviceCommissioned()) {
+            const char* err = "{\"type\":\"error\",\"message\":\"Device is already commissioned. Factory reset required to re-commission.\"}";
+            httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)err, .len = strlen(err) };
+            httpd_ws_send_frame_async(req->handle, fd, &f);
+        } else {
+            ESP_LOGI(TAG, "→ Re-opening commissioning window (DNS-SD, 900 s)...");
+            CHIP_ERROR cwErr = chip::Server::GetInstance()
+                .GetCommissioningWindowManager()
+                .OpenBasicCommissioningWindow(
+                    chip::System::Clock::Seconds32(900),
+                    chip::CommissioningWindowAdvertisement::kDnssdOnly);
+            if (cwErr == CHIP_NO_ERROR) {
+                ESP_LOGI(TAG, "✓ Commissioning window re-opened");
+                const char* ok = "{\"type\":\"success\",\"message\":\"<strong>✓ Commissioning window re-opened!</strong><br><br>"
+                                  "The device is now discoverable via WiFi/mDNS for 15 minutes.<br><br>"
+                                  "Please scan the QR code with your Matter controller app.\"}";
+                httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)ok, .len = strlen(ok) };
+                httpd_ws_send_frame_async(req->handle, fd, &f);
+            } else {
+                char errBuf[256];
+                snprintf(errBuf, sizeof(errBuf),
+                         "{\"type\":\"error\",\"message\":\"Could not open commissioning window: %s\"}",
+                         chip::ErrorStr(cwErr));
+                httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)errBuf, .len = strlen(errBuf) };
+                httpd_ws_send_frame_async(req->handle, fd, &f);
+            }
         }
     }
     else if (strcmp(cmd, "info") == 0) {
@@ -1939,29 +1982,10 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_smart_connect\"")) {
                 p->handler->sendModalClose(p->fd, "ble-connect-modal");
                 
                 ESP_LOGI(TAG, "✓ Smart Connect successful");
-                
-                // Status-Update senden
+
+                // Broadcast full status to ALL connected clients
                 vTaskDelay(pdMS_TO_TICKS(1000));
-                
-                const char* stateStr = (p->passkey > 0) ? "connected_encrypted" : "connected_unencrypted";
-                
-                char status_buf[512];
-                snprintf(status_buf, sizeof(status_buf),
-                        "{\"type\":\"ble_status\","
-                        "\"paired\":true,"
-                        "\"state\":\"%s\","
-                        "\"name\":\"%s\","
-                        "\"address\":\"%s\","
-                        "\"passkey\":\"%06u\","
-                        "\"bindkey\":\"%s\","
-                        "\"sensor_data\":{\"valid\":false}}",
-                        stateStr,
-                        device.name.c_str(),
-                        device.address.c_str(),
-                        p->passkey,
-                        device.bindkey.c_str());
-                
-                p->handler->broadcast_to_all_clients(status_buf);
+                p->handler->broadcastBLEStatus();
                 
             } else {
                 // Fehler
@@ -2072,21 +2096,8 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_connect\"")) {
             // Status-Update
             vTaskDelay(pdMS_TO_TICKS(1000));
             
-            PairedShellyDevice device = self->bleManager->getPairedDevice();
-            
-            char status_buf[512];
-            snprintf(status_buf, sizeof(status_buf),
-                    "{\"type\":\"ble_status\","
-                    "\"paired\":true,"
-                    "\"state\":\"connected_unencrypted\","
-                    "\"name\":\"%s\","
-                    "\"address\":\"%s\","
-                    "\"sensor_data\":{\"valid\":false}}",
-                    device.name.c_str(),
-                    device.address.c_str());
-            
-            self->broadcast_to_all_clients(status_buf);
-            
+            self->broadcastBLEStatus();
+
         } else {
             // BESSERE ERROR MESSAGE mit Troubleshooting
             const char* error = 
@@ -2157,19 +2168,8 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_encrypt\"")) {
                     xSemaphoreGive(p->handler->client_mutex);
                 }
 
-                // UI Status-Update senden
-                PairedShellyDevice dev = p->handler->bleManager->getPairedDevice();
-                char json_buf[1024];
-                snprintf(json_buf, sizeof(json_buf),
-                        "{\"type\":\"ble_status\","
-                        "\"paired\":true,"
-                        "\"state\":\"connected_encrypted\"," 
-                        "\"name\":\"%s\","
-                        "\"address\":\"%s\","
-                        "\"sensor_data\":{\"valid\":false}}",
-                        dev.name.c_str(), dev.address.c_str());
-                        
-                p->handler->broadcast_to_all_clients(json_buf);
+                // Broadcast full status to ALL connected clients
+                p->handler->broadcastBLEStatus();
             } else {
                 const char* error = "{\"type\":\"error\",\"message\":\"Encryption failed. Check passkey!\"}";
                 if (xSemaphoreTake(p->handler->client_mutex, pdMS_TO_TICKS(1000))) {
@@ -2318,25 +2318,13 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_enable_encryption\"")) {
                     xSemaphoreGive(p->handler->client_mutex);
                 }
                 
-                // Status-Update nach kurzer Verzögerung
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                
-                char status_buf[512];
-                snprintf(status_buf, sizeof(status_buf),
-                        "{\"type\":\"ble_status\","
-                        "\"paired\":true,"
-                        "\"state\":\"connected_encrypted\","
-                        "\"name\":\"%s\","
-                        "\"address\":\"%s\","
-                        "\"sensor_data\":{\"valid\":false}}",
-                        device.name.c_str(),
-                        device.address.c_str());
-                
-                p->handler->broadcast_to_all_clients(status_buf);
-                
                 // Continuous Scan starten
                 ESP_LOGI(TAG, "→ Starting continuous scan for sensor data...");
                 p->bleManager->startContinuousScan();
+
+                // Broadcast full status to ALL connected clients
+                vTaskDelay(pdMS_TO_TICKS(1000));
+                p->handler->broadcastBLEStatus();
                 
             } else {
                 const char* error = 
@@ -2724,25 +2712,9 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"")) {
             vTaskDelay(pdMS_TO_TICKS(2000));
             p->handler->sendModalClose(p->fd, "ble-encrypted-known-modal");
             
-            // Status-Update senden
+            // Broadcast full status to ALL connected clients
             vTaskDelay(pdMS_TO_TICKS(1000));
-            
-            char status_buf[768];
-            snprintf(status_buf, sizeof(status_buf),
-                    "{\"type\":\"ble_status\","
-                    "\"paired\":true,"
-                    "\"state\":\"connected_encrypted\","
-                    "\"name\":\"%s\","
-                    "\"address\":\"%s\","
-                    "\"passkey\":\"%06u\","
-                    "\"bindkey\":\"%s\","
-                    "\"sensor_data\":{\"valid\":false}}",
-                    deviceName.c_str(),
-                    p->address.c_str(),
-                    p->passkey,
-                    p->bindkey.c_str());
-            
-            p->handler->broadcast_to_all_clients(status_buf);
+            p->handler->broadcastBLEStatus();
             
             // High Water Mark Logging
             UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
@@ -2793,6 +2765,8 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_unpair\"")) {
             
             ESP_LOGI(TAG, "✓ Device unpaired");
             ESP_LOGI(TAG, "✓ Continuous scan stopped");
+            // Notify ALL open browser tabs that the device is now unpaired
+            self->broadcastBLEStatus();
         }
     }
 }
@@ -2825,11 +2799,14 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_pair\"")) {
             httpd_ws_send_frame_async(req->handle, fd, &frame);
             
             ESP_LOGI(TAG, "✓ Pairing successful");
-            
+
             // Continuous Scan starten
             ESP_LOGI(TAG, "→ Starting continuous scan for sensor data...");
             self->bleManager->startContinuousScan();
-            
+
+            // Notify ALL open browser tabs (e.g. multiple phones)
+            self->broadcastBLEStatus();
+
         } else {
             const char* error = "{\"type\":\"error\",\"message\":\"Failed to pair device\"}";
             httpd_ws_frame_t frame = {
@@ -2849,14 +2826,7 @@ else if (strcmp(cmd, "ble_start_continuous_scan") == 0) {
         if (self->bleManager->isPaired()) {
             ESP_LOGI(TAG, "Starting continuous BLE scan (paired device exists)");
             self->bleManager->startContinuousScan();
-            
-            const char* success = "{\"type\":\"info\",\"message\":\"Continuous scanning started\"}";
-            httpd_ws_frame_t frame = {
-                .type = HTTPD_WS_TYPE_TEXT,
-                .payload = (uint8_t*)success,
-                .len = strlen(success)
-            };
-            httpd_ws_send_frame_async(req->handle, fd, &frame);
+            self->broadcastBLEStatus();
         } else {
             ESP_LOGW(TAG, "Cannot start continuous scan - no device paired");
             
@@ -2897,27 +2867,9 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
         ESP_LOGI(TAG, "  Will NOT auto-restart");
         ESP_LOGI(TAG, "");
         
-        // Status-Update nach kurzer Verzögerung
+        // Broadcast full status to ALL connected clients
         vTaskDelay(pdMS_TO_TICKS(500));
-        
-        // Sende aktuellen BLE Status
-        if (self->bleManager->isPaired()) {
-            PairedShellyDevice device = self->bleManager->getPairedDevice();
-            
-            char status_buf[512];
-            snprintf(status_buf, sizeof(status_buf),
-                    "{\"type\":\"ble_status\","
-                    "\"paired\":true,"
-                    "\"state\":\"connected_encrypted\","
-                    "\"name\":\"%s\","
-                    "\"address\":\"%s\","
-                    "\"continuous_scan_active\":false,"
-                    "\"sensor_data\":{\"valid\":false}}",
-                    device.name.c_str(),
-                    device.address.c_str());
-            
-            self->broadcast_to_all_clients(status_buf);
-        }
+        self->broadcastBLEStatus();
     } else {
         const char* error = "{\"type\":\"error\",\"message\":\"BLE Manager not available\"}";
         httpd_ws_frame_t frame = {
@@ -3128,21 +3080,17 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
         else if (ws == WindowState::TILTED)  wsStr = "tilted";
         else if (ws == WindowState::OPEN)    wsStr = "open";
 
-        char buf2[256];
+        char buf2[200];
         snprintf(buf2, sizeof(buf2),
                  "{\"type\":\"window_logic_status\","
                  "\"enabled\":%s,"
                  "\"reed_delay\":%u,"
-                 "\"tilt_min\":%d,"
-                 "\"tilt_max\":%d,"
-                 "\"open_min\":%d,"
+                 "\"tilt_thresh\":%d,"
                  "\"vent_pos\":%u,"
                  "\"window_state\":\"%s\"}",
                  cfg.enabled      ? "true" : "false",
                  (unsigned)cfg.reedDelayMs,
-                 (int)cfg.tiltAngleMin,
-                 (int)cfg.tiltAngleMax,
-                 (int)cfg.openAngleMin,
+                 (int)cfg.tiltThreshold,
                  (unsigned)cfg.ventPosition,
                  wsStr);
 
@@ -3174,16 +3122,14 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
         };
 
         WindowLogicConfig cfg = shutter_driver_get_window_logic_config(self->handle);
-        cfg.enabled      = readBool("enabled",    cfg.enabled);
-        cfg.reedDelayMs  = (uint16_t)readInt("reed_delay", cfg.reedDelayMs);
-        cfg.tiltAngleMin = (int16_t) readInt("tilt_min",   cfg.tiltAngleMin);
-        cfg.tiltAngleMax = (int16_t) readInt("tilt_max",   cfg.tiltAngleMax);
-        cfg.openAngleMin = (int16_t) readInt("open_min",   cfg.openAngleMin);
-        cfg.ventPosition = (uint8_t) readInt("vent_pos",   cfg.ventPosition);
+        cfg.enabled       = readBool("enabled",    cfg.enabled);
+        cfg.reedDelayMs   = (uint16_t)readInt("reed_delay",  cfg.reedDelayMs);
+        cfg.tiltThreshold = (int16_t) readInt("tilt_thresh", cfg.tiltThreshold);
+        cfg.ventPosition  = (uint8_t) readInt("vent_pos",    cfg.ventPosition);
 
         shutter_driver_set_window_logic_config(self->handle, cfg);
 
-        const char* ok = "{\"type\":\"info\",\"message\":\"Fensterlogik gespeichert\"}";
+        const char* ok = "{\"type\":\"info\",\"message\":\"Window logic settings saved\"}";
         httpd_ws_frame_t ok_frame = {
             .type    = HTTPD_WS_TYPE_TEXT,
             .payload = (uint8_t*)ok,
@@ -3847,6 +3793,93 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
     broadcast_to_all_clients(msg);
     ESP_LOGI(TAG, "✓ Broadcast complete");
     ESP_LOGI(TAG, "");
+  }
+
+  // ============================================================================
+  // WebSocket Broadcast: Full BLE Status to ALL clients
+  // Called after any significant BLE state change so every open browser tab
+  // reflects the new state without requiring a manual tab switch / reload.
+  // ============================================================================
+
+  void WebUIHandler::broadcastBLEStatus() {
+    if (!bleManager) return;
+
+    bool paired = bleManager->isPaired();
+    ShellyBLEManager::DeviceState devState = bleManager->getDeviceState();
+
+    const char* stateStr = "not_paired";
+    if      (devState == ShellyBLEManager::STATE_CONNECTED_UNENCRYPTED) stateStr = "connected_unencrypted";
+    else if (devState == ShellyBLEManager::STATE_CONNECTED_ENCRYPTED)   stateStr = "connected_encrypted";
+
+    char msg[512];
+
+    if (!paired) {
+        snprintf(msg, sizeof(msg),
+                 "{\"type\":\"ble_status\","
+                 "\"paired\":false,"
+                 "\"state\":\"not_paired\","
+                 "\"continuous_scan_active\":%s}",
+                 bleManager->isContinuousScanEnabled() ? "true" : "false");
+    } else {
+        PairedShellyDevice dev = bleManager->getPairedDevice();
+        ShellyBLESensorData sd;
+        bool hasData = bleManager->getSensorData(sd);
+
+        // Window state from shutter driver
+        const char* wsStr = "closed";
+        if (handle) {
+            WindowState ws = shutter_driver_get_window_state(handle);
+            if      (ws == WindowState::PENDING) wsStr = "pending";
+            else if (ws == WindowState::TILTED)  wsStr = "tilted";
+            else if (ws == WindowState::OPEN)    wsStr = "open";
+        }
+
+        // seconds_ago
+        int secondsAgo = -1;
+        if (hasData && sd.lastUpdate > 0) {
+            uint32_t now = millis();
+            uint32_t elapsed = (now >= sd.lastUpdate) ? (now - sd.lastUpdate)
+                                                      : (0xFFFFFFFF - sd.lastUpdate + now);
+            if (elapsed < 86400000u) secondsAgo = (int)(elapsed / 1000);
+        }
+
+        // bindkey mask
+        bool hasBindkey = dev.bindkey.length() == 32;
+        char bindkeyMasked[8] = "None";
+        if (hasBindkey) snprintf(bindkeyMasked, sizeof(bindkeyMasked), "%.4s…", dev.bindkey.c_str());
+
+        snprintf(msg, sizeof(msg),
+                 "{\"type\":\"ble_status\","
+                 "\"paired\":true,"
+                 "\"state\":\"%s\","
+                 "\"name\":\"%s\","
+                 "\"address\":\"%s\","
+                 "\"continuous_scan_active\":%s,"
+                 "\"sensor_data\":{"
+                   "\"valid\":%s,"
+                   "\"window_open\":%s,"
+                   "\"window_state\":\"%s\","
+                   "\"battery\":%d,"
+                   "\"rotation\":%d,"
+                   "\"illuminance\":%u,"
+                   "\"rssi\":%d,"
+                   "\"seconds_ago\":%d}}",
+                 stateStr,
+                 dev.name.c_str(),
+                 dev.address.c_str(),
+                 bleManager->isContinuousScanEnabled() ? "true" : "false",
+                 (hasData && sd.dataValid) ? "true" : "false",
+                 (hasData && sd.windowOpen) ? "true" : "false",
+                 wsStr,
+                 hasData ? sd.battery : 0,
+                 hasData ? sd.rotation : 0,
+                 hasData ? sd.illuminance : 0u,
+                 hasData ? sd.rssi : 0,
+                 secondsAgo);
+    }
+
+    broadcast_to_all_clients(msg);
+    ESP_LOGD(TAG, "broadcastBLEStatus: %s", paired ? "paired" : "not_paired");
   }
 
   // ============================================================================

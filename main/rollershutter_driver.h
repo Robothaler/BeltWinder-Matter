@@ -38,6 +38,7 @@ esp_err_t shutter_driver_stop_motion(app_driver_handle_t handle);
 
 // Calibration
 esp_err_t shutter_driver_start_calibration(app_driver_handle_t handle);
+esp_err_t shutter_driver_start_calibration_from_bottom(app_driver_handle_t handle);
 
 // Configuration
 void shutter_driver_set_direction(app_driver_handle_t handle, bool inverted);
@@ -58,6 +59,8 @@ void shutter_driver_set_window_sensor_data(app_driver_handle_t handle, bool reed
 WindowState             shutter_driver_get_window_state(app_driver_handle_t handle);
 const WindowLogicConfig shutter_driver_get_window_logic_config(app_driver_handle_t handle);
 void shutter_driver_set_window_logic_config(app_driver_handle_t handle, const WindowLogicConfig& cfg);
+// Returns true (and clears internal flag) if window state changed since last call
+bool shutter_driver_consume_window_state_changed(app_driver_handle_t handle);
 
 // Operational State Callback
 typedef void (*operational_state_callback_t)(RollerShutter::State state);

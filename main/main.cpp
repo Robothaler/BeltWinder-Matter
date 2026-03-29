@@ -7,6 +7,7 @@
 #include <esp_task_wdt.h>
 #include <esp_bt.h>
 #include <app/server/Server.h>
+#include <app/server/CommissioningWindowManager.h>
 
 #include <esp_matter.h>
 #include <esp_matter_core.h>
@@ -220,6 +221,14 @@ void onShutterStateChanged(RollerShutter::State state) {
 
 
 // ============================================================================
+// Last BLE sensor data — kept so the main loop can re-broadcast when window
+// state changes asynchronously (e.g. PENDING → TILTED after the delay timer).
+// ============================================================================
+static String             lastBLEAddress;
+static ShellyBLESensorData lastBLEData;
+static bool               lastBLEDataValid = false;
+
+// ============================================================================
 // BLE Sensor Data Callback
 // ============================================================================
 
@@ -345,6 +354,11 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     // ════════════════════════════════════════════════════════════════
     
     shutter_driver_set_window_sensor_data(shutter_handle, data.windowOpen, data.rotation);
+
+    // Cache for async re-broadcast when window state changes via loop() timer
+    lastBLEAddress   = address;
+    lastBLEData      = data;
+    lastBLEDataValid = true;
 }
 
 
@@ -1027,9 +1041,38 @@ bool startMatterStack() {
     }
     
     matter_stack_started = true;
-    
+
     ESP_LOGI(TAG, "✓ Matter stack started successfully");
     ESP_LOGI(TAG, "");
+
+    // ════════════════════════════════════════════════════════════════════
+    // Explicitly open commissioning window (DNS-SD / WiFi only).
+    //
+    // CHIP_DEVICE_CONFIG_ENABLE_PAIRING_AUTOSTART auto-opens the window
+    // via OpenBasicCommissioningWindow(kAllSupported), which tries to
+    // enable BLE advertising. Because NimBLE already owns the BT
+    // controller that call may fail and SuccessOrExit() silently aborts
+    // Server::Init() before the window is actually open.
+    //
+    // Fix: after esp_matter::start() returns we explicitly re-open the
+    // window using kDnssdOnly (mDNS over WiFi). This is the only
+    // commissioning transport that works on this firmware.
+    // ════════════════════════════════════════════════════════════════════
+
+    bool commissioned_check = Matter.isDeviceCommissioned();
+    if (!commissioned_check) {
+        ESP_LOGI(TAG, "→ Opening commissioning window (DNS-SD / WiFi only)...");
+        CHIP_ERROR cwErr = chip::Server::GetInstance()
+            .GetCommissioningWindowManager()
+            .OpenBasicCommissioningWindow(
+                chip::System::Clock::Seconds32(900),
+                chip::CommissioningWindowAdvertisement::kDnssdOnly);
+        if (cwErr == CHIP_NO_ERROR) {
+            ESP_LOGI(TAG, "✓ Commissioning window open (900 s, DNS-SD)");
+        } else {
+            ESP_LOGW(TAG, "⚠ Could not open commissioning window: %s", chip::ErrorStr(cwErr));
+        }
+    }
     
     // ════════════════════════════════════════════════════════════════════
     // Subscription Handler aktivieren
@@ -1815,6 +1858,16 @@ void loop() {
         was_commissioned = is_commissioned;
 
         // ────────────────────────────────────────────────────────────
+        // Window state async re-broadcast (PENDING → TILTED/OPEN after delay)
+        // classifyWindowAngle() sets windowStateChanged when called from loop().
+        // We re-broadcast the last cached BLE data with the updated window_state.
+        // ────────────────────────────────────────────────────────────
+        if (lastBLEDataValid &&
+            shutter_driver_consume_window_state_changed(shutter_handle)) {
+            if (webUI) webUI->broadcastSensorDataUpdate(lastBLEAddress, lastBLEData);
+        }
+
+        // ────────────────────────────────────────────────────────────
         // Shutter Control Loop (nur wenn commissioned)
         // ────────────────────────────────────────────────────────────
         if (is_commissioned && hardware_initialized) {
@@ -1943,7 +1996,13 @@ void loop() {
         // ════════════════════════════════════════════════════════════════
         // Matter nicht gestartet → NUR Hardware-Basics
         // ════════════════════════════════════════════════════════════════
-        
+
+        // Window state async re-broadcast (same as in commissioned branch)
+        if (lastBLEDataValid &&
+            shutter_driver_consume_window_state_changed(shutter_handle)) {
+            if (webUI) webUI->broadcastSensorDataUpdate(lastBLEAddress, lastBLEData);
+        }
+
         // Shutter kann OHNE Matter laufen (z.B. bei Kalibrierung)
         if (hardware_initialized) {
             shutter_driver_loop(shutter_handle);
@@ -1981,6 +2040,16 @@ void loop() {
         last_ws_cleanup = millis();
         if (webUI) {
             webUI->cleanup_idle_clients();
+        }
+    }
+
+    // BLE status heartbeat — keeps all open browser tabs in sync even if
+    // no BLE event fires for a while (e.g. scan stopped, no sensor movement).
+    static uint32_t last_ble_heartbeat = 0;
+    if (millis() - last_ble_heartbeat >= 10000) {
+        last_ble_heartbeat = millis();
+        if (webUI && bleManager && webUI->get_client_count() > 0) {
+            webUI->broadcastBLEStatus();
         }
     }
 

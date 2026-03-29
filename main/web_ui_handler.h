@@ -71,10 +71,13 @@ public:
         remove_contact_sensor_callback = cb;
     }
 
-    void broadcastBLEStateChange(ShellyBLEManager::DeviceState oldState, 
+    void broadcastBLEStateChange(ShellyBLEManager::DeviceState oldState,
                                   ShellyBLEManager::DeviceState newState);
-    
-    void broadcastSensorDataUpdate(const String& address, 
+    // Broadcast full ble_status to ALL connected WebSocket clients.
+    // Call after any BLE state change (pair, unpair, encryption, scan state).
+    void broadcastBLEStatus();
+
+    void broadcastSensorDataUpdate(const String& address,
                                     const ShellyBLESensorData& data);
     void sendModalClose(int fd, const char* modal_id);
     void logMemoryStats(const char* location);

@@ -111,27 +111,23 @@ void RollerShutter::loadStateFromKVS() {
     err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_enabled", &wl_enabled, sizeof(wl_enabled), &len);
     windowLogicCfg.enabled = (wl_enabled != 0);
 
-    uint16_t wl_reed_delay = 3000;
+    uint16_t wl_reed_delay = 300;
     err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_reed_delay", &wl_reed_delay, sizeof(wl_reed_delay), &len);
     if (err == CHIP_NO_ERROR) windowLogicCfg.reedDelayMs = wl_reed_delay;
 
-    int16_t wl_tilt_min = 5, wl_tilt_max = 45, wl_open_min = 46;
-    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_tilt_min", &wl_tilt_min, sizeof(wl_tilt_min), &len);
-    if (err == CHIP_NO_ERROR) windowLogicCfg.tiltAngleMin = wl_tilt_min;
-    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_tilt_max", &wl_tilt_max, sizeof(wl_tilt_max), &len);
-    if (err == CHIP_NO_ERROR) windowLogicCfg.tiltAngleMax = wl_tilt_max;
-    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_open_min", &wl_open_min, sizeof(wl_open_min), &len);
-    if (err == CHIP_NO_ERROR) windowLogicCfg.openAngleMin = wl_open_min;
+    int16_t wl_tilt_thresh = 1;
+    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_tilt_thresh", &wl_tilt_thresh, sizeof(wl_tilt_thresh), &len);
+    if (err == CHIP_NO_ERROR) windowLogicCfg.tiltThreshold = wl_tilt_thresh;
 
     uint8_t wl_vent_pos = 15;
     err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_vent_pos", &wl_vent_pos, sizeof(wl_vent_pos), &len);
     if (err == CHIP_NO_ERROR) windowLogicCfg.ventPosition = wl_vent_pos;
 
-    ESP_LOGI(TAG, "  Window Logic Cfg:   enabled=%s, delay=%dms, tilt=%d°-%d°, open>=%d°, vent=%d%%",
+    ESP_LOGI(TAG, "  Window Logic Cfg:   enabled=%s, delay=%dms, tiltThresh=%d°, vent=%d%%",
              windowLogicCfg.enabled ? "YES" : "NO",
              windowLogicCfg.reedDelayMs,
-             windowLogicCfg.tiltAngleMin, windowLogicCfg.tiltAngleMax,
-             windowLogicCfg.openAngleMin, windowLogicCfg.ventPosition);
+             windowLogicCfg.tiltThreshold,
+             windowLogicCfg.ventPosition);
 
     err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("top_history", topLimitHistory, sizeof(topLimitHistory), &len);
     if (err != CHIP_NO_ERROR) {
@@ -181,12 +177,10 @@ void RollerShutter::saveStateToKVS() {
 
     // Window Logic Config
     uint8_t wl_enabled = windowLogicCfg.enabled ? 1 : 0;
-    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_enabled",    &wl_enabled,                   sizeof(wl_enabled));
-    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_reed_delay", &windowLogicCfg.reedDelayMs,   sizeof(windowLogicCfg.reedDelayMs));
-    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_tilt_min",   &windowLogicCfg.tiltAngleMin,  sizeof(windowLogicCfg.tiltAngleMin));
-    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_tilt_max",   &windowLogicCfg.tiltAngleMax,  sizeof(windowLogicCfg.tiltAngleMax));
-    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_open_min",   &windowLogicCfg.openAngleMin,  sizeof(windowLogicCfg.openAngleMin));
-    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_vent_pos",   &windowLogicCfg.ventPosition,  sizeof(windowLogicCfg.ventPosition));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_enabled",     &wl_enabled,                    sizeof(wl_enabled));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_reed_delay",  &windowLogicCfg.reedDelayMs,    sizeof(windowLogicCfg.reedDelayMs));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_tilt_thresh", &windowLogicCfg.tiltThreshold,  sizeof(windowLogicCfg.tiltThreshold));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_vent_pos",    &windowLogicCfg.ventPosition,   sizeof(windowLogicCfg.ventPosition));
 
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("top_history", topLimitHistory, sizeof(topLimitHistory));
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("bottom_history", bottomLimitHistory, sizeof(bottomLimitHistory));
@@ -348,11 +342,31 @@ void RollerShutter::startCalibration() {
         ESP_LOGW(TAG, "Already moving. Ignoring calibration command.");
         return;
     }
-    ESP_LOGI(TAG, "Starting calibration sequence.");
+    ESP_LOGI(TAG, "Starting calibration: UP first (shutter starts anywhere).");
     calibrated = false;
+    calibrationFromBottom = false;
+    calibrationUpPulses = 0;
+    calibrationDownPulses = 0;
+    calUpStartCheck = 0;
     currentState = State::CALIBRATING_UP;
     calibrationStartTime = millis();
     triggerMoveUp();
+}
+
+void RollerShutter::startCalibrationFromBottom() {
+    if (currentState != State::STOPPED) {
+        ESP_LOGW(TAG, "Already moving. Ignoring calibration command.");
+        return;
+    }
+    ESP_LOGI(TAG, "Starting calibration: DOWN first (shutter starts near top).");
+    calibrated = false;
+    calibrationFromBottom = true;
+    calibrationUpPulses = 0;
+    calibrationDownPulses = 0;
+    calUpStartCheck = 0;
+    currentState = State::CALIBRATING_DOWN;
+    calibrationStartTime = millis();
+    triggerMoveDown();
 }
 
 void RollerShutter::setDirectionInverted(bool inverted) {
@@ -388,9 +402,9 @@ static const char* windowStateStr(WindowState s) {
 void RollerShutter::setWindowLogicConfig(const WindowLogicConfig& cfg) {
     windowLogicCfg = cfg;
     saveState();
-    ESP_LOGI(TAG, "Window logic cfg saved: enabled=%s delay=%dms tilt=%d°-%d° open>=%d° vent=%d%%",
+    ESP_LOGI(TAG, "Window logic cfg saved: enabled=%s delay=%dms tiltThresh=%d° vent=%d%%",
              cfg.enabled ? "YES" : "NO", cfg.reedDelayMs,
-             cfg.tiltAngleMin, cfg.tiltAngleMax, cfg.openAngleMin, cfg.ventPosition);
+             cfg.tiltThreshold, cfg.ventPosition);
 }
 
 void RollerShutter::setWindowSensorData(bool reedOpen, int16_t rotation) {
@@ -400,6 +414,7 @@ void RollerShutter::setWindowSensorData(bool reedOpen, int16_t rotation) {
         // Reed closed → window is shut
         if (windowState != WindowState::CLOSED) {
             ESP_LOGI(TAG, "Window → CLOSED (reed closed)");
+            windowStateChanged = true;
         }
         windowState   = WindowState::CLOSED;
         reedOpenTime  = 0;
@@ -413,39 +428,34 @@ void RollerShutter::setWindowSensorData(bool reedOpen, int16_t rotation) {
         autoVentFired = false;
         if (windowState != WindowState::PENDING) {
             ESP_LOGI(TAG, "Window → PENDING (reed opened, waiting %d ms for angle)", windowLogicCfg.reedDelayMs);
+            windowStateChanged = true;
         }
         windowState = WindowState::PENDING;
+        // Fall through: if delay is 0, classify immediately below
+    }
+
+    // Delay still active → stay PENDING (return early, loop() will resolve later)
+    if (windowLogicCfg.reedDelayMs > 0 &&
+        (millis() - reedOpenTime) < windowLogicCfg.reedDelayMs) {
         return;
     }
 
-    // Delay still active → stay PENDING
-    if ((millis() - reedOpenTime) < windowLogicCfg.reedDelayMs) {
-        if (windowState != WindowState::PENDING) {
-            windowState = WindowState::PENDING;
-        }
-        return;
-    }
-
-    // Delay passed → classify by rotation
+    // Delay passed (or delay=0) → classify by rotation
     classifyWindowAngle();
 }
 
 void RollerShutter::classifyWindowAngle() {
-    WindowState newState;
-
-    if (lastRotation >= windowLogicCfg.openAngleMin) {
-        newState = WindowState::OPEN;
-    } else if (lastRotation >= windowLogicCfg.tiltAngleMin &&
-               lastRotation <= windowLogicCfg.tiltAngleMax) {
-        newState = WindowState::TILTED;
-    } else {
-        // Rotation out of both ranges — treat as TILTED (safer than OPEN)
-        newState = WindowState::TILTED;
-    }
+    // Sensor: reed open + rotation <= tiltThreshold → OPEN (flat, fully open)
+    //         reed open + rotation >  tiltThreshold → TILTED
+    WindowState newState = (lastRotation > windowLogicCfg.tiltThreshold)
+                           ? WindowState::TILTED
+                           : WindowState::OPEN;
 
     if (newState != windowState) {
-        ESP_LOGI(TAG, "Window → %s (rotation=%d°)", windowStateStr(newState), lastRotation);
-        windowState = newState;
+        ESP_LOGI(TAG, "Window → %s (rotation=%d°, threshold=%d°)",
+                 windowStateStr(newState), lastRotation, windowLogicCfg.tiltThreshold);
+        windowState        = newState;
+        windowStateChanged = true;  // signal main loop to re-broadcast
     }
 
     // Proactive: if logic enabled and shutter is closed and window was just tilted,
@@ -744,42 +754,64 @@ void RollerShutter::handleStateMachine() {
             static uint32_t last_cal_up_debug = 0;
             if (millis() - last_cal_up_debug >= 200) {
                 last_cal_up_debug = millis();
-                ESP_LOGI(TAG, "CALIBRATING_UP: time=%lums, pulses=%ld", 
-                        millis() - calibrationStartTime, 
+                ESP_LOGI(TAG, "CALIBRATING_UP: time=%lums, pulses=%ld",
+                        millis() - calibrationStartTime,
                         (long)calibrationUpPulses);
             }
-            
+
+            // Motor-not-moving detection: if >5s elapsed and still 0 pulses, motor
+            // did not respond to UP. Try DOWN direction instead.
+            if (calUpStartCheck == 0) calUpStartCheck = millis();
+            if (calibrationUpPulses == 0 &&
+                (millis() - calUpStartCheck) > 5000) {
+                ESP_LOGW(TAG, "⚠ Motor did not respond to UP after 5s → switching to DOWN");
+                calUpStartCheck = 0;
+                triggerStop();
+                vTaskDelay(pdMS_TO_TICKS(500));
+                calibrationFromBottom = true;
+                calibrationUpPulses = 0;
+                calibrationDownPulses = 0;
+                calibrationStartTime = millis();
+                currentState = State::CALIBRATING_DOWN;
+                triggerMoveDown();
+                break;
+            }
+
             // Hardware-Check ob Motor wirklich gestoppt ist
-            bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH && 
+            bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH &&
                                         digitalRead(pins.motorDown) == HIGH);
-            
-            if (actualDirection == State::STOPPED && 
+
+            if (actualDirection == State::STOPPED &&
                 desiredMotorAction == State::MOVING_UP &&
                 motorReallyStopped) {
-                
+
+                calUpStartCheck = 0;  // reset for next calibration run
+
                 ESP_LOGI(TAG, "");
                 ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
                 ESP_LOGI(TAG, "║   CALIBRATION: TOP LIMIT REACHED  ║");
                 ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
                 ESP_LOGI(TAG, "  UP Pulses: %ld", (long)calibrationUpPulses);
                 ESP_LOGI(TAG, "");
-                
+
                 // Warte 1 Sekunde
                 vTaskDelay(pdMS_TO_TICKS(1000));
-                
+
                 // Setze Position auf 0 (ganz oben)
                 currentPulseCount = 0;
                 positionChanged = true;
-                
-                // Wechsle SOFORT zu CALIBRATING_DOWN!
-                currentState = State::CALIBRATING_DOWN;
-                ESP_LOGI(TAG, "→ Starting CALIBRATING_DOWN");
-                
-                // Warte nochmal 1 Sekunde
-                vTaskDelay(pdMS_TO_TICKS(1000));
-                
-                // Starte DOWN-Fahrt
-                triggerMoveDown();
+
+                if (calibrationFromBottom) {
+                    // DOWN was already done first; now UP is done → VALIDATION
+                    currentState = State::CALIBRATING_VALIDATION;
+                    ESP_LOGI(TAG, "→ UP phase done (from-bottom flow) → VALIDATION");
+                } else {
+                    // Normal flow: UP done → now go DOWN
+                    currentState = State::CALIBRATING_DOWN;
+                    ESP_LOGI(TAG, "→ Starting CALIBRATING_DOWN");
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    triggerMoveDown();
+                }
             }
             break;
         }
@@ -789,26 +821,37 @@ void RollerShutter::handleStateMachine() {
             static uint32_t last_cal_down_debug = 0;
             if (millis() - last_cal_down_debug >= 200) {
                 last_cal_down_debug = millis();
-                ESP_LOGI(TAG, "CALIBRATING_DOWN: time=%lums, pulses=%ld", 
-                         millis() - calibrationStartTime, 
+                ESP_LOGI(TAG, "CALIBRATING_DOWN: time=%lums, pulses=%ld",
+                         millis() - calibrationStartTime,
                          (long)calibrationDownPulses);
             }
-            
-            bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH && 
+
+            bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH &&
                                    digitalRead(pins.motorDown) == HIGH);
-            
-            if (actualDirection == State::STOPPED && 
+
+            if (actualDirection == State::STOPPED &&
                 desiredMotorAction == State::MOVING_DOWN &&
                 motorReallyStopped) {
-                
+
                 ESP_LOGI(TAG, "");
                 ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
                 ESP_LOGI(TAG, "║  CALIBRATION: BOTTOM LIMIT REACHED║");
                 ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
                 ESP_LOGI(TAG, "  DOWN Pulses: %ld", (long)calibrationDownPulses);
                 ESP_LOGI(TAG, "");
-                
-                currentState = State::CALIBRATING_VALIDATION;
+
+                if (calibrationFromBottom) {
+                    // First phase done (DOWN). Now go UP for the second phase.
+                    currentPulseCount = calibrationDownPulses;
+                    positionChanged = true;
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    currentState = State::CALIBRATING_UP;
+                    ESP_LOGI(TAG, "→ Starting CALIBRATING_UP (from-bottom, second phase)");
+                    vTaskDelay(pdMS_TO_TICKS(1000));
+                    triggerMoveUp();
+                } else {
+                    currentState = State::CALIBRATING_VALIDATION;
+                }
             }
             break;
         }
@@ -823,9 +866,24 @@ void RollerShutter::handleStateMachine() {
             ESP_LOGI(TAG, "DOWN Pulses: %ld", (long)calibrationDownPulses);
             ESP_LOGI(TAG, "");
             
+            // Guard: if either counter is 0 the motor didn't move in that direction
+            if (calibrationUpPulses == 0 || calibrationDownPulses == 0) {
+                ESP_LOGE(TAG, "✗ VALIDATION FAILED: zero pulses in one direction!");
+                ESP_LOGE(TAG, "  UP=%ld  DOWN=%ld", (long)calibrationUpPulses, (long)calibrationDownPulses);
+                calibrated = false;
+                currentState = State::STOPPED;
+                calibrationUpPulses = 0;
+                calibrationDownPulses = 0;
+                calibrationFromBottom = false;
+                calUpStartCheck = 0;
+                if (_calibrationCompleteCallback) _calibrationCompleteCallback(false);
+                break;
+            }
+
             // Berechne Differenz
             int32_t diff = abs(calibrationUpPulses - calibrationDownPulses);
-            float diffPercent = (float)diff / calibrationUpPulses * 100.0f;
+            int32_t divisor = (calibrationUpPulses + calibrationDownPulses) / 2;  // use avg as base
+            float diffPercent = (float)diff / (float)divisor * 100.0f;
             
             ESP_LOGI(TAG, "Difference: %ld pulses (%.2f%%)", (long)diff, diffPercent);
             ESP_LOGI(TAG, "");
@@ -876,7 +934,9 @@ void RollerShutter::handleStateMachine() {
             // Reset Kalibrierungs-Variablen
             calibrationUpPulses = 0;
             calibrationDownPulses = 0;
-            
+            calibrationFromBottom = false;
+            calUpStartCheck = 0;
+
             break;
         }
     }

@@ -42,13 +42,18 @@ enum class WindowState : uint8_t {
 };
 
 // --- Window Logic Configuration ---
+// Sensor behavior (Shelly BLU DW):
+//   Closed  → reed=false, rotation=0°
+//   Open    → reed=true,  rotation=0-1°  (flat, minimal angle)
+//   Tilted  → reed=true,  rotation>tiltThreshold
+//
+// So classification is: reed open + rotation <= tiltThreshold → OPEN
+//                        reed open + rotation >  tiltThreshold → TILTED
 struct WindowLogicConfig {
-    bool     enabled      = false;  // Master enable/disable
-    uint16_t reedDelayMs  = 3000;   // ms to wait after reed opens before classifying angle
-    int16_t  tiltAngleMin = 5;      // °  lower bound for TILTED
-    int16_t  tiltAngleMax = 45;     // °  upper bound for TILTED
-    int16_t  openAngleMin = 46;     // °  lower bound for OPEN
-    uint8_t  ventPosition = 15;     // %  ventilation target position
+    bool     enabled       = false;  // Master enable/disable
+    uint16_t reedDelayMs   = 300;    // ms to wait after reed opens before reading angle
+    int16_t  tiltThreshold = 1;      // °  rotation > this → TILTED, else → OPEN
+    uint8_t  ventPosition  = 15;     // %  ventilation target position
 };
 
 #define DEVICE_IP_MAX_LENGTH 16

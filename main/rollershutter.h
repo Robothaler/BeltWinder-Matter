@@ -31,7 +31,8 @@ public:
 
     void moveToPercent(uint8_t percent);
     void stop();
-    void startCalibration();
+    void startCalibration();           // start from current pos, move UP first
+    void startCalibrationFromBottom(); // start by moving DOWN first (shutter near top)
     void setDirectionInverted(bool inverted);
 
     void recordTopLimit();
@@ -49,9 +50,15 @@ public:
 
     // New window logic API
     void setWindowSensorData(bool reedOpen, int16_t rotation);
-    WindowState         getWindowState()       const { return windowState; }
-    const WindowLogicConfig& getWindowLogicConfig() const { return windowLogicCfg; }
+    WindowState              getWindowState()          const { return windowState; }
+    const WindowLogicConfig& getWindowLogicConfig()    const { return windowLogicCfg; }
     void setWindowLogicConfig(const WindowLogicConfig& cfg);
+    // Returns true (and clears flag) if window state changed since last call
+    bool consumeWindowStateChanged() {
+        bool v = windowStateChanged;
+        windowStateChanged = false;
+        return v;
+    }
 
     // ════════════════════════════════════════════════════════════════
     // Intelligente Update-Strategie
@@ -203,14 +210,17 @@ private:
     WindowOpenLogic windowLogic = DEFAULT_WINDOW_LOGIC;  // legacy
 
     // New window logic
-    WindowState       windowState    = WindowState::CLOSED;
+    WindowState       windowState        = WindowState::CLOSED;
     WindowLogicConfig windowLogicCfg;
-    uint32_t          reedOpenTime   = 0;    // millis() when reed first opened (0 = not open)
-    int16_t           lastRotation   = 0;    // last rotation value from BLE packet
-    bool              autoVentFired  = false; // prevent repeated auto-vent for same tilt event
+    uint32_t          reedOpenTime       = 0;     // millis() when reed first opened (0 = not open)
+    int16_t           lastRotation       = 0;     // last rotation value from BLE packet
+    bool              autoVentFired      = false; // prevent repeated auto-vent for same tilt event
+    bool              windowStateChanged = false; // set when state transitions; cleared by caller
 
     unsigned long calibrationStartTime = 0;
     const unsigned long CALIBRATION_TIMEOUT = 90000; // 90 Sekunden
+    bool calibrationFromBottom = false; // true = DOWN phase is first (shutter starts near top)
+    uint32_t calUpStartCheck = 0;      // timestamp when CALIBRATING_UP entered (for no-motion detection)
 
     State lastActualDirection = State::STOPPED;
     uint8_t directionStableCounter = 0;
