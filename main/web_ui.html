@@ -6332,10 +6332,19 @@
       // Generate QR Code
       const container = document.getElementById('qr-code-container');
       container.innerHTML = '';  // Clear existing QR code
-      
+
+      // Matter QR codes must encode only the raw "MT:..." payload.
+      // getOnboardingQRCodeUrl() returns a full URL like
+      // "https://...?data=MT:Y3.15...", so extract the MT: part.
+      let qrText = qrUrl;
+      const mtIdx = qrUrl.indexOf('MT:');
+      if (mtIdx >= 0) {
+        qrText = qrUrl.substring(mtIdx);
+      }
+
       // Create QR Code with QRCode.js
       matterQRCode = new QRCode(container, {
-        text: qrUrl,
+        text: qrText,
         width: 300,
         height: 300,
         colorDark: "#000000",
