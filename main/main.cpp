@@ -344,7 +344,7 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     // Rolladen-Logik (IMMER aktiv, unabhängig von Matter!)
     // ════════════════════════════════════════════════════════════════
     
-    shutter_driver_set_window_state(shutter_handle, data.windowOpen);
+    shutter_driver_set_window_sensor_data(shutter_handle, data.windowOpen, data.rotation);
 }
 
 

@@ -6,6 +6,9 @@
 static const char* TAG = "Shutter";
 extern bool hardware_initialized;
 
+// Forward declaration (defined further below with the window-logic methods)
+static const char* windowStateStr(WindowState s);
+
 // Thread-Safe ISR-Variables
 portMUX_TYPE RollerShutter::pulseMux = portMUX_INITIALIZER_UNLOCKED;
 volatile int32_t RollerShutter::pulseBuffer = 0;
@@ -43,6 +46,13 @@ void RollerShutter::loop() {
     applyMotorAction();
     handleButtonRelease();
     periodicSave();
+
+    // Resolve PENDING window state once the reed-delay has elapsed
+    if (windowState == WindowState::PENDING &&
+        reedOpenTime != 0 &&
+        (millis() - reedOpenTime) >= windowLogicCfg.reedDelayMs) {
+        classifyWindowAngle();
+    }
 }
 
 // --- Public API Implementation ---
@@ -96,6 +106,33 @@ void RollerShutter::loadStateFromKVS() {
     err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("win_logic", &logic_val, sizeof(logic_val), &len);
     windowLogic = static_cast<WindowOpenLogic>(logic_val);
 
+    // Window Logic Config
+    uint8_t wl_enabled = 0;
+    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_enabled", &wl_enabled, sizeof(wl_enabled), &len);
+    windowLogicCfg.enabled = (wl_enabled != 0);
+
+    uint16_t wl_reed_delay = 3000;
+    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_reed_delay", &wl_reed_delay, sizeof(wl_reed_delay), &len);
+    if (err == CHIP_NO_ERROR) windowLogicCfg.reedDelayMs = wl_reed_delay;
+
+    int16_t wl_tilt_min = 5, wl_tilt_max = 45, wl_open_min = 46;
+    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_tilt_min", &wl_tilt_min, sizeof(wl_tilt_min), &len);
+    if (err == CHIP_NO_ERROR) windowLogicCfg.tiltAngleMin = wl_tilt_min;
+    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_tilt_max", &wl_tilt_max, sizeof(wl_tilt_max), &len);
+    if (err == CHIP_NO_ERROR) windowLogicCfg.tiltAngleMax = wl_tilt_max;
+    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_open_min", &wl_open_min, sizeof(wl_open_min), &len);
+    if (err == CHIP_NO_ERROR) windowLogicCfg.openAngleMin = wl_open_min;
+
+    uint8_t wl_vent_pos = 15;
+    err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("wl_vent_pos", &wl_vent_pos, sizeof(wl_vent_pos), &len);
+    if (err == CHIP_NO_ERROR) windowLogicCfg.ventPosition = wl_vent_pos;
+
+    ESP_LOGI(TAG, "  Window Logic Cfg:   enabled=%s, delay=%dms, tilt=%d°-%d°, open>=%d°, vent=%d%%",
+             windowLogicCfg.enabled ? "YES" : "NO",
+             windowLogicCfg.reedDelayMs,
+             windowLogicCfg.tiltAngleMin, windowLogicCfg.tiltAngleMax,
+             windowLogicCfg.openAngleMin, windowLogicCfg.ventPosition);
+
     err = chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Get("top_history", topLimitHistory, sizeof(topLimitHistory), &len);
     if (err != CHIP_NO_ERROR) {
         memset(topLimitHistory, 0, sizeof(topLimitHistory));
@@ -142,6 +179,15 @@ void RollerShutter::saveStateToKVS() {
     uint8_t logic_val = static_cast<uint8_t>(windowLogic);
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("win_logic", &logic_val, sizeof(logic_val));
 
+    // Window Logic Config
+    uint8_t wl_enabled = windowLogicCfg.enabled ? 1 : 0;
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_enabled",    &wl_enabled,                   sizeof(wl_enabled));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_reed_delay", &windowLogicCfg.reedDelayMs,   sizeof(windowLogicCfg.reedDelayMs));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_tilt_min",   &windowLogicCfg.tiltAngleMin,  sizeof(windowLogicCfg.tiltAngleMin));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_tilt_max",   &windowLogicCfg.tiltAngleMax,  sizeof(windowLogicCfg.tiltAngleMax));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_open_min",   &windowLogicCfg.openAngleMin,  sizeof(windowLogicCfg.openAngleMin));
+    chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("wl_vent_pos",   &windowLogicCfg.ventPosition,  sizeof(windowLogicCfg.ventPosition));
+
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("top_history", topLimitHistory, sizeof(topLimitHistory));
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("bottom_history", bottomLimitHistory, sizeof(bottomLimitHistory));
     chip::DeviceLayer::PersistedStorage::KeyValueStoreMgr().Put("top_idx", &topLimitHistoryIndex, sizeof(topLimitHistoryIndex));
@@ -169,8 +215,8 @@ void RollerShutter::moveToPercent(uint8_t percent) {
     ESP_LOGI(TAG, "  → targetPulseCount:     %ld", (long)targetPulseCount);
     ESP_LOGI(TAG, "");
     ESP_LOGI(TAG, "CONFIGURATION:");
-    ESP_LOGI(TAG, "  → windowIsOpen:         %s", windowIsOpen ? "YES" : "NO");
-    ESP_LOGI(TAG, "  → windowLogic:          %d", (int)windowLogic);
+    ESP_LOGI(TAG, "  → windowState:          %s", windowStateStr(windowState));
+    ESP_LOGI(TAG, "  → windowLogicEnabled:   %s", windowLogicCfg.enabled ? "YES" : "NO");
     ESP_LOGI(TAG, "  → directionInverted:    %s", directionInverted ? "YES" : "NO");
     ESP_LOGI(TAG, "");
     
@@ -208,41 +254,21 @@ void RollerShutter::moveToPercent(uint8_t percent) {
         return;
     }
     
-    // Window sensor logic
-    if (percent > currentPercent && windowIsOpen && 
-        windowLogic != WindowOpenLogic::LOGIC_DISABLED) {
-        
-        ESP_LOGW(TAG, "═══════════════════════════════════");
-        ESP_LOGW(TAG, "⚠ WINDOW OPEN - APPLYING LOGIC");
-        ESP_LOGW(TAG, "═══════════════════════════════════");
-        ESP_LOGW(TAG, "Window state: OPEN");
-        ESP_LOGW(TAG, "Movement direction: DOWNWARD");
-        ESP_LOGW(TAG, "Active logic: %d", (int)windowLogic);
-        
-        switch (windowLogic) {
-            case WindowOpenLogic::BLOCK_DOWNWARD:
-                ESP_LOGI(TAG, "→ Logic: BLOCK_DOWNWARD");
-                ESP_LOGI(TAG, "  ✗ Command rejected - window is open");
-                return;
-                
-            case WindowOpenLogic::OPEN_FULLY:
-                ESP_LOGI(TAG, "→ Logic: OPEN_FULLY");
-                ESP_LOGI(TAG, "  ✓ Overriding target: %d%% → 0%%", percent);
-                percent = 0;
-                newTarget = 0;
-                break;
-                
-            case WindowOpenLogic::VENTILATION_POSITION:
-                ESP_LOGI(TAG, "→ Logic: VENTILATION_POSITION");
-                ESP_LOGI(TAG, "  ✓ Overriding target: %d%% → %d%%", percent, VENTILATION_PERCENTAGE);
-                percent = VENTILATION_PERCENTAGE;
-                newTarget = (maxPulseCount * VENTILATION_PERCENTAGE) / 100;
-                break;
-                
-            default: 
-                break;
+    // ── New window logic ────────────────────────────────────────────────────
+    if (windowLogicCfg.enabled && percent > currentPercent) {
+        if (windowState == WindowState::OPEN) {
+            // Window fully open: block ALL close/downward commands.
+            // Physical hardware buttons bypass moveToPercent() entirely so they
+            // are still allowed (per spec: "nur Manuelle Kommandos über Button").
+            ESP_LOGW(TAG, "═══════════════════════════════════");
+            ESP_LOGW(TAG, "⚠ WINDOW OPEN - CLOSE COMMAND BLOCKED");
+            ESP_LOGW(TAG, "  window=OPEN, target=%d%% > current=%d%%", percent, currentPercent);
+            ESP_LOGW(TAG, "  Only physical hardware buttons are allowed!");
+            ESP_LOGW(TAG, "═══════════════════════════════════");
+            return;
         }
-        ESP_LOGW(TAG, "═══════════════════════════════════");
+        // WindowState::TILTED → all commands accepted (no blocking)
+        // WindowState::CLOSED / PENDING → no restriction either
     }
     
     targetPulseCount = newTarget;
@@ -337,18 +363,103 @@ void RollerShutter::setDirectionInverted(bool inverted) {
     }
 }
 
-void RollerShutter::setWindowState(bool isOpen) {
-    if (windowIsOpen != isOpen) {
-        windowIsOpen = isOpen;
-        ESP_LOGI(TAG, "Window state changed to: %s", isOpen ? "OPEN" : "CLOSED");
-    }
-}
-
 void RollerShutter::setWindowOpenLogic(WindowOpenLogic logic) {
     if (windowLogic != logic) {
         windowLogic = logic;
         saveState();
         ESP_LOGI(TAG, "Window logic changed to: %d", (int)logic);
+    }
+}
+
+// ────────────────────────────────────────────────────────────────────────────
+// New granular window logic
+// ────────────────────────────────────────────────────────────────────────────
+
+static const char* windowStateStr(WindowState s) {
+    switch (s) {
+        case WindowState::CLOSED:  return "CLOSED";
+        case WindowState::PENDING: return "PENDING";
+        case WindowState::TILTED:  return "TILTED";
+        case WindowState::OPEN:    return "OPEN";
+        default:                   return "?";
+    }
+}
+
+void RollerShutter::setWindowLogicConfig(const WindowLogicConfig& cfg) {
+    windowLogicCfg = cfg;
+    saveState();
+    ESP_LOGI(TAG, "Window logic cfg saved: enabled=%s delay=%dms tilt=%d°-%d° open>=%d° vent=%d%%",
+             cfg.enabled ? "YES" : "NO", cfg.reedDelayMs,
+             cfg.tiltAngleMin, cfg.tiltAngleMax, cfg.openAngleMin, cfg.ventPosition);
+}
+
+void RollerShutter::setWindowSensorData(bool reedOpen, int16_t rotation) {
+    lastRotation = rotation;
+
+    if (!reedOpen) {
+        // Reed closed → window is shut
+        if (windowState != WindowState::CLOSED) {
+            ESP_LOGI(TAG, "Window → CLOSED (reed closed)");
+        }
+        windowState   = WindowState::CLOSED;
+        reedOpenTime  = 0;
+        autoVentFired = false;
+        return;
+    }
+
+    // Reed is open — record the time it first opened
+    if (reedOpenTime == 0) {
+        reedOpenTime  = millis();
+        autoVentFired = false;
+        if (windowState != WindowState::PENDING) {
+            ESP_LOGI(TAG, "Window → PENDING (reed opened, waiting %d ms for angle)", windowLogicCfg.reedDelayMs);
+        }
+        windowState = WindowState::PENDING;
+        return;
+    }
+
+    // Delay still active → stay PENDING
+    if ((millis() - reedOpenTime) < windowLogicCfg.reedDelayMs) {
+        if (windowState != WindowState::PENDING) {
+            windowState = WindowState::PENDING;
+        }
+        return;
+    }
+
+    // Delay passed → classify by rotation
+    classifyWindowAngle();
+}
+
+void RollerShutter::classifyWindowAngle() {
+    WindowState newState;
+
+    if (lastRotation >= windowLogicCfg.openAngleMin) {
+        newState = WindowState::OPEN;
+    } else if (lastRotation >= windowLogicCfg.tiltAngleMin &&
+               lastRotation <= windowLogicCfg.tiltAngleMax) {
+        newState = WindowState::TILTED;
+    } else {
+        // Rotation out of both ranges — treat as TILTED (safer than OPEN)
+        newState = WindowState::TILTED;
+    }
+
+    if (newState != windowState) {
+        ESP_LOGI(TAG, "Window → %s (rotation=%d°)", windowStateStr(newState), lastRotation);
+        windowState = newState;
+    }
+
+    // Proactive: if logic enabled and shutter is closed and window was just tilted,
+    // automatically open to ventilation position.
+    if (!windowLogicCfg.enabled) return;
+    if (windowState != WindowState::TILTED) return;
+    if (autoVentFired) return;
+
+    uint8_t pos = getCurrentPercent();
+    if (pos >= 97) {  // shutter is closed (±3% hysteresis)
+        autoVentFired = true;
+        ESP_LOGI(TAG, "→ Auto-vent: shutter was closed (%d%%), moving to ventilation position (%d%%)",
+                 pos, windowLogicCfg.ventPosition);
+        moveToPercent(windowLogicCfg.ventPosition);
     }
 }
 

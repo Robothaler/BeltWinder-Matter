@@ -181,14 +181,29 @@ bool shutter_driver_is_calibrated(app_driver_handle_t handle) {
     return ((RollerShutter*)handle)->isCalibrated();
 }
 
-void shutter_driver_set_window_state(app_driver_handle_t handle, bool isOpen) {
-    if (!handle) return;
-    ((RollerShutter*)handle)->setWindowState(isOpen);
-}
-
 void shutter_driver_set_window_open_logic(app_driver_handle_t handle, WindowOpenLogic logic) {
     if (!handle) return;
     ((RollerShutter*)handle)->setWindowOpenLogic(logic);
+}
+
+void shutter_driver_set_window_sensor_data(app_driver_handle_t handle, bool reedOpen, int16_t rotation) {
+    if (!handle) return;
+    ((RollerShutter*)handle)->setWindowSensorData(reedOpen, rotation);
+}
+
+WindowState shutter_driver_get_window_state(app_driver_handle_t handle) {
+    if (!handle) return WindowState::CLOSED;
+    return ((RollerShutter*)handle)->getWindowState();
+}
+
+const WindowLogicConfig shutter_driver_get_window_logic_config(app_driver_handle_t handle) {
+    if (!handle) return WindowLogicConfig{};
+    return ((RollerShutter*)handle)->getWindowLogicConfig();
+}
+
+void shutter_driver_set_window_logic_config(app_driver_handle_t handle, const WindowLogicConfig& cfg) {
+    if (!handle) return;
+    ((RollerShutter*)handle)->setWindowLogicConfig(cfg);
 }
 
 RollerShutter::State shutter_driver_get_current_state(app_driver_handle_t handle) {

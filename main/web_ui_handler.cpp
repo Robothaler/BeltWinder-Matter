@@ -3119,10 +3119,82 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
         };
         httpd_ws_send_frame_async(req->handle, fd, &frame);
     }
+    else if (strcmp(cmd, "window_logic_status") == 0) {
+        WindowLogicConfig cfg = shutter_driver_get_window_logic_config(self->handle);
+        WindowState       ws  = shutter_driver_get_window_state(self->handle);
+
+        const char* wsStr = "closed";
+        if      (ws == WindowState::PENDING) wsStr = "pending";
+        else if (ws == WindowState::TILTED)  wsStr = "tilted";
+        else if (ws == WindowState::OPEN)    wsStr = "open";
+
+        char buf2[256];
+        snprintf(buf2, sizeof(buf2),
+                 "{\"type\":\"window_logic_status\","
+                 "\"enabled\":%s,"
+                 "\"reed_delay\":%u,"
+                 "\"tilt_min\":%d,"
+                 "\"tilt_max\":%d,"
+                 "\"open_min\":%d,"
+                 "\"vent_pos\":%u,"
+                 "\"window_state\":\"%s\"}",
+                 cfg.enabled      ? "true" : "false",
+                 (unsigned)cfg.reedDelayMs,
+                 (int)cfg.tiltAngleMin,
+                 (int)cfg.tiltAngleMax,
+                 (int)cfg.openAngleMin,
+                 (unsigned)cfg.ventPosition,
+                 wsStr);
+
+        httpd_ws_frame_t wl_frame = {
+            .type    = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)buf2,
+            .len     = strlen(buf2)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &wl_frame);
+    }
+    else if (CMD_MATCH(cmd, "{\"cmd\":\"window_logic_save\"")) {
+        String json = String(cmd);
+
+        auto readBool = [&](const char* key, bool def) -> bool {
+            String pattern = String("\"") + key + "\":";
+            int idx = json.indexOf(pattern);
+            if (idx < 0) return def;
+            idx += pattern.length();
+            while (idx < (int)json.length() && json[idx] == ' ') idx++;
+            return json.substring(idx, idx + 4) == "true";
+        };
+        auto readInt = [&](const char* key, int def) -> int {
+            String pattern = String("\"") + key + "\":";
+            int idx = json.indexOf(pattern);
+            if (idx < 0) return def;
+            idx += pattern.length();
+            while (idx < (int)json.length() && json[idx] == ' ') idx++;
+            return json.substring(idx).toInt();
+        };
+
+        WindowLogicConfig cfg = shutter_driver_get_window_logic_config(self->handle);
+        cfg.enabled      = readBool("enabled",    cfg.enabled);
+        cfg.reedDelayMs  = (uint16_t)readInt("reed_delay", cfg.reedDelayMs);
+        cfg.tiltAngleMin = (int16_t) readInt("tilt_min",   cfg.tiltAngleMin);
+        cfg.tiltAngleMax = (int16_t) readInt("tilt_max",   cfg.tiltAngleMax);
+        cfg.openAngleMin = (int16_t) readInt("open_min",   cfg.openAngleMin);
+        cfg.ventPosition = (uint8_t) readInt("vent_pos",   cfg.ventPosition);
+
+        shutter_driver_set_window_logic_config(self->handle, cfg);
+
+        const char* ok = "{\"type\":\"info\",\"message\":\"Fensterlogik gespeichert\"}";
+        httpd_ws_frame_t ok_frame = {
+            .type    = HTTPD_WS_TYPE_TEXT,
+            .payload = (uint8_t*)ok,
+            .len     = strlen(ok)
+        };
+        httpd_ws_send_frame_async(req->handle, fd, &ok_frame);
+    }
     else {
         ESP_LOGW(TAG, "Unknown command: '%s'", cmd);
     }
-    
+
     free(buf);
     return ESP_OK;
 }
@@ -3803,11 +3875,21 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
             }
         }
 
-        char json_buf[512];
+        // Include granular window state from shutter driver
+        const char* wsStr = "closed";
+        if (handle) {
+            WindowState ws = shutter_driver_get_window_state(handle);
+            if      (ws == WindowState::PENDING) wsStr = "pending";
+            else if (ws == WindowState::TILTED)  wsStr = "tilted";
+            else if (ws == WindowState::OPEN)    wsStr = "open";
+        }
+
+        char json_buf[560];
         snprintf(json_buf, sizeof(json_buf),
                 "{\"type\":\"ble_sensor_update\","
                 "\"address\":\"%s\","
                 "\"window_open\":%s,"
+                "\"window_state\":\"%s\","
                 "\"battery\":%d,"
                 "\"illuminance\":%u,"
                 "\"rotation\":%d,"
@@ -3818,6 +3900,7 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
                 "\"seconds_ago\":%d}",
                 address.c_str(),
                 data.windowOpen ? "true" : "false",
+                wsStr,
                 data.battery,
                 data.illuminance,
                 data.rotation,

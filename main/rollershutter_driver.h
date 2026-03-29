@@ -50,9 +50,14 @@ bool shutter_driver_is_position_changed(app_driver_handle_t handle);
 bool shutter_driver_is_calibrated(app_driver_handle_t handle);
 RollerShutter::State shutter_driver_get_current_state(app_driver_handle_t handle);
 
-// Window Sensor
-void shutter_driver_set_window_state(app_driver_handle_t handle, bool isOpen);
+// Window Sensor (legacy)
 void shutter_driver_set_window_open_logic(app_driver_handle_t handle, WindowOpenLogic logic);
+
+// Window Sensor (new granular API)
+void shutter_driver_set_window_sensor_data(app_driver_handle_t handle, bool reedOpen, int16_t rotation);
+WindowState             shutter_driver_get_window_state(app_driver_handle_t handle);
+const WindowLogicConfig shutter_driver_get_window_logic_config(app_driver_handle_t handle);
+void shutter_driver_set_window_logic_config(app_driver_handle_t handle, const WindowLogicConfig& cfg);
 
 // Operational State Callback
 typedef void (*operational_state_callback_t)(RollerShutter::State state);

@@ -1192,6 +1192,9 @@
       <button onclick="show('ble')" id="nav-ble" aria-label="BLE sensor tab">
         <span>📡 BLE Sensor</span>
       </button>
+      <button onclick="show('window-logic')" id="nav-window-logic" aria-label="Fensterlogik tab" class="hidden">
+        <span>🪟 Fensterlogik</span>
+      </button>
       <button onclick="show('system')" id="nav-system" aria-label="System information tab">
         <span>💻 System</span>
       </button>
@@ -1704,6 +1707,140 @@
         </div>
       </div>
     </div>
+
+    <!-- ============================================================================
+     Fensterlogik Tab
+     ============================================================================ -->
+
+    <div id="window-logic" class="hidden" role="tabpanel" aria-labelledby="nav-window-logic">
+
+      <!-- Live Status Card -->
+      <div class="card">
+        <h2>🪟 Fenster-Status (Live)</h2>
+        <div class="status-grid">
+          <div class="status-item">
+            <div class="status-label">Fensterzustand</div>
+            <div class="status-value" id="wl-window-state">—</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">Winkel (Rotation)</div>
+            <div class="status-value" id="wl-rotation">—</div>
+          </div>
+          <div class="status-item">
+            <div class="status-label">Logik aktiv</div>
+            <div class="status-value" id="wl-logic-active">—</div>
+          </div>
+        </div>
+      </div>
+
+      <!-- Settings Card -->
+      <div class="card">
+        <h2>⚙️ Fensterlogik Einstellungen</h2>
+
+        <!-- Master Enable -->
+        <div class="form-group" style="display:flex;align-items:center;justify-content:space-between;margin-bottom:20px">
+          <div>
+            <strong>Fensterlogik aktivieren</strong>
+            <div style="font-size:0.85em;color:#aaa;margin-top:4px">
+              Wenn deaktiviert, werden alle Fensterzustände ignoriert
+            </div>
+          </div>
+          <label class="toggle-switch" style="flex-shrink:0;margin-left:16px">
+            <input type="checkbox" id="wl-enabled">
+            <span class="toggle-slider"></span>
+          </label>
+        </div>
+
+        <div id="wl-settings-body">
+
+          <!-- Reed Delay -->
+          <div class="form-group" style="margin-bottom:20px">
+            <label for="wl-reed-delay"><strong>Erkennungs-Verzögerung (ms)</strong></label>
+            <div style="font-size:0.85em;color:#aaa;margin:4px 0 8px">
+              Nach dem Öffnen des Reedkontakts wird dieser Zeitraum gewartet, bevor der Winkel ausgewertet wird.
+              Standardwert: 3000 ms
+            </div>
+            <input type="number" id="wl-reed-delay" min="500" max="15000" step="500"
+                   style="width:100%;padding:10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:8px;font-size:1em">
+          </div>
+
+          <!-- Tilt Angle Range -->
+          <div class="form-group" style="margin-bottom:20px">
+            <label><strong>Winkelbereich: GEKIPPT</strong></label>
+            <div style="font-size:0.85em;color:#aaa;margin:4px 0 8px">
+              Wenn der Winkel in diesem Bereich liegt, gilt das Fenster als <em>gekippt</em>.
+              Bei gekipptem Fenster werden alle Befehle akzeptiert. Wenn der Rolladen geschlossen
+              war (≥97%), öffnet er automatisch auf die Lüftungsstellung.
+            </div>
+            <div style="display:flex;gap:12px">
+              <div style="flex:1">
+                <label for="wl-tilt-min" style="font-size:0.85em;color:#aaa">Von (°)</label>
+                <input type="number" id="wl-tilt-min" min="0" max="180" step="1"
+                       style="width:100%;padding:10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:8px;font-size:1em">
+              </div>
+              <div style="flex:1">
+                <label for="wl-tilt-max" style="font-size:0.85em;color:#aaa">Bis (°)</label>
+                <input type="number" id="wl-tilt-max" min="0" max="180" step="1"
+                       style="width:100%;padding:10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:8px;font-size:1em">
+              </div>
+            </div>
+          </div>
+
+          <!-- Open Angle -->
+          <div class="form-group" style="margin-bottom:20px">
+            <label><strong>Winkelgrenze: GEÖFFNET</strong></label>
+            <div style="font-size:0.85em;color:#aaa;margin:4px 0 8px">
+              Ab diesem Winkel gilt das Fenster als <em>geöffnet</em>.
+              Schließ-Befehle werden dann blockiert (nur physische Tasten erlaubt).
+            </div>
+            <div style="display:flex;align-items:center;gap:8px">
+              <span style="color:#aaa;font-size:0.9em">Ab</span>
+              <input type="number" id="wl-open-min" min="0" max="180" step="1"
+                     style="flex:1;padding:10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:8px;font-size:1em">
+              <span style="color:#aaa;font-size:0.9em">°</span>
+            </div>
+          </div>
+
+          <!-- Ventilation Position -->
+          <div class="form-group" style="margin-bottom:24px">
+            <label for="wl-vent-pos"><strong>Lüftungsstellung (%)</strong></label>
+            <div style="font-size:0.85em;color:#aaa;margin:4px 0 8px">
+              Position des Rolladens bei automatischer Öffnung durch Kippstellung.
+              0% = vollständig offen, 100% = vollständig geschlossen.
+            </div>
+            <div style="display:flex;align-items:center;gap:12px">
+              <input type="range" id="wl-vent-pos-slider" min="0" max="50" step="1"
+                     style="flex:1"
+                     oninput="document.getElementById('wl-vent-pos').value=this.value">
+              <input type="number" id="wl-vent-pos" min="0" max="50" step="1"
+                     style="width:70px;padding:10px;background:#1a1a2e;color:#e0e0e0;border:1px solid #444;border-radius:8px;font-size:1em"
+                     oninput="document.getElementById('wl-vent-pos-slider').value=this.value">
+              <span style="color:#aaa;font-size:0.9em">%</span>
+            </div>
+          </div>
+
+          <!-- Logic Overview -->
+          <div class="info-box" style="margin-bottom:24px">
+            <p><strong>ℹ️ Zusammenfassung der Logik</strong></p>
+            <ul style="margin:10px 0 0 20px;line-height:2">
+              <li><strong>Fenster GESCHLOSSEN</strong> → Alle Befehle erlaubt</li>
+              <li><strong>Fenster AUSWERTUNG</strong> → Reedkontakt offen, warte auf Winkel</li>
+              <li><strong>Fenster GEKIPPT</strong> → Alle Befehle erlaubt<br>
+                  &nbsp;&nbsp;&nbsp;+ Rolladen war zu (≥97%): automatisch auf Lüftungsstellung</li>
+              <li><strong>Fenster OFFEN</strong> → Schließ-Befehle blockiert<br>
+                  &nbsp;&nbsp;&nbsp;(nur physische Tasten erlaubt)</li>
+            </ul>
+          </div>
+
+        </div><!-- wl-settings-body -->
+
+        <button class="btn primary" onclick="saveWindowLogic()"
+                style="width:100%;padding:16px;font-size:1.05em">
+          <span>💾 Einstellungen speichern</span>
+        </button>
+      </div>
+
+    </div><!-- /window-logic -->
 
     <!-- ============================================================================
      System Tab
@@ -3412,6 +3549,9 @@
         case 'contact_sensor_status':
           handleContactSensorStatus(data);
           break;
+        case 'window_logic_status':
+          handleWindowLogicStatus(data);
+          break;
         case 'modal_close':
             handleModalClose(data);
             break;
@@ -4195,6 +4335,9 @@
             console.log('  Display:', timeStr);
         }
         
+        // Window logic live update
+        updateWindowLogicLive(data);
+
         // Button events
         if (data.has_button_event) {
             const eventMap = {
@@ -4232,14 +4375,74 @@
       AppState.contactSensorEndpointActive = data.active;
       updateContactSensorToggle(data.enabled, data.active);
     }
-    
+
+    // ============================================================================
+    // Window Logic Handlers
+    // ============================================================================
+
+    function handleWindowLogicStatus(data) {
+      document.getElementById('wl-enabled').checked         = !!data.enabled;
+      document.getElementById('wl-reed-delay').value        = data.reed_delay  ?? 3000;
+      document.getElementById('wl-tilt-min').value          = data.tilt_min    ?? 5;
+      document.getElementById('wl-tilt-max').value          = data.tilt_max    ?? 45;
+      document.getElementById('wl-open-min').value          = data.open_min    ?? 46;
+      document.getElementById('wl-vent-pos').value          = data.vent_pos    ?? 15;
+      document.getElementById('wl-vent-pos-slider').value   = data.vent_pos    ?? 15;
+      updateWindowStateDisplay(data.window_state || 'closed');
+    }
+
+    function updateWindowStateDisplay(state) {
+      const el = document.getElementById('wl-window-state');
+      if (!el) return;
+      const map = {
+        closed:  { text: '🔒 Geschlossen', cls: 'commissioned' },
+        pending: { text: '⏳ Auswertung…',  cls: '' },
+        tilted:  { text: '↗️ Gekippt',       cls: '' },
+        open:    { text: '🔓 Geöffnet',      cls: 'not-commissioned' }
+      };
+      const info = map[state] || { text: state, cls: '' };
+      el.textContent  = info.text;
+      el.className    = 'status-value ' + info.cls;
+
+      const logicEl = document.getElementById('wl-logic-active');
+      if (logicEl) {
+        const enabled = document.getElementById('wl-enabled')?.checked;
+        logicEl.textContent = enabled ? '✅ Aktiv' : '❌ Deaktiviert';
+        logicEl.className   = 'status-value ' + (enabled ? 'commissioned' : '');
+      }
+    }
+
+    // Called from ble_sensor_update to keep the live status current
+    function updateWindowLogicLive(data) {
+      if (data.window_state) updateWindowStateDisplay(data.window_state);
+      const rotEl = document.getElementById('wl-rotation');
+      if (rotEl && data.rotation !== undefined) rotEl.textContent = data.rotation + '°';
+    }
+
+    function saveWindowLogic() {
+      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
+        showErrorBanner('Fehler', 'Keine WebSocket-Verbindung', 'error');
+        return;
+      }
+      const payload = {
+        cmd:        'window_logic_save',
+        enabled:    document.getElementById('wl-enabled').checked,
+        reed_delay: parseInt(document.getElementById('wl-reed-delay').value) || 3000,
+        tilt_min:   parseInt(document.getElementById('wl-tilt-min').value)   || 5,
+        tilt_max:   parseInt(document.getElementById('wl-tilt-max').value)   || 45,
+        open_min:   parseInt(document.getElementById('wl-open-min').value)   || 46,
+        vent_pos:   parseInt(document.getElementById('wl-vent-pos').value)   || 15
+      };
+      AppState.ws.send(JSON.stringify(payload));
+    }
+
     // ============================================================================
     // Tab Navigation
     // ============================================================================
-    
+
     function show(id) {
       // Hide all tabs
-      document.querySelectorAll('#overview, #matter, #ble, #system, #settings').forEach(e => {
+      document.querySelectorAll('#overview, #matter, #ble, #system, #settings, #window-logic').forEach(e => {
         e.classList.add('hidden');
         e.setAttribute('aria-hidden', 'true');
       });
@@ -4272,6 +4475,9 @@
             console.log('→ Loading BLE status...');
             AppState.ws.send('ble_status');
             AppState.ws.send('contact_sensor_status');
+            break;
+          case 'window-logic':
+            AppState.ws.send('window_logic_status');
             break;
         }
       }
@@ -5356,6 +5562,16 @@
         document.getElementById('ble-sensor-status').classList.remove('hidden');
         document.getElementById('ble-scan-interface').classList.add('hidden');
         document.getElementById('ble-matter-toggle').classList.remove('hidden');
+
+        // Show Fensterlogik tab when a BLE sensor is paired
+        const wlNav = document.getElementById('nav-window-logic');
+        if (wlNav) {
+          wlNav.classList.remove('hidden');
+        }
+        // Request current window logic settings
+        if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
+          AppState.ws.send('window_logic_status');
+        }
         
         document.getElementById('ble-device-name').innerText = data.name || 'Unknown';
         document.getElementById('ble-device-address').innerText = data.address || 'Unknown';
@@ -5534,6 +5750,9 @@
         if (scanControlDiv) {
           scanControlDiv.style.display = 'none';
         }
+        // Hide Fensterlogik tab when no sensor is paired
+        const wlNav2 = document.getElementById('nav-window-logic');
+        if (wlNav2) wlNav2.classList.add('hidden');
       }
       
       // Refresh contact sensor status

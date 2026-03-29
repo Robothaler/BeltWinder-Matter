@@ -22,7 +22,7 @@
 #define BUILD_TIME __TIME__  // ← Automatisch vom Compiler
 #endif
 
-// --- Window Open Logic ---
+// --- Window Open Logic (legacy, kept for KVS compat) ---
 enum class WindowOpenLogic {
     LOGIC_DISABLED,
     BLOCK_DOWNWARD,
@@ -32,6 +32,24 @@ enum class WindowOpenLogic {
 
 #define DEFAULT_WINDOW_LOGIC WindowOpenLogic::OPEN_FULLY
 #define VENTILATION_PERCENTAGE 15
+
+// --- Window State (derived from BLE sensor reed + rotation) ---
+enum class WindowState : uint8_t {
+    CLOSED,    // Reed contact closed — window shut
+    PENDING,   // Reed just opened, waiting for angle to stabilise
+    TILTED,    // Rotation within tilt range — window tilted (gekippt)
+    OPEN       // Rotation within open range — window fully open
+};
+
+// --- Window Logic Configuration ---
+struct WindowLogicConfig {
+    bool     enabled      = false;  // Master enable/disable
+    uint16_t reedDelayMs  = 3000;   // ms to wait after reed opens before classifying angle
+    int16_t  tiltAngleMin = 5;      // °  lower bound for TILTED
+    int16_t  tiltAngleMax = 45;     // °  upper bound for TILTED
+    int16_t  openAngleMin = 46;     // °  lower bound for OPEN
+    uint8_t  ventPosition = 15;     // %  ventilation target position
+};
 
 #define DEVICE_IP_MAX_LENGTH 16
 

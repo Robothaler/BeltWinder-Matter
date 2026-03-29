@@ -44,8 +44,14 @@ public:
     State getCurrentState() const;
     bool hasPositionChanged();
 
-    void setWindowState(bool isOpen);
+    // Legacy (kept for internal backward compat)
     void setWindowOpenLogic(WindowOpenLogic logic);
+
+    // New window logic API
+    void setWindowSensorData(bool reedOpen, int16_t rotation);
+    WindowState         getWindowState()       const { return windowState; }
+    const WindowLogicConfig& getWindowLogicConfig() const { return windowLogicCfg; }
+    void setWindowLogicConfig(const WindowLogicConfig& cfg);
 
     // ════════════════════════════════════════════════════════════════
     // Intelligente Update-Strategie
@@ -131,6 +137,7 @@ private:
     void saveStateToKVS();
     void saveState();
     void periodicSave();
+    void classifyWindowAngle();
 
     void triggerMoveUp();
     void triggerMoveDown();
@@ -193,8 +200,14 @@ private:
     bool calibrated = false;
     bool directionInverted = false;
     bool positionChanged = true;
-    bool windowIsOpen = false;
-    WindowOpenLogic windowLogic = DEFAULT_WINDOW_LOGIC;
+    WindowOpenLogic windowLogic = DEFAULT_WINDOW_LOGIC;  // legacy
+
+    // New window logic
+    WindowState       windowState    = WindowState::CLOSED;
+    WindowLogicConfig windowLogicCfg;
+    uint32_t          reedOpenTime   = 0;    // millis() when reed first opened (0 = not open)
+    int16_t           lastRotation   = 0;    // last rotation value from BLE packet
+    bool              autoVentFired  = false; // prevent repeated auto-vent for same tilt event
 
     unsigned long calibrationStartTime = 0;
     const unsigned long CALIBRATION_TIMEOUT = 90000; // 90 Sekunden
