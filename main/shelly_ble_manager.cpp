@@ -638,6 +638,13 @@ void ShellyBLEManager::startContinuousScan() {
     ESP_LOGI(TAG, "");
     
     // ════════════════════════════════════════════════════════════════════
+    // RESET DEDUP STATE: Force first received advertisement to always trigger
+    // the sensorDataCallback, regardless of any packetId cached by a prior
+    // readSampleBTHomeData() GATT call during the pairing workflow.
+    // ════════════════════════════════════════════════════════════════════
+    pairedDevice.sensorData.dataValid = false;
+
+    // ════════════════════════════════════════════════════════════════════
     // WHITELIST: BEIDE ADDRESS TYPES HINZUFÜGEN!
     // ════════════════════════════════════════════════════════════════════
     
