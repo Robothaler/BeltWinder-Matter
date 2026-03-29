@@ -1609,7 +1609,9 @@ void setup() {
             Serial.println("Start updating " + type);
             
             if (webUI) webUI->cleanup_idle_clients();
-            if (bleManager) bleManager->stopScan(true);
+            // manualStop=false: preserve NVS continuous_scan flag so scan
+            // auto-restarts after the OTA reboot (not a user stop request).
+            if (bleManager) bleManager->stopScan(false);
         });
         
         ArduinoOTA.onEnd([]() { Serial.println("\nEnd"); });

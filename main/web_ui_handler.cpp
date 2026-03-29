@@ -1541,21 +1541,14 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                 // Memory Stats NACH Scan
                 p->handler->logMemoryStats("Scan Monitor End");
 
-                // Send completion
-                const char *complete_msg = "{\"type\":\"ble_scan_complete\"}";
-                p->handler->broadcast_to_all_clients(complete_msg);
-                ESP_LOGI(TAG, "✓ Scan complete sent");
-
-                vTaskDelay(pdMS_TO_TICKS(200));
-
-                // Send devices
+                // Send devices FIRST so the list is populated before the overlay
+                // is hidden (ble_scan_complete triggers hideLoading() in the JS).
                 if (p->bleManager) {
-                    std::vector<ShellyBLEDevice> discovered = p->bleManager->getDiscoveredDevices();
+                    const auto& discovered = p->bleManager->getDiscoveredDevices();
 
                     if (discovered.size() > 0) {
-                        // Lokaler Buffer (kein static!)
                         char json_buf[2048];
-                        
+
                         int offset = snprintf(json_buf, sizeof(json_buf),
                                             "{\"type\":\"ble_discovered\",\"devices\":[");
 
@@ -1578,6 +1571,12 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                         ESP_LOGI(TAG, "ℹ No devices found");
                     }
                 }
+
+                // Send completion AFTER devices — JS hides loading overlay on this message,
+                // revealing the already-populated device list.
+                const char *complete_msg = "{\"type\":\"ble_scan_complete\"}";
+                p->handler->broadcast_to_all_clients(complete_msg);
+                ESP_LOGI(TAG, "✓ Scan complete sent");
                 
                 // High Water Mark Logging
                 UBaseType_t highWater = uxTaskGetStackHighWaterMark(NULL);
@@ -1593,7 +1592,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                 // unique_ptr wird automatisch freigegeben
                 vTaskDelete(NULL);
                 
-            }, "ble_scan_mon", 6144, params, 1, NULL);  // Stack: 6KB
+            }, "ble_scan_mon", 5120, params, 1, NULL);  // Stack: 5KB (has char json_buf[2048] inside)
         }
     }
 
@@ -1605,7 +1604,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         // 1. Discovery List (bleibt unverändert)
         // ════════════════════════════════════════════════════════════════
         
-        std::vector<ShellyBLEDevice> discovered = self->bleManager->getDiscoveredDevices();
+        const auto& discovered = self->bleManager->getDiscoveredDevices();
         
         char json_buf[2048];
         int offset = snprintf(json_buf, sizeof(json_buf), 
@@ -1671,7 +1670,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                 }
             }
 
-            bool continuousScanActive = self->bleManager->isScanActive();
+            bool continuousScanActive = self->bleManager->isContinuousScanEnabled();
             
             offset = snprintf(json_buf, sizeof(json_buf),
                              "{\"type\":\"ble_status\","
@@ -2005,7 +2004,7 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_smart_connect\"")) {
             // unique_ptr wird hier automatisch freigegeben!
             vTaskDelete(NULL);
             
-        }, "ble_smart", 8192, params, 5, NULL);  // Stack: 8KB
+        }, "ble_smart", 6144, params, 5, NULL);  // Stack: 6KB (NimBLE client ops)
         
         ESP_LOGI(TAG, "✓ Smart Connect task created");
     }
@@ -2190,7 +2189,7 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_encrypt\"")) {
             delete p;
             vTaskDelete(NULL);
 
-        }, "ble_enc_task", 8192, params, 1, NULL);
+        }, "ble_enc_task", 6144, params, 1, NULL);  // Stack: 6KB (AES + NimBLE client ops)
     }
 }
 
@@ -2377,7 +2376,7 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_enable_encryption\"")) {
             // unique_ptr wird automatisch freigegeben
             vTaskDelete(NULL);
             
-        }, "ble_enc", 8192, params, 5, NULL);  // Stack: 8KB
+        }, "ble_enc", 6144, params, 5, NULL);  // Stack: 6KB (AES + NimBLE client ops)
         
         ESP_LOGI(TAG, "✓ Encryption task created");
     }
@@ -2524,7 +2523,7 @@ else if (CMD_MATCH(cmd, "{\"cmd\":\"ble_pair_encrypted_known\"")) {
             // Get device info from discovered list
             uint8_t addressType = BLE_ADDR_RANDOM;  // Default für Shelly
             
-            std::vector<ShellyBLEDevice> discovered = p->bleManager->getDiscoveredDevices();
+            const auto& discovered = p->bleManager->getDiscoveredDevices();
             for (const auto& dev : discovered) {
                 if (dev.address.equalsIgnoreCase(p->address)) {
                     addressType = dev.addressType;
@@ -3088,7 +3087,7 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
                 // unique_ptr wird automatisch freigegeben
                 vTaskDelete(NULL);
                 
-            }, "ble_read", 8192, params, 5, NULL);  // Stack: 8KB
+            }, "ble_read", 5120, params, 5, NULL);  // Stack: 5KB (GATT read + char json_buf[512])
             
             // Sofort Info an User senden
             const char* info = "{\"type\":\"info\",\"message\":\"Reading sensor data via GATT...\"}";
@@ -3226,9 +3225,10 @@ esp_err_t WebUIHandler::handle_start_matter(httpd_req_t *req) {
     // Build JSON Response
     // ════════════════════════════════════════════════════════════════════
     
-    DynamicJsonDocument doc(2048);
+    // StaticJsonDocument on stack avoids 2KB heap allocation + fragmentation
+    StaticJsonDocument<512> doc;
     doc["success"] = result.success;
-    doc["reboot_triggered"] = result.reboot_triggered;  // ← NEU!
+    doc["reboot_triggered"] = result.reboot_triggered;
     
     if (result.success) {
         if (result.reboot_triggered) {
@@ -3342,8 +3342,9 @@ esp_err_t WebUIHandler::handle_matter_status(httpd_req_t *req) {
     // Build JSON Response
     // ════════════════════════════════════════════════════════════════════
     
-    DynamicJsonDocument doc(1024);
-    
+    // StaticJsonDocument on stack avoids 1KB heap allocation + fragmentation
+    StaticJsonDocument<384> doc;
+
     doc["node_created"] = matter_node_created;
     doc["stack_started"] = matter_stack_started;
     doc["commissioned"] = Matter.isDeviceCommissioned();
@@ -3373,7 +3374,7 @@ esp_err_t WebUIHandler::handle_matter_status(httpd_req_t *req) {
 void WebUIHandler::begin() {
     httpd_config_t cfg = HTTPD_DEFAULT_CONFIG();
     
-    cfg.max_open_sockets = 5;
+    cfg.max_open_sockets = 4;  // 3 WebSocket clients + 1 for pending HTTP requests
     cfg.lru_purge_enable = true;
     cfg.max_uri_handlers = 12;  // 11 handlers registered: root, 3x icons, ws, 2x update, 2x matter, 2x drift
     cfg.stack_size = 8192;
@@ -3652,10 +3653,7 @@ void WebUIHandler::unregister_client(int fd) {
 
 void WebUIHandler::broadcast_to_all_clients(const char* message) {
     if (!server || !message) return;
-    
-    // PRE-BROADCAST MEMORY CHECK
-    logMemoryStats("Before WS Broadcast");
-    
+
     if (xSemaphoreTake(client_mutex, pdMS_TO_TICKS(100)) == pdTRUE) {
         size_t msg_len = strlen(message);
         
@@ -3732,10 +3730,7 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
         }
         
         free(msg_copy);
-        
-        // POST-BROADCAST MEMORY CHECK
-        logMemoryStats("After WS Broadcast");
-        
+
     } else {
         ESP_LOGW(TAG, "Could not acquire mutex for broadcast");
     }
@@ -3787,122 +3782,55 @@ void WebUIHandler::broadcast_to_all_clients(const char* message) {
   // ============================================================================
 
   void WebUIHandler::broadcastSensorDataUpdate(const String& address, const ShellyBLESensorData& data) {
-        ESP_LOGI(TAG, "");
-        ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
-        ESP_LOGI(TAG, "║   BROADCASTING SENSOR DATA        ║");
-        ESP_LOGI(TAG, "╚═══════════════════════════════════╝");
-        ESP_LOGI(TAG, "Address: %s", address.c_str());
-        ESP_LOGI(TAG, "Battery: %d%% | Window: %s", 
-                data.battery, 
-                data.windowOpen ? "OPEN" : "CLOSED");
-        ESP_LOGI(TAG, "Packet ID: %d", data.packetId);
-        ESP_LOGI(TAG, "Active clients: %d", active_clients.size());
-        
         // Berechne "seconds_ago" mit Validierung
         uint32_t currentMillis = millis();
         uint32_t secondsAgo = 0;
         bool timeValid = false;
-        
-        // Prüfe auf valide lastUpdate
+
         if (data.lastUpdate > 0) {
             if (currentMillis >= data.lastUpdate) {
-                // Normal case
                 secondsAgo = (currentMillis - data.lastUpdate) / 1000;
                 timeValid = true;
-                
-                ESP_LOGI(TAG, "Time calculation:");
-                ESP_LOGI(TAG, "  Current millis: %u", currentMillis);
-                ESP_LOGI(TAG, "  Last update:    %u", data.lastUpdate);
-                ESP_LOGI(TAG, "  Difference:     %u ms", currentMillis - data.lastUpdate);
-                ESP_LOGI(TAG, "  Seconds ago:    %u", secondsAgo);
-                
             } else {
                 // millis() overflow (nach ~49 Tagen)
-                ESP_LOGW(TAG, "⚠ millis() overflow detected!");
-                
                 uint32_t millisToOverflow = (0xFFFFFFFF - data.lastUpdate);
                 secondsAgo = (millisToOverflow + currentMillis) / 1000;
                 timeValid = true;
-                
-                ESP_LOGI(TAG, "  Overflow calculation: %u seconds", secondsAgo);
             }
-            
-            // Wenn secondsAgo zu groß (> 1 Stunde ohne Update)
-            if (secondsAgo > 3600) {
-                ESP_LOGW(TAG, "");
-                ESP_LOGW(TAG, "⚠️ WARNING: Last update very old!");
-                ESP_LOGW(TAG, "   Seconds ago: %u (%.1f hours)", secondsAgo, secondsAgo / 3600.0f);
-                ESP_LOGW(TAG, "   Possible issue: No new sensor data received!");
-                ESP_LOGW(TAG, "");
-                
-                // Markiere als ungültig wenn > 24 Stunden
-                if (secondsAgo > 86400) {
-                    ESP_LOGE(TAG, "✗ Data too old (> 24 hours), marking as invalid");
-                    timeValid = false;
-                }
+
+            if (secondsAgo > 86400) {
+                timeValid = false;
             }
-            
-        } else {
-            ESP_LOGW(TAG, "");
-            ESP_LOGW(TAG, "⚠ lastUpdate is 0 - no valid timestamp!");
-            ESP_LOGW(TAG, "  This indicates no sensor data has been received yet.");
-            ESP_LOGW(TAG, "");
-            timeValid = false;
         }
-        
+
         char json_buf[512];
-        
-        if (timeValid) {
-            snprintf(json_buf, sizeof(json_buf),
-                    "{\"type\":\"ble_sensor_update\","
-                    "\"address\":\"%s\","
-                    "\"window_open\":%s,"
-                    "\"battery\":%d,"
-                    "\"illuminance\":%u,"
-                    "\"rotation\":%d,"
-                    "\"rssi\":%d,"
-                    "\"packet_id\":%d,"
-                    "\"has_button_event\":%s,"
-                    "\"button_event\":%d,"
-                    "\"seconds_ago\":%u}",
-                    address.c_str(),
-                    data.windowOpen ? "true" : "false",
-                    data.battery,
-                    data.illuminance,
-                    data.rotation,
-                    data.rssi,
-                    data.packetId,
-                    data.hasButtonEvent ? "true" : "false",
-                    (int)data.buttonEvent,
-                    secondsAgo);
-        } else {
-            snprintf(json_buf, sizeof(json_buf),
-                    "{\"type\":\"ble_sensor_update\","
-                    "\"address\":\"%s\","
-                    "\"window_open\":%s,"
-                    "\"battery\":%d,"
-                    "\"illuminance\":%u,"
-                    "\"rotation\":%d,"
-                    "\"rssi\":%d,"
-                    "\"packet_id\":%d,"
-                    "\"has_button_event\":%s,"
-                    "\"button_event\":%d,"
-                    "\"seconds_ago\":-1}",
-                    address.c_str(),
-                    data.windowOpen ? "true" : "false",
-                    data.battery,
-                    data.illuminance,
-                    data.rotation,
-                    data.rssi,
-                    data.packetId,
-                    data.hasButtonEvent ? "true" : "false",
-                    (int)data.buttonEvent);
-        }
-        
-        ESP_LOGI(TAG, "Broadcasting message: %s", json_buf);
+        snprintf(json_buf, sizeof(json_buf),
+                "{\"type\":\"ble_sensor_update\","
+                "\"address\":\"%s\","
+                "\"window_open\":%s,"
+                "\"battery\":%d,"
+                "\"illuminance\":%u,"
+                "\"rotation\":%d,"
+                "\"rssi\":%d,"
+                "\"packet_id\":%d,"
+                "\"has_button_event\":%s,"
+                "\"button_event\":%d,"
+                "\"seconds_ago\":%d}",
+                address.c_str(),
+                data.windowOpen ? "true" : "false",
+                data.battery,
+                data.illuminance,
+                data.rotation,
+                data.rssi,
+                data.packetId,
+                data.hasButtonEvent ? "true" : "false",
+                (int)data.buttonEvent,
+                timeValid ? (int)secondsAgo : -1);
+
+        ESP_LOGD(TAG, "Sensor update: %s bat=%d%% win=%s pkt=%d",
+                 address.c_str(), data.battery,
+                 data.windowOpen ? "open" : "closed", data.packetId);
         broadcast_to_all_clients(json_buf);
-        ESP_LOGI(TAG, "✓ Broadcast complete");
-        ESP_LOGI(TAG, "");
     }
 
     // ============================================================================
@@ -4190,31 +4118,32 @@ int WebUIHandler::discoverDevices(DiscoveredDevice* devices, int max_devices) {
 void WebUIHandler::broadcastDiscoveredDevices() {
     ESP_LOGI(TAG, "Broadcasting discovered devices to clients...");
     
-    // ✅ STATISCHER BUFFER (kein Heap!)
-    static DiscoveredDevice devices[MAX_DISCOVERED_DEVICES];
-    
-    // Clear buffer
-    memset(devices, 0, sizeof(devices));
-    
+    // Heap-Allokation: nur bei Aufruf, gibt 1.3KB permanent RAM frei vs. static-Array
+    DiscoveredDevice* devices = new DiscoveredDevice[MAX_DISCOVERED_DEVICES];
+    if (!devices) {
+        broadcast_to_all_clients("{\"type\":\"device_discovery\",\"devices\":[]}");
+        return;
+    }
+    memset(devices, 0, sizeof(DiscoveredDevice) * MAX_DISCOVERED_DEVICES);
+
     // Discover
     int count = discoverDevices(devices, MAX_DISCOVERED_DEVICES);
     
     if (count == 0) {
-        const char* empty_msg = "{\"type\":\"device_discovery\",\"devices\":[]}";
-        broadcast_to_all_clients(empty_msg);
+        delete[] devices;
+        broadcast_to_all_clients("{\"type\":\"device_discovery\",\"devices\":[]}");
         return;
     }
-    
-    // ✅ JSON Builder (Stack-basiert, kein Heap!)
-    char json_buf[2048];  // 2KB Stack Buffer
+
+    char json_buf[2048];
     int offset = 0;
-    
+
     offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
                       "{\"type\":\"device_discovery\",\"devices\":[");
-    
+
     for (int i = 0; i < count && i < MAX_DISCOVERED_DEVICES; i++) {
         if (!devices[i].valid) continue;
-        
+
         offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
                           "%s{\"hostname\":\"%s\",\"ip\":\"%s\",\"room\":\"%s\",\"type\":\"%s\",\"rssi\":%d}",
                           (i > 0) ? "," : "",
@@ -4224,12 +4153,13 @@ void WebUIHandler::broadcastDiscoveredDevices() {
                           devices[i].type,
                           devices[i].rssi);
     }
-    
+
     snprintf(json_buf + offset, sizeof(json_buf) - offset, "]}");
-    
-    // Broadcast
+
+    delete[] devices;
+
     broadcast_to_all_clients(json_buf);
-    
+
     ESP_LOGI(TAG, "✓ Broadcasted %d devices", count);
 }
 

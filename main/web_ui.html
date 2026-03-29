@@ -3482,10 +3482,26 @@
     }
     
     function handleBLEScanComplete() {
+      // Cancel the safety timeout — scan completed normally via WebSocket
+      if (AppState.bleScanSafetyTimer) {
+        clearTimeout(AppState.bleScanSafetyTimer);
+        AppState.bleScanSafetyTimer = null;
+      }
+
       const btn = document.getElementById('ble-scan-btn');
       btn.disabled = false;
-      btn.innerHTML = '<span>🔍 Start Scan</span>';
       hideLoading();
+
+      const count = (AppState.discoveredDevices || []).length;
+      if (count > 0) {
+        btn.innerHTML = '<span>🔍 Scan Again</span>';
+        // Scroll the device list into view — devices were already populated by
+        // ble_discovered (sent before this message), so they are instantly visible
+        const list = document.getElementById('ble-discovered-devices');
+        if (list) list.scrollIntoView({ behavior: 'smooth', block: 'nearest' });
+      } else {
+        btn.innerHTML = '<span>🔍 Start Scan</span>';
+      }
     }
     
     function handleBLEStateChanged(data) {
@@ -4736,15 +4752,17 @@
     function startBLEScan() {
       if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
         AppState.ws.send('ble_scan');
-        
+        AppState.discoveredDevices = [];
+
         const btn = document.getElementById('ble-scan-btn');
         btn.disabled = true;
         btn.innerHTML = '<span class="spinner"></span> <span>Scanning...</span>';
-        
+
         showLoading('Scanning for BLE devices...');
-        
-        // Safety timeout
-        setTimeout(() => {
+
+        // Safety timeout — cancelled when ble_scan_complete arrives normally
+        AppState.bleScanSafetyTimer = setTimeout(() => {
+          AppState.bleScanSafetyTimer = null;
           btn.disabled = false;
           btn.innerHTML = '<span>🔍 Start Scan</span>';
           hideLoading();

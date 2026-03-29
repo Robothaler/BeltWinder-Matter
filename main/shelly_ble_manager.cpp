@@ -80,16 +80,24 @@ bool ShellyBLEManager::ensureBLEStarted() {
         ESP_LOGV(TAG, "BLE already started");
         return true;
     }
-    
-    ESP_LOGI(TAG, "→ Creating scanner...");
-    
-    // RAII: Automatisches Cleanup bei Scope-Exit!
-    auto scanner = std::make_unique<esp32_ble_simple::SimpleBLEScanner>();
-    
-    if (!scanner) {
-        ESP_LOGE(TAG, "✗ Scanner allocation failed");
+
+    // Guard: NimBLE scanner setup needs ~20KB. Abort before NimBLE can call
+    // its own abort() on allocation failure (which crashes the whole device).
+    uint32_t free_heap = esp_get_free_heap_size();
+    if (free_heap < 20000) {
+        ESP_LOGE(TAG, "✗ Insufficient heap for BLE scanner: %u bytes (need ≥20KB)", free_heap);
         return false;
     }
+
+    ESP_LOGI(TAG, "→ Creating scanner... (free heap: %u)", free_heap);
+
+    // Use nothrow to avoid std::bad_alloc crash — check pointer instead
+    auto* raw = new (std::nothrow) esp32_ble_simple::SimpleBLEScanner();
+    if (!raw) {
+        ESP_LOGE(TAG, "✗ Scanner allocation failed (OOM)");
+        return false;
+    }
+    auto scanner = std::unique_ptr<esp32_ble_simple::SimpleBLEScanner>(raw);
     
     // Konfiguration
     scanner->set_scan_active(true);
@@ -1283,9 +1291,12 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     if (scanning || (bleScanner && bleScanner->is_scanning())) {
         ESP_LOGW(TAG, "⚠ Scanner is active - STOPPING before GATT connection");
         ESP_LOGW(TAG, "  (NimBLE stack can't scan and connect simultaneously)");
-        
-        stopScan();
-        
+
+        // manualStop=true: prevents auto-restart task from firing during the GATT
+        // operation. The caller (smartConnectDevice) will call startContinuousScan()
+        // after the GATT workflow completes successfully.
+        stopScan(true);
+
         // Warte bis Scanner wirklich gestoppt ist
         uint32_t wait_start = millis();
         while ((bleScanner && bleScanner->is_scanning()) && 
@@ -1587,6 +1598,7 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     
     uint8_t addressType = BLE_ADDR_PUBLIC;  // Default
     bool wasScanning = scanning;
+    bool wasContinuous = continuousScan;  // capture BEFORE any stopScan call
     bool needNewConnection = true;
     NimBLEClient* pClient = nullptr;
     
@@ -1638,58 +1650,61 @@ bool ShellyBLEManager::connectDevice(const String& address) {
         
         if (wasScanning) {
             ESP_LOGI(TAG, "→ Stopping scan...");
-            stopScan();
+            // manualStop=true: prevents auto-restart task from firing during the
+            // GATT operation (bonding + passkey write + device reboot + reconnect
+            // can take 30-60s). Scan is restored on every exit path below.
+            stopScan(true);
             vTaskDelay(pdMS_TO_TICKS(1500));
         }
-        
+
         NimBLEDevice::setSecurityAuth(true, false, true);
         NimBLEDevice::setSecurityIOCap(BLE_HS_IO_NO_INPUT_OUTPUT);
         
         pClient = NimBLEDevice::createClient();
         if (!pClient) {
             ESP_LOGE(TAG, "✗ Failed to create client");
-            if (wasScanning) startScan(30);
+            if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
             return false;
         }
-        
+
         PairingCallbacks* callbacks = new PairingCallbacks(this);
         pClient->setClientCallbacks(callbacks, false);
         pClient->setConnectTimeout(25000);
-        
+
         ESP_LOGI(TAG, "→ Connecting...");
-        
+
         NimBLEAddress bleAddr(address.c_str(), addressType);
         bool connected = pClient->connect(bleAddr, false);
-        
+
         if (!connected) {
             uint8_t altType = (addressType == BLE_ADDR_PUBLIC) ? BLE_ADDR_RANDOM : BLE_ADDR_PUBLIC;
             bleAddr = NimBLEAddress(address.c_str(), altType);
             connected = pClient->connect(bleAddr, false);
         }
-        
+
         if (!connected) {
             ESP_LOGE(TAG, "✗ Connection failed");
             delete callbacks;
             NimBLEDevice::deleteClient(pClient);
-            if (wasScanning) startScan(30);
+            if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
             return false;
         }
-        
+
         ESP_LOGI(TAG, "✓ Connected");
-        
+
         // Warte auf Bonding
         uint32_t wait_start = millis();
         while (millis() - wait_start < 15000) {
             if (callbacks->pairingComplete) break;
             vTaskDelay(pdMS_TO_TICKS(500));
         }
-        
+
         if (!callbacks->pairingSuccess) {
             ESP_LOGE(TAG, "✗ Bonding failed");
             delete callbacks;
             pClient->disconnect();
             NimBLEDevice::deleteClient(pClient);
-            if (wasScanning) startScan(30);
+            if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
             return false;
         }
         
@@ -2124,26 +2139,26 @@ bool ShellyBLEManager::connectDevice(const String& address) {
         ESP_LOGE(TAG, "  3. If still failing: Factory reset (35+ sec button press)");
         ESP_LOGE(TAG, "");
         
-        if (wasScanning) startScan(30);
+        if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
         return false;
     }
-    
+
     ESP_LOGI(TAG, "");
-    ESP_LOGI(TAG, "✓ Reconnected successfully after %d attempt(s)!", 
+    ESP_LOGI(TAG, "✓ Reconnected successfully after %d attempt(s)!",
              connected ? maxAttempts - (maxAttempts - 1) : maxAttempts);
     ESP_LOGI(TAG, "  Final address: %s", newAddress.c_str());
     ESP_LOGI(TAG, "  Final type: %s", newType == BLE_ADDR_PUBLIC ? "PUBLIC" : "RANDOM");
     ESP_LOGI(TAG, "  MTU: %d bytes", pClient->getMTU());
     ESP_LOGI(TAG, "");
-    
+
     // Service Discovery (neue Variable für zweiten Discovery)
     std::vector<NimBLERemoteService*> services2 = pClient->getServices(true);
-    
+
     if (services2.empty()) {
         ESP_LOGE(TAG, "✗ No services found");
         pClient->disconnect();
         NimBLEDevice::deleteClient(pClient);
-        if (wasScanning) startScan(30);
+        if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
         return false;
     }
     
@@ -2245,18 +2260,16 @@ bool ShellyBLEManager::connectDevice(const String& address) {
         ESP_LOGI(TAG, "  Data will be decrypted automatically using the bindkey");
         ESP_LOGI(TAG, "");
         
-        if (wasScanning) {
-            vTaskDelay(pdMS_TO_TICKS(2000));
-            startScan(30);
-        }
-        
+        // Restore scan: continuous scan preferred, otherwise plain discovery scan
+        if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
+
         return true;
     }
-    
+
     // ========================================================================
     // FEHLER: KEIN GÜLTIGER BINDKEY
     // ========================================================================
-    
+
     ESP_LOGE(TAG, "");
     ESP_LOGE(TAG, "╔═══════════════════════════════════╗");
     ESP_LOGE(TAG, "║  ✗ PHASE 2 FAILED                 ║");
@@ -2281,11 +2294,9 @@ bool ShellyBLEManager::connectDevice(const String& address) {
     ESP_LOGE(TAG, "  • Use default passkey: 123456");
     ESP_LOGE(TAG, "  • Check Shelly BLU documentation");
     ESP_LOGE(TAG, "");
-    
-    if (wasScanning) {
-        startScan(30);
-    }
-    
+
+    if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
+
     return false;
 }
 
@@ -2530,6 +2541,9 @@ bool ShellyBLEManager::readSampleBTHomeData(const String& address, ShellyBLESens
     // Check if active connection exists
     NimBLEClient* pClient = nullptr;
     bool needsCleanup = false;
+    // Declare in outer scope so all exit paths (after connection block) can use them
+    bool wasContinuous = false;
+    bool wasScanning = false;
     
     if (activeClient && activeClient->isConnected()) {
         String connectedAddr = String(activeClient->getPeerAddress().toString().c_str());
@@ -2551,20 +2565,22 @@ bool ShellyBLEManager::readSampleBTHomeData(const String& address, ShellyBLESens
     // Create new connection if needed
     if (!pClient) {
         ESP_LOGI(TAG, "→ Creating new GATT connection...");
-        
-        // Stop scanning if active
-        bool wasScanning = scanning;
+
+        // Stop scanning if active.
+        // Use manualStop=true to prevent auto-restart task from firing during the
+        // GATT operation. Scan is explicitly restored on every exit path below.
+        wasContinuous = continuousScan;
+        wasScanning = scanning || (bleScanner && bleScanner->is_scanning());
         if (wasScanning) {
             ESP_LOGI(TAG, "  → Stopping scan...");
-            bleScanner->stop_scan();
-            scanning = false;
+            stopScan(true);
             vTaskDelay(pdMS_TO_TICKS(500));
         }
-        
+
         pClient = NimBLEDevice::createClient();
         if (!pClient) {
             ESP_LOGE(TAG, "✗ Failed to create client");
-            if (wasScanning) startScan(30);
+            if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
             ESP_LOGI(TAG, "");
             return false;
         }
@@ -2600,11 +2616,11 @@ bool ShellyBLEManager::readSampleBTHomeData(const String& address, ShellyBLESens
         if (!connected) {
             ESP_LOGE(TAG, "✗ Connection failed");
             NimBLEDevice::deleteClient(pClient);
-            if (wasScanning) startScan(30);
+            if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
             ESP_LOGI(TAG, "");
             return false;
         }
-        
+
         needsCleanup = true;
         ESP_LOGI(TAG, "✓ Connected");
         ESP_LOGI(TAG, "  MTU: %d bytes", pClient->getMTU());
@@ -2622,6 +2638,7 @@ bool ShellyBLEManager::readSampleBTHomeData(const String& address, ShellyBLESens
             pClient->disconnect();
             NimBLEDevice::deleteClient(pClient);
         }
+        if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
         ESP_LOGI(TAG, "");
         return false;
     }
@@ -2652,15 +2669,16 @@ bool ShellyBLEManager::readSampleBTHomeData(const String& address, ShellyBLESens
         ESP_LOGE(TAG, "  • Device not bonded (Phase 1 incomplete)");
         ESP_LOGE(TAG, "  • Firmware doesn't support this characteristic");
         ESP_LOGE(TAG, "  • Service discovery incomplete");
-        
+
         if (needsCleanup) {
             pClient->disconnect();
             NimBLEDevice::deleteClient(pClient);
         }
+        if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
         ESP_LOGI(TAG, "");
         return false;
     }
-    
+
     // Check if readable
     if (!pChar->canRead()) {
         ESP_LOGE(TAG, "✗ Characteristic not readable!");
@@ -2668,6 +2686,7 @@ bool ShellyBLEManager::readSampleBTHomeData(const String& address, ShellyBLESens
             pClient->disconnect();
             NimBLEDevice::deleteClient(pClient);
         }
+        if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
         ESP_LOGI(TAG, "");
         return false;
     }
@@ -2684,6 +2703,7 @@ bool ShellyBLEManager::readSampleBTHomeData(const String& address, ShellyBLESens
             pClient->disconnect();
             NimBLEDevice::deleteClient(pClient);
         }
+        if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
         ESP_LOGI(TAG, "");
         return false;
     }
@@ -2746,19 +2766,22 @@ bool ShellyBLEManager::readSampleBTHomeData(const String& address, ShellyBLESens
         ESP_LOGI(TAG, "");
         ESP_LOGI(TAG, "→ Disconnecting...");
         pClient->disconnect();
-        
+
         uint8_t retries = 0;
         while (pClient->isConnected() && retries < 20) {
             vTaskDelay(pdMS_TO_TICKS(100));
             retries++;
         }
-        
+
         NimBLEDevice::deleteClient(pClient);
         ESP_LOGI(TAG, "✓ Disconnected");
     }
-    
+
+    // Restore scan state after GATT operation
+    if (wasContinuous) startContinuousScan(); else if (wasScanning) startScan(30);
+
     ESP_LOGI(TAG, "");
-    
+
     return parseSuccess;
 }
 
@@ -2926,16 +2949,22 @@ bool ShellyBLEManager::unpairDevice() {
     ESP_LOGI(TAG, "");
     
     closeActiveConnection();
-    
-    if (continuousScan) {
-        ESP_LOGI(TAG, "→ Stopping continuous scan...");
+
+    // Stop scan before clearing device.
+    // IMPORTANT: stopScan(true) must be called BEFORE setting continuousScan=false
+    // so that wasContinuous=true inside stopScan, which correctly updates NVS and
+    // prevents the auto-restart task from spawning.
+    // clearPairedDevice() will wipe the entire NVS namespace anyway, but the order
+    // here ensures the logic path inside stopScan() is correct.
+    if (scanning) {
+        ESP_LOGI(TAG, "→ Stopping continuous scan before unpair...");
+        stopScan(true);  // sets continuousScan=false, NVS=false, no auto-restart
+    } else if (continuousScan) {
+        // Between cycles: scan flag is true but hardware is idle.
+        // No auto-restart task to worry about (isPaired() check in task will abort it).
         continuousScan = false;
-        
-        if (scanning) {
-            stopScan(true);  // Manual stop
-        }
     }
-    
+
     clearPairedDevice();
     updateDeviceState(STATE_NOT_PAIRED);
     

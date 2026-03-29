@@ -20,8 +20,8 @@
 #include <NimBLEClient.h>
 
 // Task Stack Sizes
-#define BLE_AUTOSTART_TASK_STACK_SIZE  (8192)   // 8KB
-#define BLE_RESTART_TASK_STACK_SIZE    (8192)   // 8KB
+#define BLE_AUTOSTART_TASK_STACK_SIZE  (4096)   // 4KB — only calls startScan(), no NimBLE client ops
+#define BLE_RESTART_TASK_STACK_SIZE    (4096)   // 4KB — only calls startScan(), no NimBLE client ops
 
 // BTHome Constants
 #define BTHOME_SERVICE_UUID "fcd2"
@@ -233,8 +233,13 @@ public:
     void startScan(uint16_t durationSeconds = 30, bool stopOnFirst = false);
     void stopScan(bool manualStop = false);
     void startContinuousScan();
-    bool isScanActive() const { return scanning; }
-    bool isContinuousScanActive() const { return continuousScan && scanning; }
+    // Returns true only if BOTH the software flag AND the hardware scanner are active.
+    // Using && ensures the scan monitor task detects completion immediately when
+    // on_device_found() returns false (hardware stops before stopScan() is called).
+    bool isScanActive() const {
+        return scanning && (bleScanner != nullptr) && bleScanner->is_scanning();
+    }
+    bool isContinuousScanActive() const { return continuousScan && isScanActive(); }
     bool isContinuousScanEnabled() const { return continuousScan; }
     bool isBLEStarted() const { return bleScanner != nullptr; }
     static bool hasAnyPairedDevice();
