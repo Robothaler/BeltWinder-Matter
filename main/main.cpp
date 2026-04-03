@@ -8,6 +8,7 @@
 #include <esp_bt.h>
 #include <app/server/Server.h>
 #include <app/server/CommissioningWindowManager.h>
+#include <platform/PlatformManager.h>
 
 #include <esp_matter.h>
 #include <esp_matter_core.h>
@@ -1045,33 +1046,15 @@ bool startMatterStack() {
     ESP_LOGI(TAG, "✓ Matter stack started successfully");
     ESP_LOGI(TAG, "");
 
-    // ════════════════════════════════════════════════════════════════════
-    // Explicitly open commissioning window (DNS-SD / WiFi only).
-    //
-    // CHIP_DEVICE_CONFIG_ENABLE_PAIRING_AUTOSTART auto-opens the window
-    // via OpenBasicCommissioningWindow(kAllSupported), which tries to
-    // enable BLE advertising. Because NimBLE already owns the BT
-    // controller that call may fail and SuccessOrExit() silently aborts
-    // Server::Init() before the window is actually open.
-    //
-    // Fix: after esp_matter::start() returns we explicitly re-open the
-    // window using kDnssdOnly (mDNS over WiFi). This is the only
-    // commissioning transport that works on this firmware.
-    // ════════════════════════════════════════════════════════════════════
-
-    bool commissioned_check = Matter.isDeviceCommissioned();
-    if (!commissioned_check) {
-        ESP_LOGI(TAG, "→ Opening commissioning window (DNS-SD / WiFi only)...");
-        CHIP_ERROR cwErr = chip::Server::GetInstance()
-            .GetCommissioningWindowManager()
-            .OpenBasicCommissioningWindow(
-                chip::System::Clock::Seconds32(900),
-                chip::CommissioningWindowAdvertisement::kDnssdOnly);
-        if (cwErr == CHIP_NO_ERROR) {
-            ESP_LOGI(TAG, "✓ Commissioning window open (900 s, DNS-SD)");
-        } else {
-            ESP_LOGW(TAG, "⚠ Could not open commissioning window: %s", chip::ErrorStr(cwErr));
-        }
+    // Commissioning window is opened on-demand via the WebUI button
+    // ("matter_open_commissioning" command). Opening it here would call
+    // into the CHIP server before Server::Init() completes asynchronously,
+    // which causes a crash or silent failure. The button press always
+    // happens well after the CHIP task has fully initialized.
+    if (Matter.isDeviceCommissioned()) {
+        ESP_LOGI(TAG, "✓ Device already commissioned — skipping commissioning window");
+    } else {
+        ESP_LOGI(TAG, "→ Not commissioned — use WebUI button to open commissioning window");
     }
     
     // ════════════════════════════════════════════════════════════════════
@@ -1262,10 +1245,10 @@ void setup() {
     esp_log_level_set("esp_matter_command", ESP_LOG_INFO);
     esp_log_level_set("esp_matter_cluster", ESP_LOG_WARN);
     esp_log_level_set("WiFiMgr", ESP_LOG_DEBUG);        // WiFi Manager: DEBUG
-    esp_log_level_set("BLEAutoStart", ESP_LOG_INFO);    // BLE: INFO
-    esp_log_level_set("ShellyBLE", ESP_LOG_INFO);       // BLE: INFO
-    esp_log_level_set("BLESimple", ESP_LOG_INFO);       // BLE: INFO
-    esp_log_level_set("NimBLE", ESP_LOG_INFO);          // NimBLE: INFO
+    esp_log_level_set("BLEAutoStart", ESP_LOG_NONE);    // BLE: INFO
+    esp_log_level_set("ShellyBLE", ESP_LOG_NONE);       // BLE: INFO
+    esp_log_level_set("BLESimple", ESP_LOG_NONE);       // BLE: INFO
+    esp_log_level_set("NimBLE", ESP_LOG_NONE);          // NimBLE: INFO
     esp_log_level_set("wifi", ESP_LOG_NONE);            // WiFi: ERROR
     esp_log_level_set("Shutter", ESP_LOG_DEBUG);        // Shutter: DEBUG
     esp_log_level_set("ShutterDriver", ESP_LOG_DEBUG);  // ShutterDriver: DEBUG
@@ -1868,10 +1851,18 @@ void loop() {
         }
 
         // ────────────────────────────────────────────────────────────
-        // Shutter Control Loop (nur wenn commissioned)
+        // Shutter Control Loop — always run when hardware is ready.
+        // State machine, calibration, and manual buttons must work
+        // even before Matter commissioning is complete.
+        // ────────────────────────────────────────────────────────────
+        if (hardware_initialized) {
+            shutter_driver_loop(shutter_handle);
+        }
+
+        // ────────────────────────────────────────────────────────────
+        // Matter Attribute Updates — only when commissioned
         // ────────────────────────────────────────────────────────────
         if (is_commissioned && hardware_initialized) {
-            shutter_driver_loop(shutter_handle);
 
             // Matter Update Strategy
             if (shutter_driver_should_send_matter_update(shutter_handle)) {

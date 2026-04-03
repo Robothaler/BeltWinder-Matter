@@ -16,6 +16,10 @@
 #include <string.h>
 #include <app/server/Server.h>
 #include <app/server/CommissioningWindowManager.h>
+#include <platform/PlatformManager.h>
+#include <lib/dnssd/Advertiser.h>
+#include <setup_payload/OnboardingCodesUtil.h>
+#include <setup_payload/QRCodeSetupPayloadGenerator.h>
 #include <Matter.h>
 #include <Preferences.h>
 
@@ -1202,29 +1206,69 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
             ESP_LOGE(TAG, "Failed to send matter_status: %s", esp_err_to_name(ret));
         }
     }
-    else if (strcmp(cmd, "matter_reopen_commissioning") == 0) {
+    else if (strcmp(cmd, "matter_open_commissioning") == 0) {
         extern bool matter_stack_started;
         if (!matter_stack_started) {
             const char* err = "{\"type\":\"error\",\"message\":\"Matter stack is not running. Enable Matter first.\"}";
             httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)err, .len = strlen(err) };
             httpd_ws_send_frame_async(req->handle, fd, &f);
         } else if (Matter.isDeviceCommissioned()) {
-            const char* err = "{\"type\":\"error\",\"message\":\"Device is already commissioned. Factory reset required to re-commission.\"}";
+            const char* err = "{\"type\":\"error\",\"message\":\"Device is already commissioned.\"}";
             httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)err, .len = strlen(err) };
             httpd_ws_send_frame_async(req->handle, fd, &f);
         } else {
-            ESP_LOGI(TAG, "→ Re-opening commissioning window (DNS-SD, 900 s)...");
+            // Shut down the mDNS advertiser before (re-)opening the commissioning window.
+            // DnssdServer::StartServer() calls Init() without a prior Shutdown(), which
+            // causes LwIP ERR_USE (0x3000008) when the port-5353 PCB is still registered
+            // from a previous open. Shutting down first ensures a clean slate.
+            chip::DeviceLayer::PlatformMgr().LockChipStack();
+            if (chip::Dnssd::ServiceAdvertiser::Instance().IsInitialized()) {
+                chip::Dnssd::ServiceAdvertiser::Instance().Shutdown();
+            }
+
+            ESP_LOGI(TAG, "→ Opening commissioning window (DNS-SD, 900 s)...");
             CHIP_ERROR cwErr = chip::Server::GetInstance()
                 .GetCommissioningWindowManager()
                 .OpenBasicCommissioningWindow(
                     chip::System::Clock::Seconds32(900),
                     chip::CommissioningWindowAdvertisement::kDnssdOnly);
+
+            // Generate QR code with kOnNetwork-only rendezvous so Apple Home (iOS)
+            // skips BLE discovery and commissions directly over WiFi/DNS-SD.
+            // Matter.getOnboardingQRCodeUrl() is hardcoded with kBLE set, which causes
+            // iOS to try BLE first, time out, and abort the commissioning session.
+            char qrCodeBuf[chip::QRCodeBasicSetupPayloadGenerator::kMaxQRCodeBase38RepresentationLength + 1] = {};
+            chip::MutableCharSpan qrCodeSpan(qrCodeBuf, sizeof(qrCodeBuf) - 1);
+            String qrUrl, qrMt;
+            if (GetQRCode(qrCodeSpan,
+                          chip::RendezvousInformationFlags(chip::RendezvousInformationFlag::kOnNetwork)) == CHIP_NO_ERROR) {
+                char urlBuf[192];
+                snprintf(urlBuf, sizeof(urlBuf),
+                         "https://project-chip.github.io/connectedhomeip/qrcode.html?data=%s",
+                         qrCodeBuf);
+                qrUrl = String(urlBuf);
+                qrMt  = String(qrCodeBuf);
+            } else {
+                // Fallback to hardcoded value (may include kBLE, but better than nothing)
+                qrUrl = Matter.getOnboardingQRCodeUrl();
+                int mtIdx = qrUrl.indexOf("MT:");
+                qrMt = (mtIdx >= 0) ? qrUrl.substring(mtIdx) : qrUrl;
+            }
+            String pairingCode = Matter.getManualPairingCode();
+            chip::DeviceLayer::PlatformMgr().UnlockChipStack();
+
             if (cwErr == CHIP_NO_ERROR) {
-                ESP_LOGI(TAG, "✓ Commissioning window re-opened");
-                const char* ok = "{\"type\":\"success\",\"message\":\"<strong>✓ Commissioning window re-opened!</strong><br><br>"
-                                  "The device is now discoverable via WiFi/mDNS for 15 minutes.<br><br>"
-                                  "Please scan the QR code with your Matter controller app.\"}";
-                httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)ok, .len = strlen(ok) };
+                ESP_LOGI(TAG, "✓ Commissioning window opened");
+                char okBuf[1024];
+                snprintf(okBuf, sizeof(okBuf),
+                         "{\"type\":\"matter_commissioning_ready\","
+                         "\"qr_url\":\"%s\","
+                         "\"qr_mt\":\"%s\","
+                         "\"pairing_code\":\"%s\"}",
+                         qrUrl.c_str(),
+                         qrMt.c_str(),
+                         pairingCode.c_str());
+                httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)okBuf, .len = strlen(okBuf) };
                 httpd_ws_send_frame_async(req->handle, fd, &f);
             } else {
                 char errBuf[256];

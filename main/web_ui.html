@@ -1320,122 +1320,75 @@
       <!-- ════════════════════════════════════════════════════════════════════ -->
       
       <div id="matter-qr-section" class="card hidden">
-        <h2>✓ Matter Commissioning Ready!</h2>
-        
-        <div class="success-box">
-          <p><strong>🎉 Your device is ready to pair!</strong></p>
-          <p style="margin-top:10px">
-            Scan the QR code below with your Matter controller app.
-          </p>
-        </div>
-        
-        <!-- QR Code Display -->
-        <div style="text-align:center;margin:30px 0">
-          <div id="qr-code-container" 
-              style="display:inline-block;
-                      padding:25px;
-                      background:white;
-                      border-radius:16px;
-                      box-shadow:0 8px 32px rgba(0,0,0,0.3)">
-            <!-- QRCode.js will insert the QR code here -->
+
+        <!-- Phase A: Start button (shown before commissioning window is opened) -->
+        <div id="matter-open-window-phase">
+          <h2>Matter Ready – Start Commissioning</h2>
+
+          <div class="info-box" style="margin-bottom:24px">
+            <p><strong>Matter is running.</strong></p>
+            <p style="margin-top:8px;color:#aaa">
+              Click the button below to open a 15-minute commissioning window.<br>
+              The QR code will then appear so you can add the device to your smart-home app.
+            </p>
           </div>
-          
-          <div style="margin-top:15px;color:#888;font-size:0.95em">
-            Scan with your Matter controller app
-          </div>
+
+          <button class="btn primary" style="width:100%" onclick="openCommissioningWindow()">
+            🔗 Open Commissioning Window
+          </button>
         </div>
-        
-        <!-- Manual Pairing Code -->
-        <div style="margin-top:30px">
-          <h3 style="margin-bottom:15px;color:#888;font-size:1.1em">
-            📋 Manual Pairing Code
-          </h3>
-          
-          <div style="display:flex;gap:10px;align-items:center">
-            <input type="text" 
-                  id="matter-pairing-code-input" 
-                  readonly
-                  style="flex:1;
-                          font-family:monospace;
-                          font-size:1.2em;
-                          padding:15px;
-                          background:rgba(255,255,255,0.05);
-                          border:1px solid rgba(255,255,255,0.1);
-                          border-radius:12px;
-                          color:#4CAF50;
-                          text-align:center;
-                          letter-spacing:2px">
-            
-            <button onclick="copyPairingCode()" 
-                    class="btn secondary" 
-                    style="padding:15px 20px">
-              <span>📋 Copy</span>
+
+        <!-- Phase B: QR Code (hidden until window is opened) -->
+        <div id="matter-qr-phase" class="hidden">
+          <h2>✓ Scan QR Code to Pair</h2>
+
+          <div class="success-box" style="margin-bottom:20px">
+            <p><strong>Commissioning window is open for 15 minutes.</strong></p>
+          </div>
+
+          <!-- QR Code -->
+          <div style="text-align:center;margin:20px 0">
+            <div id="qr-code-container"
+                style="display:inline-block;padding:25px;background:white;
+                        border-radius:16px;box-shadow:0 8px 32px rgba(0,0,0,0.3)">
+              <!-- QRCode.js inserts here -->
+            </div>
+            <div style="margin-top:12px;color:#888;font-size:0.9em">Scan with your Matter controller app</div>
+          </div>
+
+          <!-- Manual Pairing Code -->
+          <div style="margin-top:20px">
+            <div style="display:flex;gap:10px;align-items:center">
+              <input type="text" id="matter-pairing-code-input" readonly
+                    style="flex:1;font-family:monospace;font-size:1.2em;padding:12px;
+                            background:rgba(255,255,255,0.05);border:1px solid rgba(255,255,255,0.1);
+                            border-radius:12px;color:#4CAF50;text-align:center;letter-spacing:2px">
+              <button onclick="copyPairingCode()" class="btn secondary" style="padding:12px 18px">
+                <span>📋 Copy</span>
+              </button>
+            </div>
+            <div style="color:#888;font-size:0.82em;text-align:center;margin-top:8px">
+              Enter this code manually if QR scanning is not available
+            </div>
+          </div>
+
+          <!-- Instructions -->
+          <div class="info-box" style="margin-top:20px">
+            <p><strong>📱 How to pair:</strong></p>
+            <ol style="margin:8px 0 0 20px;line-height:1.8">
+              <li>Open your Matter controller app (Apple Home, Google Home, Home Assistant…)</li>
+              <li>Select <strong>"Add Device"</strong> or <strong>"Add Matter Device"</strong></li>
+              <li>Scan the QR code above or enter the manual code</li>
+              <li>Follow the on-screen instructions</li>
+            </ol>
+          </div>
+
+          <!-- Re-open button -->
+          <div style="margin-top:20px;text-align:center">
+            <button class="btn secondary" onclick="openCommissioningWindow()">
+              🔄 Re-open Window (another 15 min)
             </button>
           </div>
-          
-          <div style="color:#888;font-size:0.85em;text-align:center;margin-top:10px">
-            Enter this code if your controller doesn't support QR scanning
-          </div>
-        </div>
-        
-        <!-- Instructions -->
-        <div class="info-box" style="margin-top:30px">
-          <p><strong>📱 How to pair:</strong></p>
-          <ol style="margin:10px 0 0 20px;line-height:1.8">
-            <li>Open your Matter controller app</li>
-            <li>Select <strong>"Add Device"</strong> or <strong>"Add Matter Device"</strong></li>
-            <li>Scan the QR code above</li>
-            <li>Follow the on-screen instructions</li>
-            <li>Wait for pairing to complete</li>
-          </ol>
-        </div>
-        
-        <!-- App-specific instructions -->
-        <div style="display:grid;
-                    grid-template-columns:repeat(auto-fit, minmax(200px, 1fr));
-                    gap:15px;
-                    margin-top:20px">
-          
-          <div style="background:rgba(255,255,255,0.04);
-                      padding:15px;
-                      border-radius:12px;
-                      border:1px solid rgba(255,255,255,0.08)">
-            <div style="font-weight:bold;margin-bottom:8px">🍎 Apple Home</div>
-            <div style="font-size:0.85em;color:#888;line-height:1.6">
-              Settings → Add Accessory → Scan QR Code
-            </div>
-          </div>
-          
-          <div style="background:rgba(255,255,255,0.04);
-                      padding:15px;
-                      border-radius:12px;
-                      border:1px solid rgba(255,255,255,0.08)">
-            <div style="font-weight:bold;margin-bottom:8px">📱 Google Home</div>
-            <div style="font-size:0.85em;color:#888;line-height:1.6">
-              + → Set up device → Matter device
-            </div>
-          </div>
-          
-          <div style="background:rgba(255,255,255,0.04);
-                      padding:15px;
-                      border-radius:12px;
-                      border:1px solid rgba(255,255,255,0.08)">
-            <div style="font-weight:bold;margin-bottom:8px">🏠 Home Assistant</div>
-            <div style="font-size:0.85em;color:#888;line-height:1.6">
-              Settings → Devices → Add Integration → Matter
-            </div>
-          </div>
-
-        </div>
-
-        <!-- Re-open commissioning window -->
-        <div style="margin-top:25px;text-align:center">
-          <p style="color:#888;font-size:0.9em;margin-bottom:12px">
-            Commissioning window timeout? Click to re-open it (valid for 15 minutes):
-          </p>
-          <button class="btn secondary" onclick="reopenCommissioningWindow()">
-            🔄 Re-open Commissioning Window
-          </button>
         </div>
 
       </div>
@@ -3274,10 +3227,68 @@
 
       if (data.commissioned && fabricCount > 0) {
         showMatterCommissioned(fabricCount);
-      } else if (data.qr_url) {
-        // HTTP: stack_started + qr_url; WS: qr_url directly (stack is running)
-        showMatterQRCode(data.qr_url, data.pairing_code || '');
+      } else if (data.stack_started || data.qr_url) {
+        // Matter is running but not commissioned → show the "Open Window" button.
+        // Do NOT show the QR code yet; user must explicitly open the window.
+        showMatterReadyForCommissioning();
       }
+    }
+
+    /**
+     * Show matter-qr-section with the "Open Commissioning Window" button.
+     * QR code phase is hidden until the user clicks the button.
+     */
+    function showMatterReadyForCommissioning() {
+      document.getElementById('matter-not-started').classList.add('hidden');
+      document.getElementById('matter-starting').classList.add('hidden');
+      document.getElementById('matter-already-commissioned').classList.add('hidden');
+      document.getElementById('matter-qr-section').classList.remove('hidden');
+      // Ensure we're in phase A
+      document.getElementById('matter-open-window-phase').classList.remove('hidden');
+      document.getElementById('matter-qr-phase').classList.add('hidden');
+    }
+
+    /**
+     * Send the matter_open_commissioning command.
+     * The server responds with matter_commissioning_ready which triggers the QR phase.
+     */
+    function openCommissioningWindow() {
+      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
+        showErrorBanner('Not connected', 'WebSocket is not connected.', 'error');
+        return;
+      }
+      AppState.ws.send('matter_open_commissioning');
+    }
+
+    /**
+     * Handle matter_commissioning_ready response — switch to QR phase.
+     */
+    function handleMatterCommissioningReady(data) {
+      // Switch to QR phase
+      document.getElementById('matter-open-window-phase').classList.add('hidden');
+      document.getElementById('matter-qr-phase').classList.remove('hidden');
+      // Ensure section is visible
+      document.getElementById('matter-qr-section').classList.remove('hidden');
+
+      // Set pairing code
+      const codeInput = document.getElementById('matter-pairing-code-input');
+      if (codeInput) codeInput.value = data.pairing_code || '';
+
+      // Generate QR Code (use the pre-extracted MT: payload if available)
+      const container = document.getElementById('qr-code-container');
+      container.innerHTML = '';
+      const qrText = data.qr_mt || data.qr_url || '';
+      if (qrText) {
+        matterQRCode = new QRCode(container, {
+          text: qrText,
+          width: 300,
+          height: 300,
+          colorDark: '#000000',
+          colorLight: '#ffffff',
+          correctLevel: QRCode.CorrectLevel.M
+        });
+      }
+      console.log('✓ QR code generated, commissioning window open');
     }
     
     // ============================================================================
@@ -3314,7 +3325,7 @@
           if (data.already_commissioned) {
             showMatterCommissioned(data.fabric_count || 0);
           } else {
-            showMatterQRCode(data.qr_url, data.pairing_code);
+            showMatterReadyForCommissioning();
           }
         } else {
           showErrorBanner('Matter Start Failed', 
@@ -3570,6 +3581,9 @@
         case 'sensor_data_result':
             handleSensorDataResult(data);
             break;
+        case 'matter_commissioning_ready':
+          handleMatterCommissioningReady(data);
+          break;
         default:
           console.warn('⚠ Unknown message type:', data.type);
       }
@@ -4611,14 +4625,6 @@
     // ============================================================================
     // Matter Functions
     // ============================================================================
-
-    function reopenCommissioningWindow() {
-      if (!AppState.ws || AppState.ws.readyState !== WebSocket.OPEN) {
-        showErrorBanner('Not connected', 'WebSocket is not connected.', 'error');
-        return;
-      }
-      AppState.ws.send('matter_reopen_commissioning');
-    }
 
     function showMatterQR(qrUrl, qrImageUrl, pairingCode) {
       document.getElementById('matter-qr-img').src = qrImageUrl;
@@ -6542,10 +6548,10 @@
           // CASE 3: Matter Live-Start (sollte nach Änderung nicht vorkommen)
           // ════════════════════════════════════════════════════════════════
           
-          if (data.qr_url && data.pairing_code) {
-            showMatterQRCode(data.qr_url, data.pairing_code);
-            showErrorBanner('Matter Started!', 
-                          'Scan the QR code to pair your device', 
+          if (data.qr_url || data.stack_started) {
+            showMatterReadyForCommissioning();
+            showErrorBanner('Matter Started!',
+                          'Click "Open Commissioning Window" to start pairing.',
                           'success');
           }
           
@@ -6704,8 +6710,8 @@
           showMatterCommissioned(data.fabric_count);
           
         } else if (data.stack_started && data.qr_url) {
-          // Started but not commissioned yet
-          showMatterQRCode(data.qr_url, data.pairing_code);
+          // Started but not commissioned yet — show start-commissioning button
+          showMatterReadyForCommissioning();
           
         } else {
           // Not started

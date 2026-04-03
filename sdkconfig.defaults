@@ -69,6 +69,10 @@ CONFIG_NIMBLE_HOST_TASK_STACK_SIZE=4096
 
 # Do not Use BLE for commissioning (D1 Mini: WiFi commissioning only)
 CONFIG_USE_BLE_ONLY_FOR_COMMISSIONING=n
+# Disable CHIPOBLE so the QR code only encodes kOnNetwork (WiFi).
+# With CHIPOBLE=1 the QR code includes kBLE; iOS/Apple Home tries BLE first,
+# times out (no BLE advertising started), and aborts commissioning entirely.
+CONFIG_ENABLE_CHIPOBLE=n
 CONFIG_BTDM_CTRL_BUF_SIZE=128
 CONFIG_NIMBLE_MAX_CONNECTIONS=2
 

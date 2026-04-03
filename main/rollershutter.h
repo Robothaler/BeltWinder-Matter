@@ -221,6 +221,7 @@ private:
     const unsigned long CALIBRATION_TIMEOUT = 90000; // 90 Sekunden
     bool calibrationFromBottom = false; // true = DOWN phase is first (shutter starts near top)
     uint32_t calUpStartCheck = 0;      // timestamp when CALIBRATING_UP entered (for no-motion detection)
+    uint32_t lastCalibrationPulseTime = 0;  // millis() of last pulse during calibration (end-stop detection)
 
     State lastActualDirection = State::STOPPED;
     uint8_t directionStableCounter = 0;

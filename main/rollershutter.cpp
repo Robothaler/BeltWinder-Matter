@@ -348,6 +348,7 @@ void RollerShutter::startCalibration() {
     calibrationUpPulses = 0;
     calibrationDownPulses = 0;
     calUpStartCheck = 0;
+    lastCalibrationPulseTime = 0;
     currentState = State::CALIBRATING_UP;
     calibrationStartTime = millis();
     triggerMoveUp();
@@ -364,6 +365,7 @@ void RollerShutter::startCalibrationFromBottom() {
     calibrationUpPulses = 0;
     calibrationDownPulses = 0;
     calUpStartCheck = 0;
+    lastCalibrationPulseTime = 0;
     currentState = State::CALIBRATING_DOWN;
     calibrationStartTime = millis();
     triggerMoveDown();
@@ -415,6 +417,13 @@ void RollerShutter::setWindowSensorData(bool reedOpen, int16_t rotation) {
         if (windowState != WindowState::CLOSED) {
             ESP_LOGI(TAG, "Window → CLOSED (reed closed)");
             windowStateChanged = true;
+
+            // Auto-close: if the shutter was opened for ventilation during this
+            // window-open event, close it again now that the window is shut.
+            if (windowLogicCfg.enabled && autoVentFired) {
+                ESP_LOGI(TAG, "→ Auto-close: window closed while in ventilation mode → closing shutter");
+                moveToPercent(100);
+            }
         }
         windowState   = WindowState::CLOSED;
         reedOpenTime  = 0;
@@ -591,16 +600,18 @@ void RollerShutter::handleInputs() {
         if (currentState == State::CALIBRATING_UP) {
             // UP-Phase: Pulse zählen
             calibrationUpPulses += pulses;
-            ESP_LOGI(TAG, "→ CALIBRATING_UP: Added %ld pulses, total=%ld", 
+            lastCalibrationPulseTime = millis();
+            ESP_LOGI(TAG, "→ CALIBRATING_UP: Added %ld pulses, total=%ld",
                     (long)pulses, (long)calibrationUpPulses);
             positionChanged = true;
-        
+
         // ────────────────────────────────────────────────────────────
         // CALIBRATING_DOWN: Pulse ZÄHLEN (für bidirektionale Validierung)
         // ────────────────────────────────────────────────────────────
         } else if (currentState == State::CALIBRATING_DOWN) {
             calibrationDownPulses += pulses;
-            ESP_LOGI(TAG, "→ CALIBRATING_DOWN: Added %ld pulses, total=%ld", 
+            lastCalibrationPulseTime = millis();
+            ESP_LOGI(TAG, "→ CALIBRATING_DOWN: Added %ld pulses, total=%ld",
                      (long)pulses, (long)calibrationDownPulses);
             positionChanged = true;
         }
@@ -777,14 +788,15 @@ void RollerShutter::handleStateMachine() {
                 break;
             }
 
-            // Hardware-Check ob Motor wirklich gestoppt ist
-            bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH &&
-                                        digitalRead(pins.motorDown) == HIGH);
+            // End-stop detection: motor physically stopped → pulses dried up.
+            // Cannot read OUTPUT pins to detect stop — use pulse-timeout instead.
+            // Threshold of 5 ensures motor actually started moving (noise filter only).
+            bool endStopReached = (calibrationUpPulses > 5) &&
+                                   (lastCalibrationPulseTime > 0) &&
+                                   ((millis() - lastCalibrationPulseTime) > 2500);
 
-            if (actualDirection == State::STOPPED &&
-                desiredMotorAction == State::MOVING_UP &&
-                motorReallyStopped) {
-
+            if (endStopReached) {
+                lastCalibrationPulseTime = 0;  // reset for next phase
                 calUpStartCheck = 0;  // reset for next calibration run
 
                 ESP_LOGI(TAG, "");
@@ -826,12 +838,14 @@ void RollerShutter::handleStateMachine() {
                          (long)calibrationDownPulses);
             }
 
-            bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH &&
-                                   digitalRead(pins.motorDown) == HIGH);
+            // End-stop detection via pulse-timeout (OUTPUT pins cannot be read for stop detection)
+            // Threshold of 5 ensures motor actually started moving (noise filter only).
+            bool endStopReached = (calibrationDownPulses > 5) &&
+                                   (lastCalibrationPulseTime > 0) &&
+                                   ((millis() - lastCalibrationPulseTime) > 2500);
 
-            if (actualDirection == State::STOPPED &&
-                desiredMotorAction == State::MOVING_DOWN &&
-                motorReallyStopped) {
+            if (endStopReached) {
+                lastCalibrationPulseTime = 0;  // reset for next phase
 
                 ESP_LOGI(TAG, "");
                 ESP_LOGI(TAG, "╔═══════════════════════════════════╗");
@@ -844,6 +858,7 @@ void RollerShutter::handleStateMachine() {
                     // First phase done (DOWN). Now go UP for the second phase.
                     currentPulseCount = calibrationDownPulses;
                     positionChanged = true;
+                    lastCalibrationPulseTime = 0;  // reset so UP phase starts fresh
                     vTaskDelay(pdMS_TO_TICKS(1000));
                     currentState = State::CALIBRATING_UP;
                     ESP_LOGI(TAG, "→ Starting CALIBRATING_UP (from-bottom, second phase)");
