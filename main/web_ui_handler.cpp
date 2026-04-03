@@ -5,6 +5,7 @@
 #include "credentials.h"
 
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <esp_http_server.h>
 #include <esp_log.h>
 #include <esp_chip_info.h>
@@ -1217,10 +1218,20 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
             httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)err, .len = strlen(err) };
             httpd_ws_send_frame_async(req->handle, fd, &f);
         } else {
-            // Shut down the mDNS advertiser before (re-)opening the commissioning window.
-            // DnssdServer::StartServer() calls Init() without a prior Shutdown(), which
-            // causes LwIP ERR_USE (0x3000008) when the port-5353 PCB is still registered
-            // from a previous open. Shutting down first ensures a clean slate.
+            // Release port 5353 before opening the commissioning window.
+            //
+            // Root cause of ERR_USE (0x3000008):
+            //   The Arduino ESP-IDF mDNS library (mdns_networking_lwip.c) creates its
+            //   UDP PCB via udp_new() WITHOUT SOF_REUSEADDR.  LwIP udp_bind() returns
+            //   ERR_USE whenever ANY existing PCB on the same port lacks SOF_REUSEADDR,
+            //   even if the new PCB has it.  Arduino MDNS starts in the 1-second window
+            //   after esp_matter::start(), binds port 5353 first, and permanently blocks
+            //   CHIP's minimal mDNS from ever binding.
+            //
+            // Fix: stop Arduino MDNS (releases the PCB), then stop CHIP's advertiser if
+            //   it somehow managed to initialize, so Init() gets a fully clean slate.
+            MDNS.end();
+
             chip::DeviceLayer::PlatformMgr().LockChipStack();
             if (chip::Dnssd::ServiceAdvertiser::Instance().IsInitialized()) {
                 chip::Dnssd::ServiceAdvertiser::Instance().Shutdown();
@@ -1536,7 +1547,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         
         vTaskDelete(NULL);
         
-    }, "device_disc", 4096, handler, 1, NULL); // Stack 4KB
+    }, "device_disc", 8192, handler, 1, NULL); // Stack 8KB (broadcastDiscoveredDevices allocates 2KB json_buf + WiFi scan + mDNS query overhead)
 }
     
     // ============================================================================
@@ -4295,30 +4306,38 @@ void WebUIHandler::broadcastDiscoveredDevices() {
         return;
     }
 
-    char json_buf[2048];
+    char* json_buf = new char[2048];
+    if (!json_buf) {
+        delete[] devices;
+        broadcast_to_all_clients("{\"type\":\"device_discovery\",\"devices\":[]}");
+        return;
+    }
     int offset = 0;
 
-    offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+    offset += snprintf(json_buf + offset, 2048 - offset,
                       "{\"type\":\"device_discovery\",\"devices\":[");
 
+    bool first = true;
     for (int i = 0; i < count && i < MAX_DISCOVERED_DEVICES; i++) {
         if (!devices[i].valid) continue;
 
-        offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+        offset += snprintf(json_buf + offset, 2048 - offset,
                           "%s{\"hostname\":\"%s\",\"ip\":\"%s\",\"room\":\"%s\",\"type\":\"%s\",\"rssi\":%d}",
-                          (i > 0) ? "," : "",
+                          first ? "" : ",",
                           devices[i].hostname,
                           devices[i].ip,
                           devices[i].room,
                           devices[i].type,
                           devices[i].rssi);
+        first = false;
     }
 
-    snprintf(json_buf + offset, sizeof(json_buf) - offset, "]}");
+    snprintf(json_buf + offset, 2048 - offset, "]}");
 
     delete[] devices;
 
     broadcast_to_all_clients(json_buf);
+    delete[] json_buf;
 
     ESP_LOGI(TAG, "✓ Broadcasted %d devices", count);
 }
