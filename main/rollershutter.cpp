@@ -249,14 +249,17 @@ void RollerShutter::moveToPercent(uint8_t percent) {
     }
     
     // ── New window logic ────────────────────────────────────────────────────
-    if (windowLogicCfg.enabled && percent > currentPercent) {
+    // "Closing" means increasing pulse count (→ 100% internal) normally,
+    // or decreasing pulse count (→ 0% internal) when direction is inverted.
+    bool isClosingCommand = directionInverted ? (percent < currentPercent) : (percent > currentPercent);
+    if (windowLogicCfg.enabled && isClosingCommand) {
         if (windowState == WindowState::OPEN) {
             // Window fully open: block ALL close/downward commands.
             // Physical hardware buttons bypass moveToPercent() entirely so they
             // are still allowed (per spec: "nur Manuelle Kommandos über Button").
             ESP_LOGW(TAG, "═══════════════════════════════════");
             ESP_LOGW(TAG, "⚠ WINDOW OPEN - CLOSE COMMAND BLOCKED");
-            ESP_LOGW(TAG, "  window=OPEN, target=%d%% > current=%d%%", percent, currentPercent);
+            ESP_LOGW(TAG, "  window=OPEN, target=%d%% vs current=%d%%", percent, currentPercent);
             ESP_LOGW(TAG, "  Only physical hardware buttons are allowed!");
             ESP_LOGW(TAG, "═══════════════════════════════════");
             return;
@@ -422,7 +425,8 @@ void RollerShutter::setWindowSensorData(bool reedOpen, int16_t rotation) {
             // window-open event, close it again now that the window is shut.
             if (windowLogicCfg.enabled && autoVentFired) {
                 ESP_LOGI(TAG, "→ Auto-close: window closed while in ventilation mode → closing shutter");
-                moveToPercent(100);
+                // "Fully closed" = 100% internal (normal) or 0% internal (inverted)
+                moveToPercent(directionInverted ? 0 : 100);
             }
         }
         windowState   = WindowState::CLOSED;
@@ -474,11 +478,18 @@ void RollerShutter::classifyWindowAngle() {
     if (autoVentFired) return;
 
     uint8_t pos = getCurrentPercent();
-    if (pos >= 97) {  // shutter is closed (±3% hysteresis)
+    // "Closed" = 100% internal (normal) or 0% internal (inverted)
+    bool shutterIsClosed = directionInverted ? (pos <= 3) : (pos >= 97);
+    if (shutterIsClosed) {
         autoVentFired = true;
-        ESP_LOGI(TAG, "→ Auto-vent: shutter was closed (%d%%), moving to ventilation position (%d%%)",
-                 pos, windowLogicCfg.ventPosition);
-        moveToPercent(windowLogicCfg.ventPosition);
+        // ventPosition is stored as "% offen" (same scale as the WebUI overview).
+        // Convert to internal: normal → 100-ventPos, inverted → ventPos directly.
+        uint8_t internalTarget = directionInverted
+            ? windowLogicCfg.ventPosition
+            : (100 - windowLogicCfg.ventPosition);
+        ESP_LOGI(TAG, "→ Auto-vent: shutter was closed (%d%% internal), moving to %d%% offen (internal: %d%%)",
+                 pos, windowLogicCfg.ventPosition, internalTarget);
+        moveToPercent(internalTarget);
     }
 }
 

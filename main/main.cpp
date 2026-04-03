@@ -2535,13 +2535,3 @@ void performCompleteFactoryReset() {
 }
 
 
-// ============================================================================
-// SoftAP Stub
-// ============================================================================
-
-extern "C" {
-    #include "esp_netif.h"
-    esp_netif_t* esp_netif_create_default_wifi_ap(void) {
-        return NULL;
-    }
-}

@@ -6,3 +6,5 @@ main/zap/
 sdkconfig*
 dependencies.lock
 sdkconfig.esp32doit-devkit-v1
+dependencies.lock
+.gitignore

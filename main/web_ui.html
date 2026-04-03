@@ -1192,8 +1192,8 @@
       <button onclick="show('ble')" id="nav-ble" aria-label="BLE sensor tab">
         <span>📡 BLE Sensor</span>
       </button>
-      <button onclick="show('window-logic')" id="nav-window-logic" aria-label="Fensterlogik tab" class="hidden">
-        <span>🪟 Fensterlogik</span>
+      <button onclick="show('window-logic')" id="nav-window-logic" aria-label="Window Logic tab" class="hidden">
+        <span>🪟 Window Logic</span>
       </button>
       <button onclick="show('system')" id="nav-system" aria-label="System information tab">
         <span>💻 System</span>
@@ -1761,8 +1761,8 @@
           <div class="form-group" style="margin-bottom:24px">
             <label for="wl-vent-pos"><strong>Ventilation Position (%)</strong></label>
             <div style="font-size:0.85em;color:#aaa;margin:4px 0 8px">
-              Target position when the shutter auto-opens on tilt.
-              0% = fully open, 100% = fully closed. Default: 15%
+              Target position when the shutter auto-opens on tilt (same scale as Overview: % open).
+              0% = fully closed, 100% = fully open. Default: 15%
             </div>
             <div style="display:flex;align-items:center;gap:12px">
               <input type="range" id="wl-vent-pos-slider" min="0" max="50" step="1"
@@ -1782,7 +1782,7 @@
               <li><strong>CLOSED</strong> — reed contact closed → all commands allowed</li>
               <li><strong>PENDING</strong> — reed just opened, reading angle…</li>
               <li><strong>TILTED</strong> — rotation &gt; threshold → all commands allowed<br>
-                  &nbsp;&nbsp;&nbsp;+ if shutter was closed (≥97%): auto-move to ventilation position</li>
+                  &nbsp;&nbsp;&nbsp;+ if shutter was closed: auto-move to ventilation position</li>
               <li><strong>OPEN</strong> — rotation ≤ threshold → close commands blocked<br>
                   &nbsp;&nbsp;&nbsp;(physical hardware buttons always allowed)</li>
             </ul>
@@ -3594,7 +3594,7 @@
     // ============================================================================
     
     function handleStatusUpdate(data) {
-      let openPercent = 100 - data.pos;
+      let openPercent = data.inv ? data.pos : (100 - data.pos);
       document.getElementById('pos').innerText = openPercent + '% offen';
       document.getElementById('calib').innerText = data.cal ? 'Yes' : 'No';
       document.getElementById('inv').innerText = data.inv ? 'Inverted' : 'Normal';
