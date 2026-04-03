@@ -264,24 +264,6 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                               (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
         
         if (is_commissioned) {
-            // Contact Sensor Endpoint erstellen (NUR EINMAL!)
-            if (!contact_sensor_endpoint_active) {
-                ESP_LOGI(TAG, "→ Creating Contact Sensor endpoint...");
-                node_t* node = node::get();
-                if (node) {
-                    createContactSensorEndpoint(node);
-                }
-            }
-            
-            // Power Source Endpoint erstellen (NUR EINMAL!)
-            if (!power_source_endpoint_active) {
-                ESP_LOGI(TAG, "→ Creating Power Source endpoint...");
-                node_t* node = node::get();
-                if (node) {
-                    createPowerSourceEndpoint(node);
-                }
-            }
-            
             // ────────────────────────────────────────────────────────
             // Contact Sensor Attribute updaten
             // ────────────────────────────────────────────────────────
@@ -430,11 +412,6 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     // ========================================================================
     
     contact_sensor_endpoint_active = true;
-    
-    matterPref.begin("matter", false);
-    matterPref.putBool("cs_active", true);
-    matterPref.end();
-    
     ESP_LOGI(TAG, "✓ Contact Sensor endpoint fully configured");
     ESP_LOGI(TAG, "");
     
@@ -545,11 +522,6 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     ESP_LOGI(TAG, "✓ Attribute BatVoltage configured");
     
     power_source_endpoint_active = true;
-    
-    matterPref.begin("matter", false);
-    matterPref.putBool("ps_active", true);
-    matterPref.end();
-    
     ESP_LOGI(TAG, "✓ Power Source endpoint fully configured");
     ESP_LOGI(TAG, "");
     
@@ -970,20 +942,16 @@ bool createMatterNode() {
     // ════════════════════════════════════════════════════════════════════
     
     matterPref.begin("matter", true);
-    contact_sensor_matter_enabled = matterPref.getBool("cs_matter_en", false);
-    bool cs_was_active = matterPref.getBool("cs_active", false);
-    bool ps_was_active = matterPref.getBool("ps_active", false);
+    // Default true: Contact Sensor and Power Source must be present at commissioning
+    // time so that Apple Home (and other controllers) discover them on first pairing.
+    // Dynamic post-commissioning endpoint addition is not reliably picked up.
+    contact_sensor_matter_enabled = matterPref.getBool("cs_matter_en", true);
     matterPref.end();
-    
-    if (contact_sensor_matter_enabled && (cs_was_active || ps_was_active)) {
-        ESP_LOGI(TAG, "→ Creating Contact Sensor endpoints...");
-        
-        if (cs_was_active) {
-            createContactSensorEndpoint(matter_node);
-        }
-        if (cs_was_active || ps_was_active) {
-            createPowerSourceEndpoint(matter_node);
-        }
+
+    if (contact_sensor_matter_enabled) {
+        ESP_LOGI(TAG, "→ Creating Contact Sensor + Power Source endpoints...");
+        createContactSensorEndpoint(matter_node);
+        createPowerSourceEndpoint(matter_node);
     }
     
     ESP_LOGI(TAG, "");
