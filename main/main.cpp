@@ -1,6 +1,7 @@
 #include <Arduino.h>
-#include <ArduinoOTA.h> 
+#include <ArduinoOTA.h>
 #include <WiFi.h>
+#include <ESPmDNS.h>
 #include <Matter.h>
 #include <Preferences.h>
 #include <esp_log.h>
@@ -1000,8 +1001,13 @@ bool startMatterStack() {
     // Matter Stack starten
     // ════════════════════════════════════════════════════════════════════
     
+    // Arduino OTA calls MDNS.begin() internally which binds UDP port 5353
+    // without SOF_REUSEADDR. LwIP udp_bind() returns ERR_USE for any other
+    // PCB trying to bind the same port if any existing PCB lacks that flag.
+    // Release the Arduino mDNS PCB now so CHIP's minimal mDNS can bind.
+    MDNS.end();
     ESP_LOGI(TAG, "→ Starting Matter stack...");
-    
+
     esp_err_t err = esp_matter::start(nullptr);
     
     if (err != ESP_OK) {
@@ -1039,6 +1045,7 @@ bool startMatterStack() {
     // ════════════════════════════════════════════════════════════════════
     
     if (deviceNaming) {
+        esp_task_wdt_reset();
         vTaskDelay(pdMS_TO_TICKS(1000));
         deviceNaming->apply();
         
@@ -1652,6 +1659,7 @@ void setup() {
             ESP_LOGI(TAG, "✓ Matter node created");
             
             // Kurze Pause für Node-Stabilisierung
+            esp_task_wdt_reset();
             vTaskDelay(pdMS_TO_TICKS(500));
             
             // ────────────────────────────────────────────────────────────
@@ -1709,6 +1717,7 @@ void setup() {
         ESP_LOGI(TAG, "═══════════════════════════════════");
         ESP_LOGI(TAG, "  Paired device found, continuous scan was enabled.");
         ESP_LOGI(TAG, "  Starting scan after 1s BLE stabilization delay...");
+        esp_task_wdt_reset();
         vTaskDelay(pdMS_TO_TICKS(1000));
         bleManager->startContinuousScan();
         ESP_LOGI(TAG, "✓ Continuous scan started");
