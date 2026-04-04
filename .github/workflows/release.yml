@@ -1,0 +1,71 @@
+name: Build and Release Firmware
+
+on:
+  push:
+    tags:
+      - 'v*'
+
+permissions:
+  contents: write
+
+jobs:
+  build:
+    runs-on: ubuntu-latest
+    
+    steps:
+    - name: Checkout code
+      uses: actions/checkout@v4
+      with:
+        fetch-depth: 0
+
+    - name: Set up Python
+      uses: actions/setup-python@v4
+      with:
+        python-version: '3.10'
+        
+    - name: Install PlatformIO
+      run: pip install platformio
+        
+    - name: Build Firmware
+      run: pio run --environment esp32doit-devkit-v1
+        
+    - name: Get firmware size
+      id: fw_size
+      run: |
+        SIZE=$(stat -c%s .pio/build/esp32doit-devkit-v1/firmware.bin)
+        echo "size=$SIZE" >> $GITHUB_OUTPUT
+        
+    - name: Update version.json
+      run: |
+        VERSION="${GITHUB_REF#refs/tags/v}"
+        # URL zeigt auf das File im neuesten Release
+        URL="https://github.com/${{ github.repository }}/releases/download/v$VERSION/firmware.bin"
+        SIZE="${{ steps.fw_size.outputs.size }}"
+        
+        cat > version.json << EOF
+        {
+          "version": "$VERSION",
+          "url": "$URL",
+          "size": $SIZE,
+          "notes": "Release $VERSION - See release notes for details"
+        }
+        EOF
+        
+    - name: Commit version.json
+      run: |
+        git config user.name "github-actions[bot]"
+        git config user.email "github-actions[bot]@users.noreply.github.com"
+        git add version.json
+        git commit -m "Update version.json to ${{ github.ref_name }}"
+        # Pusht die version.json zurück in den main branch
+        git push origin HEAD:main
+        
+    - name: Create Release
+      uses: softprops/action-gh-release@v2
+      with:
+        files: |
+          .pio/build/esp32doit-devkit-v1/firmware.bin
+          .pio/build/esp32doit-devkit-v1/partitions.bin
+          .pio/build/esp32doit-devkit-v1/bootloader.bin
+          version.json
+        generate_release_notes: true
