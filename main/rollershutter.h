@@ -223,6 +223,8 @@ private:
     uint32_t calUpStartCheck = 0;      // timestamp when CALIBRATING_UP entered (for no-motion detection)
     uint32_t lastCalibrationPulseTime = 0;  // millis() of last pulse during calibration (end-stop detection)
 
+    uint32_t lastMovePulseTime = 0;   // millis() of last pulse during MOVING_UP/DOWN
+
     State lastActualDirection = State::STOPPED;
     uint8_t directionStableCounter = 0;
     static constexpr uint8_t DIRECTION_STABILITY_THRESHOLD = 3; // 3 Samples

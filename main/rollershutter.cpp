@@ -497,7 +497,8 @@ void RollerShutter::classifyWindowAngle() {
 
 uint8_t RollerShutter::getCurrentPercent() const {
     if (maxPulseCount == 0) return 0;
-    return (uint8_t)((currentPulseCount * 100) / maxPulseCount);
+    int32_t pct = (currentPulseCount * 100) / maxPulseCount;
+    return (uint8_t)constrain(pct, 0, 100);
 }
 
 bool RollerShutter::isCalibrated() const { return calibrated; }
@@ -637,23 +638,27 @@ void RollerShutter::handleInputs() {
             
             if (directionForPulses == State::MOVING_DOWN) {
                 currentPulseCount += pulses;
-                ESP_LOGI(TAG, "→ DOWN: Added %ld pulses, count=%ld", 
+                lastMovePulseTime = millis();
+                ESP_LOGI(TAG, "→ DOWN: Added %ld pulses, count=%ld",
                          (long)pulses, (long)currentPulseCount);
-                
+
+                // Allow up to 20% overshoot so drift at the bottom end-stop is visible.
+                // getCurrentPercent() clamps the displayed value to 100%.
+                int32_t maxAllowed = calibrated ? (maxPulseCount + maxPulseCount / 5) : INT32_MAX;
+                if (currentPulseCount > maxAllowed) currentPulseCount = maxAllowed;
+
             } else if (directionForPulses == State::MOVING_UP) {
                 currentPulseCount -= pulses;
                 if (currentPulseCount < 0) currentPulseCount = 0;
-                ESP_LOGI(TAG, "→ UP: Subtracted %ld pulses, count=%ld", 
+                lastMovePulseTime = millis();
+                ESP_LOGI(TAG, "→ UP: Subtracted %ld pulses, count=%ld",
                          (long)pulses, (long)currentPulseCount);
-                
+
             } else {
-                ESP_LOGW(TAG, "⚠ Pulse received but desiredMotorAction=STOPPED, discarding %ld pulses", 
+                ESP_LOGW(TAG, "⚠ Pulse received but desiredMotorAction=STOPPED, discarding %ld pulses",
                          (long)pulses);
             }
 
-            // Constrain to valid range
-            currentPulseCount = constrain(currentPulseCount, 0, 
-                calibrated ? maxPulseCount : INT32_MAX);
             positionChanged = true;
         }
 
@@ -730,25 +735,33 @@ void RollerShutter::handleStateMachine() {
                 ESP_LOGI(TAG, "Reached UP target (%ld pulses). Stopping.", (long)targetPulseCount);
                 triggerStop();
                 targetPulseCount = -1;
+                lastMovePulseTime = 0;
                 currentState = State::STOPPED;
             }
+            // Pulse-Timeout: physischer oberer Endanschlag (Motor blockiert, Relay bleibt aktiv)
+            else if (lastMovePulseTime > 0 &&
+                     (millis() - motorStartTime) > MOTOR_MIN_RUN_TIME &&
+                     (millis() - lastMovePulseTime) > 2500) {
+                ESP_LOGW(TAG, "⚠ Pulse timeout during UP → physical top end-stop detected");
+                ESP_LOGW(TAG, "  currentPulseCount before snap: %ld", (long)currentPulseCount);
+                triggerStop();
+                targetPulseCount = -1;
+                lastMovePulseTime = 0;
+                currentPulseCount = 0;
+                positionChanged = true;
+                currentState = State::STOPPED;
+                saveStateToKVS();
+            }
+            // Fallback: Relay-Pin wurde von außen deaktiviert (z.B. Überstromschutz)
             else if (actualDirection == State::STOPPED &&
                      (millis() - motorStartTime) > MOTOR_MIN_RUN_TIME) {
-
                 bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH &&
                                             digitalRead(pins.motorDown) == HIGH);
-
                 if (motorReallyStopped) {
                     ESP_LOGW(TAG, "Motor stopped unexpectedly (UP)!");
                     targetPulseCount = -1;
+                    lastMovePulseTime = 0;
                     currentState = State::STOPPED;
-                    // Record top-limit sample if the motor stopped near the actual top end stop
-                    if (calibrated && maxPulseCount > 0 &&
-                        currentPulseCount <= (maxPulseCount / 20)) {  // within 5% of top
-                        currentPulseCount = 0;
-                        positionChanged = true;
-                        recordTopLimit();
-                    }
                 }
             }
             break;
@@ -760,26 +773,49 @@ void RollerShutter::handleStateMachine() {
                 ESP_LOGI(TAG, "Reached DOWN target (%ld pulses). Stopping.", (long)targetPulseCount);
                 triggerStop();
                 targetPulseCount = -1;
+                lastMovePulseTime = 0;
                 currentState = State::STOPPED;
             }
-            // Grace Period für Motor-Start
+            // Pulse-Timeout: physischer unterer Endanschlag (Motor blockiert, Relay bleibt aktiv)
+            else if (lastMovePulseTime > 0 &&
+                     (millis() - motorStartTime) > MOTOR_MIN_RUN_TIME &&
+                     (millis() - lastMovePulseTime) > 2500) {
+                int32_t measured = currentPulseCount;
+                ESP_LOGW(TAG, "⚠ Pulse timeout during DOWN → physical bottom end-stop detected");
+                ESP_LOGW(TAG, "  measured pulses: %ld  maxPulseCount: %ld", (long)measured, (long)maxPulseCount);
+                triggerStop();
+                targetPulseCount = -1;
+                lastMovePulseTime = 0;
+
+                if (calibrated && maxPulseCount > 0) {
+                    int32_t diff = abs(measured - maxPulseCount);
+                    float diffPercent = (float)diff / maxPulseCount * 100.0f;
+                    if (diffPercent <= 20.0f) {
+                        // Direkte Korrektur: gemessener Wert ist die neue Referenz
+                        ESP_LOGI(TAG, "→ Updating maxPulseCount: %ld → %ld (%.1f%% drift)",
+                                 (long)maxPulseCount, (long)measured, diffPercent);
+                        maxPulseCount = measured;
+                        saveStateToKVS();
+                        recordBottomLimit();
+                    } else {
+                        ESP_LOGW(TAG, "→ Drift too large (%.1f%%), keeping maxPulseCount=%ld",
+                                 diffPercent, (long)maxPulseCount);
+                    }
+                }
+                currentPulseCount = maxPulseCount;
+                positionChanged = true;
+                currentState = State::STOPPED;
+            }
+            // Fallback: Relay-Pin wurde von außen deaktiviert (z.B. Überstromschutz)
             else if (actualDirection == State::STOPPED &&
                      (millis() - motorStartTime) > MOTOR_MIN_RUN_TIME) {
-
                 bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH &&
                                             digitalRead(pins.motorDown) == HIGH);
-
                 if (motorReallyStopped) {
                     ESP_LOGW(TAG, "Motor stopped unexpectedly (DOWN)!");
                     targetPulseCount = -1;
+                    lastMovePulseTime = 0;
                     currentState = State::STOPPED;
-                    // Record bottom-limit sample if the motor stopped near the actual bottom end stop
-                    if (calibrated && maxPulseCount > 0 &&
-                        currentPulseCount >= (maxPulseCount - maxPulseCount / 20)) {  // within 5% of bottom
-                        currentPulseCount = maxPulseCount;
-                        positionChanged = true;
-                        recordBottomLimit();
-                    }
                 }
             }
             break;
@@ -995,10 +1031,12 @@ void RollerShutter::applyMotorAction() {
     if (action != desiredMotorAction) {
         if (action == State::MOVING_UP) {
             motorStartTime = millis();
+            lastMovePulseTime = 0;
             triggerMoveUp();
         }
         else if (action == State::MOVING_DOWN) {
             motorStartTime = millis();
+            lastMovePulseTime = 0;
             triggerMoveDown();
         }
         else if (desiredMotorAction != State::STOPPED) {
