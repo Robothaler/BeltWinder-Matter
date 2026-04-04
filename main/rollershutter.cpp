@@ -732,16 +732,23 @@ void RollerShutter::handleStateMachine() {
                 targetPulseCount = -1;
                 currentState = State::STOPPED;
             }
-            else if (actualDirection == State::STOPPED && 
+            else if (actualDirection == State::STOPPED &&
                      (millis() - motorStartTime) > MOTOR_MIN_RUN_TIME) {
-                
-                bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH && 
+
+                bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH &&
                                             digitalRead(pins.motorDown) == HIGH);
-                
+
                 if (motorReallyStopped) {
                     ESP_LOGW(TAG, "Motor stopped unexpectedly (UP)!");
                     targetPulseCount = -1;
                     currentState = State::STOPPED;
+                    // Record top-limit sample if the motor stopped near the actual top end stop
+                    if (calibrated && maxPulseCount > 0 &&
+                        currentPulseCount <= (maxPulseCount / 20)) {  // within 5% of top
+                        currentPulseCount = 0;
+                        positionChanged = true;
+                        recordTopLimit();
+                    }
                 }
             }
             break;
@@ -756,16 +763,23 @@ void RollerShutter::handleStateMachine() {
                 currentState = State::STOPPED;
             }
             // Grace Period für Motor-Start
-            else if (actualDirection == State::STOPPED && 
+            else if (actualDirection == State::STOPPED &&
                      (millis() - motorStartTime) > MOTOR_MIN_RUN_TIME) {
-                
-                bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH && 
+
+                bool motorReallyStopped = (digitalRead(pins.motorUp) == HIGH &&
                                             digitalRead(pins.motorDown) == HIGH);
-                
+
                 if (motorReallyStopped) {
                     ESP_LOGW(TAG, "Motor stopped unexpectedly (DOWN)!");
                     targetPulseCount = -1;
                     currentState = State::STOPPED;
+                    // Record bottom-limit sample if the motor stopped near the actual bottom end stop
+                    if (calibrated && maxPulseCount > 0 &&
+                        currentPulseCount >= (maxPulseCount - maxPulseCount / 20)) {  // within 5% of bottom
+                        currentPulseCount = maxPulseCount;
+                        positionChanged = true;
+                        recordBottomLimit();
+                    }
                 }
             }
             break;
@@ -914,8 +928,8 @@ void RollerShutter::handleStateMachine() {
             ESP_LOGI(TAG, "Difference: %ld pulses (%.2f%%)", (long)diff, diffPercent);
             ESP_LOGI(TAG, "");
             
-            // Validierung: Max 5% Abweichung
-            if (diffPercent <= DRIFT_CORRECTION_THRESHOLD) {
+            // Validierung: Max CALIBRATION_MAX_DIFF_PERCENT (3%) Abweichung
+            if (diffPercent <= CALIBRATION_MAX_DIFF_PERCENT) {
                 // Verwende Durchschnitt
                 maxPulseCount = (calibrationUpPulses + calibrationDownPulses) / 2;
                 currentPulseCount = maxPulseCount;  // Aktuell ganz unten
@@ -1264,8 +1278,8 @@ void RollerShutter::recordBottomLimit() {
 }
 
 void RollerShutter::checkAndAdjustMaxPulseCount() {
-    // Erst nach mindestens 20 vollständigen Zyklen
-    if (fullCycleCount < 20) {
+    // Erst nach mindestens DRIFT_MIN_CYCLES vollständigen Zyklen
+    if (fullCycleCount < DRIFT_MIN_CYCLES) {
         return;
     }
     
@@ -1332,9 +1346,6 @@ void RollerShutter::checkAndAdjustMaxPulseCount() {
         ESP_LOGI(TAG, "✓ No significant drift detected");
         ESP_LOGI(TAG, "  System is stable");
         ESP_LOGI(TAG, "");
-        
-        // Reset Counter nach erfolgreicher Validierung
-        fullCycleCount = 0;
     }
 }
 

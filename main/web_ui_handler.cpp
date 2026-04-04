@@ -1114,7 +1114,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     snprintf(json_buf, sizeof(json_buf),
             "{\"type\":\"device_name\","
             "\"room\":\"%s\","
-            "\"type\":\"%s\","
+            "\"deviceType\":\"%s\","
             "\"position\":\"%s\","
             "\"hostname\":\"%s\","
             "\"matterName\":\"%s\"}",
@@ -1129,22 +1129,22 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         .payload = (uint8_t*)json_buf,
         .len = strlen(json_buf)
     };
-    httpd_ws_send_frame_async(req->handle, fd, &frame);
+    httpd_ws_send_frame(req, &frame);
 }
     else if (strcmp(cmd, "status") == 0) {
         char status_buf[128];
-        snprintf(status_buf, sizeof(status_buf), 
+        snprintf(status_buf, sizeof(status_buf),
                  "{\"type\":\"status\",\"pos\":%d,\"cal\":%s,\"inv\":%s}",
                  shutter_driver_get_current_percent(self->handle),
                  shutter_driver_is_calibrated(self->handle) ? "true" : "false",
                  shutter_driver_get_direction_inverted(self->handle) ? "true" : "false");
-        
+
         httpd_ws_frame_t status_frame = {
             .type = HTTPD_WS_TYPE_TEXT,
             .payload = (uint8_t*)status_buf,
             .len = strlen(status_buf)
         };
-        httpd_ws_send_frame_async(req->handle, fd, &status_frame);
+        httpd_ws_send_frame(req, &status_frame);
     }
     else if (strcmp(cmd, "matter_status") == 0) {
         uint8_t fabric_count = chip::Server::GetInstance().GetFabricTable().FabricCount();
@@ -1201,14 +1201,14 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
             .payload = (uint8_t*)matter_buf,
             .len = (size_t)len
         };
-        
-        esp_err_t ret = httpd_ws_send_frame_async(req->handle, fd, &matter_frame);
+
+        esp_err_t ret = httpd_ws_send_frame(req, &matter_frame);
         if (ret != ESP_OK) {
             ESP_LOGE(TAG, "Failed to send matter_status: %s", esp_err_to_name(ret));
         }
     }
     else if (strcmp(cmd, "matter_open_commissioning") == 0) {
-        extern bool matter_stack_started;
+        extern volatile bool matter_stack_started;
         if (!matter_stack_started) {
             const char* err = "{\"type\":\"error\",\"message\":\"Matter stack is not running. Enable Matter first.\"}";
             httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)err, .len = strlen(err) };
@@ -1279,15 +1279,17 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                          qrUrl.c_str(),
                          qrMt.c_str(),
                          pairingCode.c_str());
+                // Use synchronous send: okBuf is on the stack and must stay valid
+                // during send. httpd_ws_send_frame() sends immediately without queuing.
                 httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)okBuf, .len = strlen(okBuf) };
-                httpd_ws_send_frame_async(req->handle, fd, &f);
+                httpd_ws_send_frame(req, &f);
             } else {
                 char errBuf[256];
                 snprintf(errBuf, sizeof(errBuf),
                          "{\"type\":\"error\",\"message\":\"Could not open commissioning window: %s\"}",
                          chip::ErrorStr(cwErr));
                 httpd_ws_frame_t f = { .type = HTTPD_WS_TYPE_TEXT, .payload = (uint8_t*)errBuf, .len = strlen(errBuf) };
-                httpd_ws_send_frame_async(req->handle, fd, &f);
+                httpd_ws_send_frame(req, &f);
             }
         }
     }
@@ -1377,18 +1379,19 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
     
     // Parse JSON
     String json = String(cmd);
-    
-    int roomStart = json.indexOf("\"room\":\"") + 8;
-    int roomEnd = json.indexOf("\"", roomStart);
-    String room = json.substring(roomStart, roomEnd);
-    
-    int typeStart = json.indexOf("\"type\":\"") + 8;
-    int typeEnd = json.indexOf("\"", typeStart);
-    String type = json.substring(typeStart, typeEnd);
-    
-    int posStart = json.indexOf("\"position\":\"") + 12;
-    int posEnd = json.indexOf("\"", posStart);
-    String position = json.substring(posStart, posEnd);
+
+    auto extractField = [&](const char* key, int keyLen) -> String {
+        int start = json.indexOf(key);
+        if (start < 0) return "";
+        start += keyLen;
+        int end = json.indexOf("\"", start);
+        if (end < start) return "";
+        return json.substring(start, end);
+    };
+
+    String room     = extractField("\"room\":\"",     8);
+    String type     = extractField("\"type\":\"",     8);
+    String position = extractField("\"position\":\"", 12);
     
     ESP_LOGI(TAG, "  Room: %s", room.c_str());
     ESP_LOGI(TAG, "  Type: %s", type.c_str());
@@ -1468,12 +1471,19 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
             .len = strlen(success)
         };
         httpd_ws_send_frame_async(req->handle, fd, &frame);
-        
-        // Close WebSocket nach 2 Sekunden (Client muss sich neu anmelden)
-        vTaskDelay(pdMS_TO_TICKS(2000));
-        
-        // Alle Clients disconnecten
-        self->disconnect_all_clients();
+
+        // Disconnect all clients after a short delay so the success message
+        // reaches the browser before the connection closes.
+        // Done in a separate task to avoid blocking the httpd task.
+        struct DisconnectParams { WebUIHandler* handler; };
+        auto* dp = new DisconnectParams{self};
+        xTaskCreate([](void* arg) {
+            auto* p = static_cast<DisconnectParams*>(arg);
+            vTaskDelay(pdMS_TO_TICKS(2000));
+            p->handler->disconnect_all_clients();
+            delete p;
+            vTaskDelete(NULL);
+        }, "ws_dc", 2048, dp, 1, NULL);
         
     } else {
         const char* error = "{\"type\":\"error\",\"message\":\"Failed to save credentials\"}";
@@ -1608,7 +1618,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
             // Memory Stats VOR Task-Erstellung
             self->logMemoryStats("Before BLE Scan Monitor Task");
             
-            xTaskCreate([](void *param) {
+            BaseType_t taskRet = xTaskCreate([](void *param) {
                 // RAII-Pattern
                 std::unique_ptr<ScanMonitorParams> p(
                     static_cast<ScanMonitorParams*>(param)
@@ -1691,6 +1701,10 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                 vTaskDelete(NULL);
                 
             }, "ble_scan_mon", 5120, params, 1, NULL);  // Stack: 5KB (has char json_buf[2048] inside)
+            if (taskRet != pdPASS) {
+                ESP_LOGE(TAG, "✗ Failed to create ble_scan_mon task");
+                delete params;
+            }
         }
     }
 
@@ -1704,12 +1718,18 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
         
         const auto& discovered = self->bleManager->getDiscoveredDevices();
         
-        char json_buf[2048];
-        int offset = snprintf(json_buf, sizeof(json_buf), 
+        static const int BLE_BUF_SIZE = 2048;
+        char* json_buf = (char*)malloc(BLE_BUF_SIZE);
+        if (!json_buf) {
+            ESP_LOGE(TAG, "ble_status: out of memory");
+            free(buf);
+            return ESP_ERR_NO_MEM;
+        }
+        int offset = snprintf(json_buf, BLE_BUF_SIZE,
                               "{\"type\":\"ble_discovered\",\"devices\":[");
-        
+
         for (size_t i = 0; i < discovered.size(); i++) {
-            offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+            offset += snprintf(json_buf + offset, BLE_BUF_SIZE - offset,
                                "%s{\"name\":\"%s\",\"address\":\"%s\",\"rssi\":%d,\"encrypted\":%s}",
                                i > 0 ? "," : "",
                                discovered[i].name.c_str(),
@@ -1717,14 +1737,14 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                                discovered[i].rssi,
                                discovered[i].isEncrypted ? "true" : "false");
         }
-        snprintf(json_buf + offset, sizeof(json_buf) - offset, "]}");
-        
+        snprintf(json_buf + offset, BLE_BUF_SIZE - offset, "]}");
+
         httpd_ws_frame_t frame = {
             .type = HTTPD_WS_TYPE_TEXT,
             .payload = (uint8_t*)json_buf,
             .len = strlen(json_buf)
         };
-        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        httpd_ws_send_frame(req, &frame);
         
         // ════════════════════════════════════════════════════════════════
         // 2. Paired Device Status
@@ -1770,7 +1790,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
 
             bool continuousScanActive = self->bleManager->isContinuousScanEnabled();
             
-            offset = snprintf(json_buf, sizeof(json_buf),
+            offset = snprintf(json_buf, BLE_BUF_SIZE,
                              "{\"type\":\"ble_status\","
                              "\"paired\":true,"
                              "\"state\":\"%s\","
@@ -1845,7 +1865,7 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                 // JSON mit allen Sensor-Daten
                 // ════════════════════════════════════════════════════════
                 
-                offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+                offset += snprintf(json_buf + offset, BLE_BUF_SIZE - offset,
                                   "\"valid\":true,"
                                   "\"packet_id\":%d,"
                                   "\"window_open\":%s,"
@@ -1868,18 +1888,18 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
             } else {
                 // Keine Daten verfügbar
                 ESP_LOGD(TAG, "No sensor data available");
-                
-                offset += snprintf(json_buf + offset, sizeof(json_buf) - offset,
+
+                offset += snprintf(json_buf + offset, BLE_BUF_SIZE - offset,
                                   "\"valid\":false,"
                                   "\"seconds_ago\":-1");  // ← Explizit -1
             }
-            
-            snprintf(json_buf + offset, sizeof(json_buf) - offset, "}}");
-            
+
+            snprintf(json_buf + offset, BLE_BUF_SIZE - offset, "}}");
+
         } else {
             // Nicht gepairt
             bool isScanActive = self->bleManager ? self->bleManager->isScanActive() : false;
-            snprintf(json_buf, sizeof(json_buf),
+            snprintf(json_buf, BLE_BUF_SIZE,
                     "{\"type\":\"ble_status\","
                     "\"paired\":false,"
                     "\"state\":\"%s\","
@@ -1888,10 +1908,11 @@ esp_err_t WebUIHandler::ws_handler(httpd_req_t *req) {
                     isScanActive ? "true" : "false");
         }
         
-        // Sende zweite Message (ble_status)
+        // Sende zweite Message (ble_status) — synchronous send, then free heap buffer
         frame.payload = (uint8_t*)json_buf;
         frame.len = strlen(json_buf);
-        httpd_ws_send_frame_async(req->handle, fd, &frame);
+        httpd_ws_send_frame(req, &frame);
+        free(json_buf);
     }
 }
 
@@ -3108,8 +3129,8 @@ else if (strcmp(cmd, "ble_stop_scan") == 0) {
     }
 
     else if (strcmp(cmd, "contact_sensor_status") == 0) {
-        extern bool contact_sensor_matter_enabled;
-        extern bool contact_sensor_endpoint_active;
+        extern volatile bool contact_sensor_matter_enabled;
+        extern volatile bool contact_sensor_endpoint_active;
         
         char status_buf[128];
         snprintf(status_buf, sizeof(status_buf),
@@ -3408,9 +3429,9 @@ esp_err_t WebUIHandler::handle_matter_status(httpd_req_t *req) {
     // External declarations (from main.cpp)
     // ════════════════════════════════════════════════════════════════════
     
-    extern bool matter_node_created;
-    extern bool matter_stack_started;
-    
+    extern volatile bool matter_node_created;
+    extern volatile bool matter_stack_started;
+
     // ════════════════════════════════════════════════════════════════════
     // Build JSON Response
     // ════════════════════════════════════════════════════════════════════

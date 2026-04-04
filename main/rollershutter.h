@@ -79,7 +79,7 @@ public:
     static volatile bool isr_ready;
 
     int32_t getMaxPulseCount() const { return maxPulseCount; }
-    uint8_t getFullCycleCount() const { return fullCycleCount; }
+    uint16_t getFullCycleCount() const { return fullCycleCount; }
     
     int32_t calculateCurrentAverage() const {
         int64_t sum = 0;
@@ -190,7 +190,7 @@ private:
     int32_t bottomLimitHistory[DRIFT_HISTORY_SIZE];
     uint8_t topLimitHistoryIndex = 0;
     uint8_t bottomLimitHistoryIndex = 0;
-    uint8_t fullCycleCount = 0;
+    uint16_t fullCycleCount = 0;
 
     // ════════════════════════════════════════════════════════════════
     // Smart Update Strategy

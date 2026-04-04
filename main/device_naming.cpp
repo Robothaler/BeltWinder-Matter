@@ -114,6 +114,11 @@ void DeviceNaming::generateNames() {
         hostnameBase += "-" + sanitizeForHostname(_current.position);
     }
     
+    // RFC 1035: max 63 chars per DNS label
+    if (hostnameBase.length() > 63) {
+        hostnameBase = hostnameBase.substring(0, 63);
+        ESP_LOGW(TAG, "Hostname truncated to 63 chars: %s", hostnameBase.c_str());
+    }
     _current.hostname = hostnameBase;
     
     // ========================================================================

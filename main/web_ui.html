@@ -1890,7 +1890,7 @@
                               0%
                           </div>
                       </div>
-                      <small class="text-muted">Auto-correction at 10%</small>
+                      <small class="text-muted">Warning at 3% · Auto-correction at 10% (after 10 full cycles)</small>
                   </div>
               </div>
               
@@ -1925,14 +1925,14 @@
             <div>
                 <div style="font-size:0.8em;color:#666;margin-bottom:4px">Network Hostname (mDNS)</div>
                 <div id="current-hostname" style="font-family:'Courier New',monospace;font-size:1.1em;color:#4CAF50">
-                BW-Unbenannt-Fenster
+                …
                 </div>
             </div>
             
             <div>
                 <div style="font-size:0.8em;color:#666;margin-bottom:4px">Matter Device Name</div>
                 <div id="current-matter-name" style="font-size:1.1em;color:#2196F3">
-                Unbenannt Fenster
+                …
                 </div>
             </div>
             </div>
@@ -2999,14 +2999,17 @@
         // Update Container
         container.innerHTML = html;
         
-        // Add hover effects via CSS injection
-        const style = document.createElement('style');
-        style.textContent = `
-            .device-item:hover .hover-glow {
-                left: 100%;
-            }
-        `;
-        document.head.appendChild(style);
+        // Add hover effects via CSS injection (only once)
+        if (!document.getElementById('ble-device-hover-style')) {
+            const style = document.createElement('style');
+            style.id = 'ble-device-hover-style';
+            style.textContent = `
+                .device-item:hover .hover-glow {
+                    left: 100%;
+                }
+            `;
+            document.head.appendChild(style);
+        }
         
         // Success Message
         showErrorBanner('Scan Complete', 
@@ -3361,48 +3364,45 @@
 
       if (data.type === 'device_name') {
         console.log('📋 Device name received:', data);
-        
-        // Update current display
-        document.getElementById('current-hostname').innerText = data.hostname || 'N/A';
+
+        // Update current display (with .local suffix for hostname)
+        document.getElementById('current-hostname').innerText = data.hostname ? data.hostname + '.local' : 'N/A';
         document.getElementById('current-matter-name').innerText = data.matterName || 'N/A';
-        
+
         // Set form values
         if (data.room) {
             const roomSelect = document.getElementById('device-room');
-            
+
             // Check if room is in predefined list
             let found = false;
             for (let i = 0; i < roomSelect.options.length; i++) {
-            if (roomSelect.options[i].value === data.room) {
-                roomSelect.value = data.room;
-                found = true;
-                break;
+                if (roomSelect.options[i].value === data.room) {
+                    roomSelect.value = data.room;
+                    found = true;
+                    break;
+                }
             }
-            }
-            
+
             // If not found, set as custom
             if (!found && data.room !== 'Unbenannt') {
-            roomSelect.value = 'custom';
-            document.getElementById('custom-room-group').style.display = 'block';
-            document.getElementById('device-room-custom').value = data.room;
+                roomSelect.value = 'custom';
+                document.getElementById('custom-room-group').style.display = 'block';
+                document.getElementById('device-room-custom').value = data.room;
             }
         }
-        
-        if (data.type) {
-            document.getElementById('device-type').value = data.type;
+
+        // Note: field is now "deviceType" to avoid collision with message "type"
+        if (data.deviceType) {
+            document.getElementById('device-type').value = data.deviceType;
         }
-        
+
         if (data.position) {
             document.getElementById('device-position').value = data.position;
         }
 
-        if (data.type === 'device_discovery') {
-            handleDeviceDiscovery(data);
-        }
-        
         // Update preview
         updateDeviceNamePreview();
-        }
+      }
 
         if (data.type === 'device_name_saved') {
           hideLoading();
@@ -3411,25 +3411,14 @@
           btn.disabled = false;
           btn.innerHTML = '<span>💾 Save Device Name</span>';
           
-          // Update current display
-          document.getElementById('current-hostname').innerText = data.hostname;
-          document.getElementById('current-matter-name').innerText = data.matterName;
-          
-          showErrorBanner('Success!', 
-                          'Device name saved. Restart to apply new hostname.', 
+          // Update current display (with .local suffix for hostname)
+          document.getElementById('current-hostname').innerText = data.hostname ? data.hostname + '.local' : 'N/A';
+          document.getElementById('current-matter-name').innerText = data.matterName || 'N/A';
+
+          showErrorBanner('Success!',
+                          'Device name saved. All changes are active immediately.',
                           'success');
-          
-          // Zeige Restart Hint
-          const restartHint = document.getElementById('restart-hint');
-          if (restartHint) {
-              restartHint.style.display = 'block';
-              
-              // Auto-Scroll zu Restart Button
-              setTimeout(() => {
-                  restartHint.scrollIntoView({ behavior: 'smooth', block: 'center' });
-              }, 500);
-          }
-          
+
           console.log('✓ Device name saved:');
           console.log('  Hostname:', data.hostname);
           console.log('  Matter Name:', data.matterName);
@@ -4189,23 +4178,23 @@
             .then(response => response.json())
             .then(data => {
                 // Update Text
-                document.getElementById('cal-status').textContent = 
+                document.getElementById('cal-status').textContent =
                     data.calibrated ? '✓ Calibrated' : '✗ Not Calibrated';
                 document.getElementById('max-pulses').textContent = data.maxPulseCount;
                 document.getElementById('avg-pulses').textContent = data.measuredAverage;
                 document.getElementById('full-cycles').textContent = data.fullCycleCount;
-                
+
                 // Update Drift Badge
                 let driftPercent = data.driftPercent || 0;
                 let driftBadge = document.getElementById('drift-percent');
                 let driftBar = document.getElementById('drift-bar');
-                
+
                 driftBadge.textContent = driftPercent.toFixed(2) + '%';
                 driftBar.style.width = Math.min(driftPercent, 100) + '%';
                 driftBar.textContent = driftPercent.toFixed(1) + '%';
-                
-                // Badge Color
-                if (driftPercent < 5) {
+
+                // Badge Color (thresholds match firmware: warn=3%, correct=10%)
+                if (driftPercent < 3) {
                     driftBadge.className = 'badge bg-success';
                     driftBar.className = 'progress-bar bg-success';
                 } else if (driftPercent < 10) {
@@ -4215,21 +4204,35 @@
                     driftBadge.className = 'badge bg-danger';
                     driftBar.className = 'progress-bar bg-danger';
                 }
-                
+
                 document.getElementById('drift-pulses').textContent = data.driftPulses || 0;
-                
+
                 // Update Chart
                 updateDriftChart(data.bottomHistory || []);
-            });
+            })
+            .catch(err => console.warn('Drift stats fetch failed:', err));
     }
 
     function updateDriftChart(history) {
-        const ctx = document.getElementById('drift-chart').getContext('2d');
-        
+        const canvas = document.getElementById('drift-chart');
+        if (typeof Chart === 'undefined') {
+            canvas.style.display = 'none';
+            let msg = document.getElementById('drift-chart-msg');
+            if (!msg) {
+                msg = document.createElement('p');
+                msg.id = 'drift-chart-msg';
+                msg.style.cssText = 'color:#888;font-size:0.85em;text-align:center;margin:8px 0';
+                msg.textContent = 'Chart unavailable (Chart.js could not be loaded — device may be offline)';
+                canvas.parentNode.insertBefore(msg, canvas.nextSibling);
+            }
+            return;
+        }
+        const ctx = canvas.getContext('2d');
+
         if (driftChart) {
             driftChart.destroy();
         }
-        
+
         driftChart = new Chart(ctx, {
             type: 'line',
             data: {
@@ -4275,15 +4278,12 @@
                         alert('Drift history reset successfully!');
                         refreshDriftStats();
                     }
-                });
+                })
+                .catch(err => console.warn('Drift reset failed:', err));
         }
     }
 
-    // Auto-refresh alle 30 Sekunden
-    setInterval(refreshDriftStats, 30000);
-
-    // Initial load
-    refreshDriftStats();
+    // Drift auto-refresh is started/stopped by the settings tab (see show())
     
     // ════════════════════════════════════════════════════════════════════════
     // Handle BLE Sensor Update
@@ -4512,6 +4512,12 @@
       navBtn.classList.add('active');
       navBtn.setAttribute('aria-selected', 'true');
       
+      // Stop drift interval when leaving settings tab
+      if (id !== 'settings' && AppState.driftInterval) {
+        clearInterval(AppState.driftInterval);
+        AppState.driftInterval = null;
+      }
+
       // Load tab-specific data
       if (AppState.ws && AppState.ws.readyState === WebSocket.OPEN) {
         switch(id) {
@@ -4528,6 +4534,13 @@
             break;
           case 'window-logic':
             AppState.ws.send('window_logic_status');
+            break;
+          case 'settings':
+            loadDeviceName();
+            refreshDriftStats();
+            if (!AppState.driftInterval) {
+              AppState.driftInterval = setInterval(refreshDriftStats, 30000);
+            }
             break;
         }
       }

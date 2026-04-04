@@ -51,8 +51,8 @@ static ShellyBLEManager* bleManager = nullptr;
 DeviceNaming* deviceNaming = nullptr;
 static Preferences matterPref;
 
-bool matter_node_created = false;  // extern zugänglich
-bool matter_stack_started = false; // extern zugänglich
+volatile bool matter_node_created = false;  // extern zugänglich; written from setup, read from multiple tasks
+volatile bool matter_stack_started = false; // extern zugänglich; written from setup, read from multiple tasks
 
 static char device_ip_str[DEVICE_IP_MAX_LENGTH] = "0.0.0.0";
 
@@ -64,13 +64,13 @@ uint16_t window_covering_endpoint_id = 0;
 // Contact Sensor
 static endpoint_t* contact_sensor_endpoint = nullptr;
 static uint16_t contact_sensor_endpoint_id = 0;
-bool contact_sensor_endpoint_active = false;
-bool contact_sensor_matter_enabled = false;
+volatile bool contact_sensor_endpoint_active = false;
+volatile bool contact_sensor_matter_enabled = false;
 
 // Power Source Endpoint
 static endpoint_t* power_source_endpoint = nullptr;
 static uint16_t power_source_endpoint_id = 0;
-bool power_source_endpoint_active = false;
+volatile bool power_source_endpoint_active = false;
 
 // ============================================================================
 // Forward Declarations
@@ -225,10 +225,12 @@ void onShutterStateChanged(RollerShutter::State state) {
 // ============================================================================
 // Last BLE sensor data — kept so the main loop can re-broadcast when window
 // state changes asynchronously (e.g. PENDING → TILTED after the delay timer).
+// Written from NimBLE task, read from loop() — protected by s_ble_cache_mutex.
 // ============================================================================
-static String             lastBLEAddress;
+static SemaphoreHandle_t   s_ble_cache_mutex = nullptr;
+static String              lastBLEAddress;
 static ShellyBLESensorData lastBLEData;
-static bool               lastBLEDataValid = false;
+static bool                lastBLEDataValid = false;
 
 // ============================================================================
 // BLE Sensor Data Callback
@@ -261,17 +263,21 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     // ════════════════════════════════════════════════════════════════
     
     if (contact_sensor_matter_enabled && matter_stack_started) {
-        bool is_commissioned = Matter.isDeviceCommissioned() && 
+        // Lock ChipStack: attribute::update() must be called with the stack lock held.
+        // onBLESensorData() runs in the NimBLE task context, so we acquire explicitly.
+        chip::DeviceLayer::PlatformMgr().LockChipStack();
+
+        bool is_commissioned = Matter.isDeviceCommissioned() &&
                               (chip::Server::GetInstance().GetFabricTable().FabricCount() > 0);
-        
+
         if (is_commissioned) {
             // ────────────────────────────────────────────────────────
             // Contact Sensor Attribute updaten
             // ────────────────────────────────────────────────────────
-            
+
             if (contact_sensor_endpoint_active && contact_sensor_endpoint_id != 0) {
                 ESP_LOGD(TAG, "→ Updating Contact Sensor attributes...");
-                
+
                 // Contact State
                 esp_matter_attr_val_t contact_val = esp_matter_bool(!data.windowOpen);
                 attribute::update(contact_sensor_endpoint_id,
@@ -279,14 +285,14 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                                  chip::app::Clusters::BooleanState::Attributes::StateValue::Id,
                                  &contact_val);
             }
-            
+
             // ────────────────────────────────────────────────────────
             // Power Source Attribute updaten
             // ────────────────────────────────────────────────────────
-            
+
             if (power_source_endpoint_active && power_source_endpoint_id != 0) {
                 ESP_LOGD(TAG, "→ Updating Power Source attributes...");
-                
+
                 // Battery Percentage (0-200, where 200 = 100%)
                 esp_matter_attr_val_t battery_val = esp_matter_nullable_uint8(data.battery * 2);
                 attribute::update(power_source_endpoint_id,
@@ -303,20 +309,20 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                 } else {
                     charge_level = chip::app::Clusters::PowerSource::BatChargeLevelEnum::kOk;
                 }
-                
+
                 esp_matter_attr_val_t charge_val = esp_matter_enum8((uint8_t)charge_level);
                 attribute::update(power_source_endpoint_id,
                                  chip::app::Clusters::PowerSource::Id,
                                  chip::app::Clusters::PowerSource::Attributes::BatChargeLevel::Id,
                                  &charge_val);
-                
+
                 // Battery Replacement Needed
                 esp_matter_attr_val_t replacement_val = esp_matter_bool(data.battery < 10);
                 attribute::update(power_source_endpoint_id,
                                  chip::app::Clusters::PowerSource::Id,
                                  chip::app::Clusters::PowerSource::Attributes::BatReplacementNeeded::Id,
                                  &replacement_val);
-                
+
                 // Battery Voltage
                 uint16_t voltage_mv = 2400 + (data.battery * 6);
                 esp_matter_attr_val_t voltage_val = esp_matter_nullable_uint16(voltage_mv);
@@ -324,13 +330,15 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
                                  chip::app::Clusters::PowerSource::Id,
                                  chip::app::Clusters::PowerSource::Attributes::BatVoltage::Id,
                                  &voltage_val);
-                
+
                 ESP_LOGD(TAG, "✓ Power Source attributes updated (Battery: %d%%, Level: %s)",
                          data.battery,
                          charge_level == chip::app::Clusters::PowerSource::BatChargeLevelEnum::kCritical ? "CRITICAL" :
                          charge_level == chip::app::Clusters::PowerSource::BatChargeLevelEnum::kWarning ? "WARNING" : "OK");
             }
         }
+
+        chip::DeviceLayer::PlatformMgr().UnlockChipStack();
     }
     
     // ════════════════════════════════════════════════════════════════
@@ -339,10 +347,14 @@ void onBLESensorData(const String& address, const ShellyBLESensorData& data) {
     
     shutter_driver_set_window_sensor_data(shutter_handle, data.windowOpen, data.rotation);
 
-    // Cache for async re-broadcast when window state changes via loop() timer
-    lastBLEAddress   = address;
-    lastBLEData      = data;
-    lastBLEDataValid = true;
+    // Cache for async re-broadcast when window state changes via loop() timer.
+    // Protect with mutex: this write is from the NimBLE task; reads are from loop().
+    if (s_ble_cache_mutex && xSemaphoreTake(s_ble_cache_mutex, pdMS_TO_TICKS(10)) == pdTRUE) {
+        lastBLEAddress   = address;
+        lastBLEData      = data;
+        lastBLEDataValid = true;
+        xSemaphoreGive(s_ble_cache_mutex);
+    }
 }
 
 
@@ -686,13 +698,9 @@ void disableContactSensorMatter() {
                         "\"success\":false,"
                         "\"message\":\"Calibration failed! Please try again.\"}");
             }
-        
-            for (int i = 0; i < 3; i++) {
-                webUI->broadcast_to_all_clients(msg);
-                vTaskDelay(pdMS_TO_TICKS(200));
-            }
-            
-            ESP_LOGI(TAG, "✓ Sent calibration result to WebUI (3x for reliability)");
+
+            webUI->broadcast_to_all_clients(msg);
+            ESP_LOGI(TAG, "✓ Sent calibration result to WebUI");
         }
         
         ESP_LOGI(TAG, "");
@@ -1210,6 +1218,7 @@ MatterStartResult initializeAndStartMatter() {
 
 void setup() {
     Serial.begin(115200);
+    s_ble_cache_mutex = xSemaphoreCreateMutex();
 
     esp_log_level_set("*", ESP_LOG_INFO);               // Global: INFO
 
@@ -1822,9 +1831,14 @@ void loop() {
         // classifyWindowAngle() sets windowStateChanged when called from loop().
         // We re-broadcast the last cached BLE data with the updated window_state.
         // ────────────────────────────────────────────────────────────
-        if (lastBLEDataValid &&
-            shutter_driver_consume_window_state_changed(shutter_handle)) {
-            if (webUI) webUI->broadcastSensorDataUpdate(lastBLEAddress, lastBLEData);
+        if (shutter_driver_consume_window_state_changed(shutter_handle)) {
+            if (s_ble_cache_mutex && xSemaphoreTake(s_ble_cache_mutex, 0) == pdTRUE) {
+                bool valid = lastBLEDataValid;
+                String addr = lastBLEAddress;
+                ShellyBLESensorData cached = lastBLEData;
+                xSemaphoreGive(s_ble_cache_mutex);
+                if (valid && webUI) webUI->broadcastSensorDataUpdate(addr, cached);
+            }
         }
 
         // ────────────────────────────────────────────────────────────
@@ -1966,9 +1980,14 @@ void loop() {
         // ════════════════════════════════════════════════════════════════
 
         // Window state async re-broadcast (same as in commissioned branch)
-        if (lastBLEDataValid &&
-            shutter_driver_consume_window_state_changed(shutter_handle)) {
-            if (webUI) webUI->broadcastSensorDataUpdate(lastBLEAddress, lastBLEData);
+        if (shutter_driver_consume_window_state_changed(shutter_handle)) {
+            if (s_ble_cache_mutex && xSemaphoreTake(s_ble_cache_mutex, 0) == pdTRUE) {
+                bool valid = lastBLEDataValid;
+                String addr = lastBLEAddress;
+                ShellyBLESensorData cached = lastBLEData;
+                xSemaphoreGive(s_ble_cache_mutex);
+                if (valid && webUI) webUI->broadcastSensorDataUpdate(addr, cached);
+            }
         }
 
         // Shutter kann OHNE Matter laufen (z.B. bei Kalibrierung)
